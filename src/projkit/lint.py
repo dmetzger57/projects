@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
+from .ops import RECEIPT_TAG, file_tags, tag_file
 from .project import README, STATUSES, Project
 from .workspace import Workspace
 
@@ -143,7 +144,20 @@ def _check_meta(ws: Workspace, p: Project, template_goals: set[str]) -> list[Iss
             add("L008", "error", f"receipt not found: {rel}")
         elif _is_dataless(target):
             add("L011", "info", f"receipt not downloaded from iCloud: {rel}")
+        else:
+            tags = file_tags(target)
+            if tags is not None and RECEIPT_TAG not in tags:
+                # e.g. filed from the iPhone app, which cannot set Finder tags
+                issues.append(Issue("L013", "warn", target, f"receipt missing Finder tag '{RECEIPT_TAG}': {rel}",
+                                    _tag_fix(target)))
     return issues
+
+
+def _tag_fix(path: Path) -> Callable[[], str]:
+    def f() -> str:
+        tag_file(path)
+        return f"tagged {path.name} '{RECEIPT_TAG}'"
+    return f
 
 
 def lint_project(ws: Workspace, p: Project, template_goals: set[str] | None = None) -> list[Issue]:

@@ -1,6 +1,6 @@
 # projkit — `proj`
 
-CLI and local web UI for the project folders in `~/Documents/Projects`.
+CLI, local web UI and iPhone app ([ios/](ios/README.md)) for the project folders in `~/Documents/Projects`.
 The file format is defined in [SPEC.md](SPEC.md); the files are the source of truth.
 
 ## Setup

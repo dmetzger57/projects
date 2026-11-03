@@ -136,3 +136,12 @@ def test_missing_receipt_reported(ws):
     msgs = [i.message for i in lint_workspace(ws) if i.code == "L008"]
     assert any("not found" in m for m in msgs)
     assert any("outside" in m for m in msgs)
+
+
+def test_untagged_receipt_flagged_and_fixed(ws):
+    from projkit.ops import file_tags
+    issues = [i for i in lint_workspace(ws) if i.code == "L013"]
+    assert len(issues) == 1 and issues[0].fixable      # fixture receipt has no Finder tag
+    issues[0].fix()
+    assert "receipt" in file_tags(ws.receipts_root / "2026" / "scanner.pdf")
+    assert [i for i in lint_workspace(ws) if i.code == "L013"] == []

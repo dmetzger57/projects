@@ -2,3 +2,14 @@
 __pycache__/
 *.egg-info/
 .pytest_cache/
+
+# Swift / Xcode
+ios/ProjKit/.build/
+.swiftpm/
+xcuserdata/
+DerivedData/
+*.xcuserstate
+
+# Claude session transcripts (local only)
+ClaudeSession/
+.DS_Store

@@ -1,6 +1,6 @@
 # Project Folder Format — v1
 
-This is the contract shared by the `proj` CLI, the web UI and the future SwiftUI app.
+This is the contract shared by the `proj` CLI, the web UI and the SwiftUI iPhone app (`ios/`).
 The files are the source of truth; any index/database is a rebuildable cache.
 
 ## Layout
@@ -61,7 +61,11 @@ Free text describing contents of Documents/.
 ```
 
 Rules:
-- Front-matter key order and comments must be preserved by writers.
+- Front-matter key order must be preserved by writers. Keys a writer does not change must be
+  preserved; the Python tool also keeps comments, and the iPhone app re-emits untouched keys
+  byte-for-byte (comments on changed keys may be dropped).
+- The iPhone app only edits keys it fully understands (scalars, flow lists, block lists of
+  scalars or flat mappings); keys using other YAML (block scalars, anchors, nesting) are left as is.
 - Dates are ISO `YYYY-MM-DD`.
 - Notes are `### YYYY-MM-DD` headings under `## Notes`, newest last; writers append to today's heading or create it.
 - Unknown front-matter keys must be preserved (forward compatibility).
@@ -81,7 +85,8 @@ A heading/intro followed by one `- ` bullet per idea. Writers preserve everythin
 
 ## Receipts
 
-Files live in `$PROJ_RECEIPTS/<year>/YYYY-MM-DD <description>.<ext>` and carry the Finder tag `receipt`.
+Files live in `$PROJ_RECEIPTS/<year>/YYYY-MM-DD <description>.<ext>` and carry the Finder tag `receipt`
+(the iPhone app cannot set tags; `proj lint` reports untagged receipts as L013 and `--fix` adds the tag).
 Projects reference them by path relative to `$PROJ_RECEIPTS`; files are never duplicated into projects.
 
 ## Naming

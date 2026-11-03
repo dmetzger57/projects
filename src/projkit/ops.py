@@ -278,6 +278,22 @@ def remove_receipt(p: Project, index: int) -> dict:
     return r
 
 
+def file_tags(path: Path) -> list[str] | None:
+    """Finder tags of a file (None if they cannot be read, e.g. not macOS)."""
+    attr = "com.apple.metadata:_kMDItemUserTags"
+    try:
+        r = subprocess.run(["xattr", "-px", attr, str(path)], capture_output=True, text=True)
+    except FileNotFoundError:
+        return None
+    if r.returncode != 0:
+        return []  # attribute absent
+    try:
+        raw = plistlib.loads(bytes.fromhex(r.stdout.replace("\n", "").replace(" ", "")))
+    except Exception:
+        return []
+    return [t.split("\n")[0] for t in raw]
+
+
 def tag_file(path: Path, tag: str = RECEIPT_TAG) -> None:
     """Add a Finder tag (merging with existing tags)."""
     if shutil.which("tag"):
