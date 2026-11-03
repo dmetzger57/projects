@@ -285,7 +285,7 @@ struct ProjectDetailView: View {
                 } label: {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(r.fileName).foregroundStyle(.primary)
-                        Text([r.date.map(shortDate), r.vendor, r.amount?.formatted(.currency(code: "USD"))]
+                        Text([r.date.map(shortDate), r.vendor, r.amount.map(money)]
                             .compactMap { $0 }.joined(separator: " · "))
                             .font(.caption).foregroundStyle(.secondary)
                     }
@@ -311,7 +311,7 @@ struct ProjectDetailView: View {
             HStack {
                 Text("Receipts")
                 Spacer()
-                if !p.receipts.isEmpty { Text(p.totalCost.formatted(.currency(code: "USD"))) }
+                if !p.receipts.isEmpty { Text(money(p.totalCost)) }
             }
         } footer: {
             if !p.receipts.isEmpty { Text("Swipe to detach. Files stay in the Receipts folder.") }

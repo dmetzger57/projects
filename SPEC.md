@@ -10,6 +10,8 @@ $PROJ_ROOT (default ~/Documents/Projects)
 ├── 0 - Idea Backlog.md          backlog (ideas.md format, see below)
 ├── 1 - Template/                template copied by `proj new`
 ├── 2 - Closed/<Project>/        closed projects (flat; area kept in front matter)
+├── 3 - Receipts/                optional receipts root inside the workspace (iPhone setup for
+│                                people without ~/Documents/Receipts; same <year>/ layout)
 └── <Area>/<Project>/
     ├── README.md                required
     ├── Documents/               required

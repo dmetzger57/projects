@@ -13,3 +13,4 @@ DerivedData/
 # Claude session transcripts (local only)
 ClaudeSession/
 .DS_Store
+ios/build/

@@ -25,7 +25,9 @@ struct RootView: View {
     var body: some View {
         @Bindable var model = model
         Group {
-            if model.isConfigured {
+            if model.isConfigured && model.needsSetup {
+                SetupView()
+            } else if model.isConfigured {
                 TabView {
                     ProjectsView()
                         .tabItem { Label("Projects", systemImage: "folder") }
@@ -58,7 +60,7 @@ struct OnboardingView: View {
                 .font(.system(size: 64))
                 .foregroundStyle(.tint)
             Text("Proj").font(.largeTitle.bold())
-            Text("Choose your Projects folder to get started.\nIn the picker, open **iCloud Drive › Documents › Projects** and tap **Open**.")
+            Text("Choose your Projects folder to get started.\nIn the picker, open **iCloud Drive › Documents › Projects** and tap **Open**.\nNew to Proj? Create an empty folder (e.g. “Projects”) in the picker and choose it — Proj sets it up for you.")
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
             Button {

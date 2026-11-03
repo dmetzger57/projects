@@ -3,6 +3,8 @@ import Foundation
 public let templateDirName = "1 - Template"
 public let closedDirName = "2 - Closed"
 public let backlogFileName = "0 - Idea Backlog.md"
+/// Optional receipts folder inside the projects root (for people without ~/Documents/Receipts).
+public let internalReceiptsDirName = "3 - Receipts"
 
 /// The projects root (e.g. iCloud Drive/Documents/Projects) and the receipts root.
 public struct Workspace: Sendable {
@@ -19,8 +21,12 @@ public struct Workspace: Sendable {
     public var templateDir: URL { root.appendingPathComponent(templateDirName) }
     public var closedDir: URL { root.appendingPathComponent(closedDirName) }
     public var backlogURL: URL { root.appendingPathComponent(backlogFileName) }
+    public var internalReceiptsDir: URL { root.appendingPathComponent(internalReceiptsDirName) }
 
-    static func isReserved(_ name: String) -> Bool {
+    /// True for a folder that has no template and no areas yet (e.g. a new family member's).
+    public var needsSetup: Bool { !fs.isDirectory(templateDir) && areas().isEmpty }
+
+    public static func isReserved(_ name: String) -> Bool {
         name.range(of: #"^\d+ - "#, options: .regularExpression) != nil
     }
 

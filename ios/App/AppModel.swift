@@ -7,7 +7,10 @@ import ProjKitCore
 @MainActor @Observable
 final class AppModel {
     private(set) var projectsRoot: URL?
-    private(set) var receiptsRoot: URL?
+    private var pickedReceiptsRoot: URL?
+    /// Keep receipts in `3 - Receipts` inside the projects folder (for people without ~/Documents/Receipts).
+    private(set) var receiptsInside = false
+    private(set) var needsSetup = false
     private(set) var projects: [Project] = []
     private(set) var ideas: [String] = []
     private(set) var areas: [String] = []
@@ -17,12 +20,18 @@ final class AppModel {
 
     private static let projectsKey = "projectsBookmark"
     private static let receiptsKey = "receiptsBookmark"
+    private static let receiptsInsideKey = "receiptsInside"
+
+    var receiptsRoot: URL? {
+        receiptsInside ? projectsRoot?.appendingPathComponent(internalReceiptsDirName) : pickedReceiptsRoot
+    }
 
     var workspace: Workspace? { projectsRoot.map { Workspace(root: $0, receiptsRoot: receiptsRoot) } }
 
     init() {
         projectsRoot = Self.restore(Self.projectsKey)
-        receiptsRoot = Self.restore(Self.receiptsKey)
+        pickedReceiptsRoot = Self.restore(Self.receiptsKey)
+        receiptsInside = UserDefaults.standard.bool(forKey: Self.receiptsInsideKey)
     }
 
     // MARK: folders
@@ -65,11 +74,35 @@ final class AppModel {
 
     func setReceiptsFolder(_ url: URL) async {
         do {
-            receiptsRoot = try remember(url, key: Self.receiptsKey)
+            pickedReceiptsRoot = try remember(url, key: Self.receiptsKey)
+            setReceiptsInside(false)
             await reload()
         } catch {
             errorMessage = "Couldn't remember that folder: \(error.localizedDescription)"
         }
+    }
+
+    func setReceiptsInside(_ on: Bool) {
+        receiptsInside = on
+        UserDefaults.standard.set(on, forKey: Self.receiptsInsideKey)
+    }
+
+    /// Use `3 - Receipts` inside the projects folder (created if missing).
+    func useReceiptsInside() async {
+        setReceiptsInside(true)
+        await perform { ws in
+            if !ws.fs.isDirectory(ws.internalReceiptsDir) { try ws.fs.createDirectory(ws.internalReceiptsDir) }
+        }
+    }
+
+    /// Turns the chosen (empty) folder into a projects workspace.
+    func setUpWorkspace(areas: [String], receiptsInside inside: Bool) async {
+        if inside { setReceiptsInside(true) }
+        await perform { try Ops.setUpWorkspace($0, areas: areas, receiptsInside: inside) }
+    }
+
+    func newArea(_ name: String) async {
+        await perform { try Ops.newArea($0, name) }
     }
 
     // MARK: loading
@@ -78,10 +111,10 @@ final class AppModel {
         guard let ws = workspace else { return }
         isLoading = true
         defer { isLoading = false }
-        let result = await Task.detached(priority: .userInitiated) { () -> ([Project], [String], [String]) in
-            (ws.projects(), Ops.ideas(ws), ws.areas())
+        let result = await Task.detached(priority: .userInitiated) { () -> ([Project], [String], [String], Bool) in
+            (ws.projects(), Ops.ideas(ws), ws.areas(), ws.needsSetup)
         }.value
-        (projects, ideas, areas) = result
+        (projects, ideas, areas, needsSetup) = result
         lastLoaded = Date()
     }
 

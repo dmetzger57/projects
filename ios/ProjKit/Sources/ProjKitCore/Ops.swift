@@ -46,6 +46,62 @@ public enum Ops {
         try ws.save(q)
     }
 
+    // MARK: workspace setup / areas
+
+    /// README for `1 - Template` in a freshly set-up workspace (same shape the Mac tool migrates to).
+    static let templateReadme = """
+    ---
+    format: 1
+    title: Project
+    area: Area
+    status: active
+    created:
+    closed:
+    tags: []
+    goals: []
+    links: []
+    receipts: []
+    ---
+
+    ## Description
+
+    ## Project Files
+
+    ## Notes
+
+    """
+
+    /// Creates an area folder (names starting "<digits> - " are reserved for system folders).
+    @discardableResult
+    public static func newArea(_ ws: Workspace, _ rawName: String) throws -> URL {
+        let name = try checkName(rawName)
+        guard !Workspace.isReserved(name) else { throw OpError("area names can't start with a number and \" - \"") }
+        if ws.areas().contains(where: { $0.lowercased() == name.lowercased() }) {
+            throw OpError("area '\(name)' already exists")
+        }
+        let dir = ws.root.appendingPathComponent(name)
+        try ws.fs.createDirectory(dir)
+        return dir
+    }
+
+    /// Makes an empty (or partial) folder into a projects workspace. Idempotent: existing
+    /// items are left alone. With `receiptsInside`, creates `3 - Receipts` for receipts.
+    public static func setUpWorkspace(_ ws: Workspace, areas: [String], receiptsInside: Bool) throws {
+        let tpl = ws.templateDir
+        for d in [tpl, tpl.appendingPathComponent("Documents"), tpl.appendingPathComponent("Receipts"), ws.closedDir]
+        where !ws.fs.exists(d) {
+            try ws.fs.createDirectory(d)
+        }
+        let readme = tpl.appendingPathComponent(readmeName)
+        if !ws.fs.exists(readme) { try ws.fs.writeText(templateReadme, to: readme) }
+        if !ws.fs.exists(ws.backlogURL) { try ws.fs.writeText("# Idea Backlog\n\n", to: ws.backlogURL) }
+        if receiptsInside, !ws.fs.exists(ws.internalReceiptsDir) { try ws.fs.createDirectory(ws.internalReceiptsDir) }
+        var seen = Set(ws.areas().map { $0.lowercased() })
+        for a in areas.map({ $0.trimmingCharacters(in: .whitespaces) }) where !a.isEmpty && seen.insert(a.lowercased()).inserted {
+            try newArea(ws, a)
+        }
+    }
+
     // MARK: lifecycle
 
     @discardableResult

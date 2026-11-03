@@ -5,17 +5,27 @@ struct SettingsView: View {
     enum Target { case projects, receipts }
     @Environment(AppModel.self) private var model
     @State private var picking: Target?
+    @State private var receiptsOptions = false
 
     var body: some View {
         NavigationStack {
             Form {
                 Section {
                     folderRow("Projects", model.projectsRoot, target: .projects)
-                    folderRow("Receipts", model.receiptsRoot, target: .receipts)
+                    Button { receiptsOptions = true } label: {
+                        folderLabel("Receipts", model.receiptsInside ? "Inside Projects › \(internalReceiptsDirName)"
+                                                                     : model.receiptsRoot.map(displayPath))
+                    }
+                    .confirmationDialog("Where should receipts be saved?", isPresented: $receiptsOptions, titleVisibility: .visible) {
+                        Button("Choose a Folder…") { picking = .receipts }
+                        Button("Inside Projects (\(internalReceiptsDirName))") { Task { await model.useReceiptsInside() } }
+                    } message: {
+                        Text("On the Mac, receipts usually live in iCloud Drive › Documents › Receipts.")
+                    }
                 } header: {
                     Text("Folders")
                 } footer: {
-                    Text("Pick iCloud Drive › Documents › Projects and › Receipts. Proj edits the files in place; changes appear in `proj` on the Mac.")
+                    Text("Pick iCloud Drive › Documents › Projects and › Receipts. Proj edits the files in place; changes appear in `proj` on the Mac. To share projects with family, share the Projects folder in iCloud Drive and have them choose it here.")
                 }
                 Section("Status") {
                     LabeledContent("Projects", value: "\(model.projects.count)")
@@ -46,19 +56,21 @@ struct SettingsView: View {
     }
 
     private func folderRow(_ label: String, _ url: URL?, target: Target) -> some View {
-        Button { picking = target } label: {
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(label).foregroundStyle(.primary)
-                    Text(url.map(displayPath) ?? "Not chosen")
-                        .font(.caption)
-                        .foregroundStyle(url == nil ? .red : .secondary)
-                        .lineLimit(1)
-                        .truncationMode(.head)
-                }
-                Spacer()
-                Text("Change").font(.callout)
+        Button { picking = target } label: { folderLabel(label, url.map(displayPath)) }
+    }
+
+    private func folderLabel(_ label: String, _ location: String?) -> some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(label).foregroundStyle(.primary)
+                Text(location ?? "Not chosen")
+                    .font(.caption)
+                    .foregroundStyle(location == nil ? .red : .secondary)
+                    .lineLimit(1)
+                    .truncationMode(.head)
             }
+            Spacer()
+            Text("Change").font(.callout)
         }
     }
 

@@ -39,3 +39,23 @@ assert not errors, errors
 assert any(i.code == "L013" for i in lint_workspace(ws)), "iPhone receipt should be flagged for tagging"
 print("cross-check OK: Python reads, lints and keeps editing what Swift wrote")
 EOF
+
+# A workspace set up from scratch on the iPhone (family member) must be valid for the Mac tools too.
+mkdir -p "$TMP/Fresh"
+(cd "$HERE/ProjKit" && swift run -q Checks --setup "$TMP/Fresh")
+PROJ_ROOT="$TMP/Fresh" PROJ_RECEIPTS="$TMP/Fresh/3 - Receipts" "$REPO/.venv/bin/python" - <<'EOF2'
+from projkit.lint import lint_workspace
+from projkit.workspace import Workspace
+from projkit import ops
+ws = Workspace.default()
+assert ws.areas() == ["Home", "Personal"], ws.areas()
+p = ws.find("Garden")[0]
+assert p.area == "Home" and p.goals[0]["text"] == "Plant tomatoes"
+assert ops.ideas(ws) == ["Greenhouse"]
+errors = [i for i in lint_workspace(ws) if i.severity == "error"]
+assert not errors, errors
+# the Mac tool can create projects from the iPhone-made template
+q = ops.new_project(ws, "Fence", "Personal")
+assert q.goals == [] and q.notes[-1].text == "- Project created"
+print("cross-check OK: Mac tools accept a workspace set up on the iPhone")
+EOF2

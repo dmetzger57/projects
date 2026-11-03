@@ -65,6 +65,22 @@ if args.count == 4, args[1] == "--mutate" {
     exit(0)
 }
 
+if args.count == 3, args[1] == "--setup" {
+    let root = URL(fileURLWithPath: args[2])
+    let ws = Workspace(root: root, receiptsRoot: root.appendingPathComponent(internalReceiptsDirName))
+    do {
+        try Ops.setUpWorkspace(ws, areas: ["Home", "Personal"], receiptsInside: true)
+        let p = try Ops.newProject(ws, title: "Garden", area: "Home")
+        try Ops.addGoal(ws, p, "Plant tomatoes")
+        try Ops.addIdea(ws, "Greenhouse")
+        print("setup applied")
+    } catch {
+        print("error: \(error)")
+        exit(1)
+    }
+    exit(0)
+}
+
 // MARK: - tests
 
 test("round-trip of every real README is byte-identical") {
@@ -224,6 +240,31 @@ test("ops: ideas and promote") {
     eq(Ops.ideas(ws), ["Solar"])
     let backlog = try ws.fs.readText(ws.backlogURL)
     check(backlog.hasPrefix("# Idea Backlog\n\n- Solar\n"), "backlog format")
+}
+
+test("setup: empty folder becomes a workspace; areas") {
+    let base = FileManager.default.temporaryDirectory.appendingPathComponent("projkit-setup-\(UUID().uuidString)")
+    try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+    let ws = Workspace(root: base, receiptsRoot: base.appendingPathComponent(internalReceiptsDirName))
+    check(ws.needsSetup, "empty folder needs setup")
+    try Ops.setUpWorkspace(ws, areas: ["Home", "Personal", " ", "home"], receiptsInside: true)
+    check(!ws.needsSetup, "set up")
+    eq(ws.areas(), ["Home", "Personal"])                     // reserved "3 - Receipts" is not an area
+    check(ws.fs.isDirectory(ws.internalReceiptsDir), "3 - Receipts created")
+    eq(ws.template()?.title, "Project")
+    eq(Ops.ideas(ws), [])
+    try Ops.setUpWorkspace(ws, areas: ["Work"], receiptsInside: false)   // idempotent, adds new areas
+    eq(ws.areas(), ["Home", "Personal", "Work"])
+    let p = try Ops.newProject(ws, title: "Garden", area: "Home")
+    eq(p.section("Description"), "")
+    try Ops.addReceipt(ws, p, data: Data("%PDF".utf8), fileExtension: "pdf", description: "Seeds",
+                       amount: 4, vendor: nil, date: "2026-11-03")
+    eq(ws.load(p.url).receipts.first?.path, "2026/2026-11-03 Seeds.pdf")
+    var threw = 0
+    for bad in ["home", "4 - Stuff", "a/b", ""] {
+        do { try Ops.newArea(ws, bad) } catch { threw += 1 }
+    }
+    eq(threw, 4, "bad area names rejected")
 }
 
 test("iCloud placeholder names map to real names") {

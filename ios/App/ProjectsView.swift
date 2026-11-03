@@ -11,6 +11,8 @@ struct ProjectsView: View {
     @State private var filter: ProjectFilter = .open
     @State private var search = ""
     @State private var showNew = false
+    @State private var showNewArea = false
+    @State private var newAreaName = ""
     @State private var path: [String] = []
 
     private var filtered: [Project] {
@@ -78,11 +80,27 @@ struct ProjectsView: View {
             }
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
-                    Button { showNew = true } label: { Label("New Project", systemImage: "plus") }
+                    Menu {
+                        Button { showNew = true } label: { Label("New Project", systemImage: "doc.badge.plus") }
+                            .disabled(model.areas.isEmpty)
+                        Button { newAreaName = ""; showNewArea = true } label: { Label("New Area", systemImage: "folder.badge.plus") }
+                    } label: {
+                        Label("Add", systemImage: "plus")
+                    }
                 }
             }
             .sheet(isPresented: $showNew) {
                 NewProjectSheet { folder in path.append(folder) }
+            }
+            .alert("New Area", isPresented: $showNewArea) {
+                TextField("Name", text: $newAreaName)
+                Button("Cancel", role: .cancel) {}
+                Button("Create") {
+                    let name = newAreaName
+                    Task { await model.newArea(name) }
+                }
+            } message: {
+                Text("Areas group related projects, e.g. Home or Garden.")
             }
         }
     }
@@ -96,7 +114,7 @@ struct SummaryRow: View {
         HStack(spacing: 18) {
             stat("\(projects.count)", "projects")
             stat("\(open)", "open goals")
-            stat(cost.formatted(.currency(code: "USD")), "spent")
+            stat(money(cost), "spent")
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -123,7 +141,7 @@ struct ProjectRow: View {
             }
             HStack(spacing: 12) {
                 Text(total > 0 ? "\(done)/\(total) goals" : "No goals")
-                if !project.receipts.isEmpty { Text(project.totalCost.formatted(.currency(code: "USD"))) }
+                if !project.receipts.isEmpty { Text(money(project.totalCost)) }
                 if let last = project.notes.last(where: { !$0.text.isEmpty }) { Text(shortDate(last.date)) }
             }
             .font(.caption)
@@ -167,6 +185,11 @@ func shortDate(_ iso: String) -> String {
 
 func longDate(_ iso: String) -> String {
     parseISO(iso)?.formatted(date: .complete, time: .omitted) ?? iso
+}
+
+/// Amounts in the phone's local currency (receipts store plain numbers).
+func money(_ amount: Double) -> String {
+    amount.formatted(.currency(code: Locale.current.currency?.identifier ?? "USD"))
 }
 
 /// Inline markdown (bold, italics, links, code) with line breaks and list dashes preserved.

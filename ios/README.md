@@ -4,6 +4,7 @@ A native SwiftUI app for the same `~/Documents/Projects` folder the `proj` CLI a
 It reads and writes the README.md files directly in iCloud Drive, so it works anywhere,
 without the Mac being on, and changes show up in `proj` on the Mac.
 
+**Setup:** an empty folder is set up for you (areas, template, Closed, backlog) · **New Area** ·
 **Projects:** projects by area, filters, search, goal progress and spending ·
 **Project:** status, goals (tap to tick off, swipe to delete), notes, editing
 Description and Project Files, links, and receipts (scan with the camera or pick a file,
@@ -36,6 +37,45 @@ pull to refresh; reloads when you return to the app.
 - At most 3 apps installed from Xcode at once on a free account.
 - The app does not use iCloud entitlements, which free accounts can't use. It works through
   folders you pick in the Files picker, which it remembers.
+
+## Publishing and sharing with family (paid Apple Developer Program)
+
+A paid membership ($99/year) removes the 7-day limit and allows TestFlight and App Store distribution.
+
+**One-time setup after enrolling**
+1. Xcode → Settings → Accounts: your Apple ID now shows the paid team. In the **Proj** target →
+   Signing & Capabilities, set **Team** to the paid team (not "Personal Team"). Then run
+   `python3 ios/make_xcodeproj.py --team <NEWTEAMID>` once, or just commit Xcode's change.
+2. If the bundle ID `com.dmetzger57.proj` is refused (it was first registered by the free team),
+   pick a new one, e.g. `com.dmetzger57.projapp`, in the same tab.
+3. In [App Store Connect](https://appstoreconnect.apple.com) → Apps → **+** → New App: iOS, any
+   available name (the home-screen name stays "Proj"), the bundle ID from step 2, SKU `proj`.
+   Under **App Privacy**, answer "No data collected".
+
+**Each release**
+```sh
+sh ios/release.sh            # runs the checks, archives, uploads (build number = date/time)
+```
+The build appears in App Store Connect → **TestFlight** after processing.
+
+**Sharing with family through TestFlight**
+- **External testing:** TestFlight → *External Testing* → **+** group "Family" → add the build →
+  submit for Beta App Review (the first time only; usually under a day) → **Enable Public Link**,
+  and send that link. Family members install the free **TestFlight** app, then tap the link.
+- TestFlight builds expire after **90 days**. Run `release.sh` again before then; testers update
+  in the TestFlight app.
+- For no expiry, submit the same build for App Store review, either public or as an
+  **unlisted** app (request unlisted distribution from Apple), and share the link.
+
+**Family members' data**
+- On first launch they choose a folder in *their* iCloud Drive. If it is empty, Proj offers to
+  **set it up**: areas, template, Closed folder, idea backlog, and optionally `3 - Receipts`
+  for receipts. No Mac is needed.
+- To **share projects**, share your whole `Projects` folder in the Files app (Share →
+  Collaborate) and have them choose the shared folder in Proj. Their edits then show up in
+  `proj` on your Mac. Share the whole folder, not one area: Proj expects to be given the
+  folder that *contains* the areas.
+- Amounts are shown in each phone's local currency. The files store plain numbers.
 
 ## How it works
 
