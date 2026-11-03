@@ -15,6 +15,7 @@
 <div class="stats">
   <div><b>{{ totals.projects }}</b><span>projects</span></div>
   <div><b>{{ totals.goals_open }}</b><span>open goals</span></div>
+  <div><b>{{ totals.tasks_open }}</b><span>open tasks</span></div>
   <div><b>{{ totals.cost|money }}</b><span>spent</span></div>
 </div>
 
@@ -36,11 +37,17 @@
               <span class="pill s-{{ c.status }}">{{ c.status }}</span>
             </div>
             {% if c.total %}
-            <div class="bar" aria-label="{{ c.done }} of {{ c.total }} goals done"><i style="width: {{ c.pct }}%"></i></div>
+            <div class="progress-row"><span>Goals</span>
+              <div class="bar" role="img" aria-label="{{ c.done }} of {{ c.total }} goals done"><i style="width: {{ c.pct }}%"></i></div>
+              <span>{{ c.done }}/{{ c.total }}</span></div>
+            {% endif %}
+            {% if c.ttotal %}
+            <div class="progress-row"><span>Tasks</span>
+              <div class="bar tasks-bar" role="img" aria-label="{{ c.tdone }} of {{ c.ttotal }} tasks done"><i style="width: {{ c.tpct }}%"></i></div>
+              <span>{{ c.tdone }}/{{ c.ttotal }}</span></div>
             {% endif %}
             <div class="card-meta">
-              {% if c.total %}<span>{{ c.done }}/{{ c.total }} goals</span>{% else %}<span>No goals</span>{% endif %}
-              {% if c.tasks_open %}<span>{{ c.tasks_open }} task{{ 's' if c.tasks_open != 1 }}</span>{% endif %}
+              {% if not c.total and not c.ttotal %}<span>No goals or tasks</span>{% endif %}
               {% if c.p.receipts %}<span>{{ c.p.total_cost|money }}</span>{% endif %}
               {% if c.last_note %}<span>{{ c.last_note.strftime('%b %-d') }}</span>{% endif %}
             </div>

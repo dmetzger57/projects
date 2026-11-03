@@ -244,6 +244,9 @@ struct ProjectDetailView: View {
     private func tasks(_ p: Project) -> some View {
         let (done, total) = p.taskProgress
         return Section {
+            if total > 0 {
+                ProgressView(value: Double(done), total: Double(total)).tint(.blue)
+            }
             ForEach(p.tasks) { t in
                 HStack(alignment: .firstTextBaseline, spacing: 10) {
                     Button {
@@ -306,7 +309,7 @@ struct ProjectDetailView: View {
             HStack {
                 Text("Tasks")
                 Spacer()
-                if total > 0 { Text("\(total - done) open") }
+                if total > 0 { Text("\(done)/\(total)") }
             }
         }
     }

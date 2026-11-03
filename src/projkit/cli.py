@@ -57,8 +57,8 @@ def ls(area: Optional[str] = typer.Option(None, "--area", "-a"),
     """List projects."""
     ws = _ws(root, receipts)
     t = Table(box=None, header_style="bold")
-    for col in ("Area", "Project", "Status", "Goals", "Cost"):
-        t.add_column(col, justify="right" if col in ("Goals", "Cost") else "left")
+    for col in ("Area", "Project", "Status", "Goals", "Tasks", "Cost"):
+        t.add_column(col, justify="right" if col in ("Goals", "Tasks", "Cost") else "left")
     for p in ws.projects(include_closed=closed or status == "closed"):
         a = p.area or ws.location_area(p) or "—"
         if area and area.lower() not in a.lower():
@@ -67,7 +67,8 @@ def ls(area: Optional[str] = typer.Option(None, "--area", "-a"),
         if status and st != status:
             continue
         done, total = p.goal_progress
-        t.add_row(a, p.title, st, f"{done}/{total}" if total else "",
+        tdone, ttotal = p.task_progress
+        t.add_row(a, p.title, st, f"{done}/{total}" if total else "", f"{tdone}/{ttotal}" if ttotal else "",
                   f"${p.total_cost:,.2f}" if p.receipts else "")
     console.print(t)
 

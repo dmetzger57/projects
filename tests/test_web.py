@@ -152,7 +152,10 @@ def test_tasks_add_toggle_edit_delete(client, ws):
     assert client.post(f"{url}/tasks/1/edit", data={"text": "  "}, headers=HX).status_code == 400
     page = client.get(url).text
     assert "Buy cedar shingles" in page and page.index('id="tasks"') < page.index("Project Files")
-    assert "1 task<" in client.get("/").text
+    home = client.get("/").text
+    assert "0 of 1 tasks done" in home and "<span>0/1</span>" in home
+    assert "<b>1</b><span>open tasks</span>" in home
+    assert "0 of 1 tasks done" in client.get("/p/Roof%20Repair/tasks").text
 
 
 def test_task_move_route(client, ws):

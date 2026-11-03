@@ -84,10 +84,11 @@ def create_app(ws: Workspace) -> FastAPI:
     def card(p: Project) -> dict:
         notes = p.notes
         done, total = p.goal_progress
+        tdone, ttotal = p.task_progress
         return dict(p=p, url=purl(p), area=p.area or ws.location_area(p) or "—",
                     status="legacy" if p.legacy else p.status, done=done, total=total,
                     pct=int(100 * done / total) if total else 0,
-                    tasks_open=sum(1 for t in p.tasks if not t["done"]),
+                    tdone=tdone, ttotal=ttotal, tpct=int(100 * tdone / ttotal) if ttotal else 0,
                     last_note=notes[-1].date if notes else None)
 
     def matches(p: Project, q: str) -> bool:
@@ -114,6 +115,7 @@ def create_app(ws: Workspace) -> FastAPI:
         recent = sorted(((n, p) for p in ws.projects(include_closed=False) for n in p.notes if n.text),
                         key=lambda t: t[0].date, reverse=True)[:6]
         totals = dict(projects=len(cards), goals_open=sum(c["total"] - c["done"] for c in cards),
+                      tasks_open=sum(c["ttotal"] - c["tdone"] for c in cards),
                       cost=sum(c["p"].total_cost for c in cards))
         return page(request, "dashboard.html", nav="projects", areas=areas, status=status, q=q,
                     recent=[(n, p, purl(p)) for n, p in recent], ideas=ops.ideas(ws), totals=totals)

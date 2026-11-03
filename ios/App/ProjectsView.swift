@@ -111,10 +111,12 @@ struct SummaryRow: View {
     let projects: [Project]
     var body: some View {
         let open = projects.reduce(0) { $0 + $1.goalProgress.total - $1.goalProgress.done }
+        let openTasks = projects.reduce(0) { $0 + $1.taskProgress.total - $1.taskProgress.done }
         let cost = projects.reduce(0) { $0 + $1.totalCost }
         HStack(spacing: 18) {
             stat("\(projects.count)", "projects")
             stat("\(open)", "open goals")
+            stat("\(openTasks)", "open tasks")
             stat(money(cost), "spent")
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -131,19 +133,17 @@ struct ProjectRow: View {
     let project: Project
     var body: some View {
         let (done, total) = project.goalProgress
+        let (tdone, ttotal) = project.taskProgress
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline) {
                 Text(project.title).font(.body.weight(.semibold))
                 Spacer()
                 StatusBadge(status: project.status)
             }
-            if total > 0 {
-                ProgressView(value: Double(done), total: Double(total))
-            }
+            if total > 0 { ProgressLine(label: "Goals", done: done, total: total, tint: .accentColor) }
+            if ttotal > 0 { ProgressLine(label: "Tasks", done: tdone, total: ttotal, tint: .blue) }
             HStack(spacing: 12) {
-                Text(total > 0 ? "\(done)/\(total) goals" : "No goals")
-                let openTasks = project.tasks.filter { !$0.done }.count
-                if openTasks > 0 { Text("\(openTasks) task\(openTasks == 1 ? "" : "s")") }
+                if total == 0 && ttotal == 0 { Text("No goals or tasks") }
                 if !project.receipts.isEmpty { Text(money(project.totalCost)) }
                 if let last = project.notes.last(where: { !$0.text.isEmpty }) { Text(shortDate(last.date)) }
             }
@@ -151,6 +151,25 @@ struct ProjectRow: View {
             .foregroundStyle(.secondary)
         }
         .padding(.vertical, 2)
+    }
+}
+
+/// "Goals ▬▬▬▭▭ 2/8" — labelled progress bar used for goals and tasks.
+struct ProgressLine: View {
+    let label: String
+    let done: Int
+    let total: Int
+    let tint: Color
+    var body: some View {
+        HStack(spacing: 8) {
+            Text(label).frame(width: 40, alignment: .leading)
+            ProgressView(value: Double(done), total: Double(total)).tint(tint)
+            Text("\(done)/\(total)").monospacedDigit()
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(label): \(done) of \(total) done")
     }
 }
 

@@ -1,10 +1,11 @@
 <section class="panel" id="tasks">
   {% set tasks = p.tasks %}
-  {% set open = tasks|rejectattr('done')|list|length %}
+  {% set done = tasks|selectattr('done')|list|length %}
   <div class="panel-head">
     <h3>Tasks</h3>
-    {% if tasks %}<span class="muted">{{ open }} open · {{ tasks|length - open }} done</span>{% endif %}
+    {% if tasks %}<span class="muted">{{ done }}/{{ tasks|length }}</span>{% endif %}
   </div>
+  {% if tasks %}<div class="bar tasks-bar" role="img" aria-label="{{ done }} of {{ tasks|length }} tasks done"><i style="width: {{ (100 * done / tasks|length)|int }}%"></i></div>{% endif %}
   <ul class="goals tasks" data-move-url="{{ url }}/tasks">
     {% for t in tasks %}
     <li class="{{ 'done' if t.done }}" data-task="{{ loop.index }}">
