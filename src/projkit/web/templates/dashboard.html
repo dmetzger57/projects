@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block body %}
+<div class="toolbar">
+  <div class="chips" role="tablist">
+    {% for s, label in [("open","Open"),("active","Active"),("on-hold","On hold"),("idea","Idea"),("closed","Closed"),("all","All")] %}
+      <a class="chip {{ 'on' if status == s }}" href="/?status={{ s }}{% if q %}&q={{ q|q }}{% endif %}">{{ label }}</a>
+    {% endfor %}
+  </div>
+  <form class="search" method="get" action="/">
+    <input type="hidden" name="status" value="{{ status }}">
+    <input type="search" name="q" value="{{ q }}" placeholder="Search projects, goals, notes…" aria-label="Search">
+  </form>
+</div>
+
+<div class="stats">
+  <div><b>{{ totals.projects }}</b><span>projects</span></div>
+  <div><b>{{ totals.goals_open }}</b><span>open goals</span></div>
+  <div><b>{{ totals.cost|money }}</b><span>spent</span></div>
+</div>
+
+<div class="layout">
+  <div class="col-main">
+    {% for area, cards in areas.items() %}
+      {% if cards or (status == 'open' and not q) %}
+      <section class="area">
+        <div class="area-head">
+          <h2>{{ area }} <span class="muted">{{ cards|length }}</span></h2>
+          {% if area != '—' %}<a class="link-quiet" href="/new?area={{ area|q }}">+ Add</a>{% endif %}
+        </div>
+        {% if cards %}
+        <div class="grid">
+          {% for c in cards %}
+          <a class="card" href="{{ c.url }}">
+            <div class="card-top">
+              <span class="card-title">{{ c.p.title }}</span>
+              <span class="pill s-{{ c.status }}">{{ c.status }}</span>
+            </div>
+            {% if c.total %}
+            <div class="bar" aria-label="{{ c.done }} of {{ c.total }} goals done"><i style="width: {{ c.pct }}%"></i></div>
+            {% endif %}
+            <div class="card-meta">
+              {% if c.total %}<span>{{ c.done }}/{{ c.total }} goals</span>{% else %}<span>No goals</span>{% endif %}
+              {% if c.p.receipts %}<span>{{ c.p.total_cost|money }}</span>{% endif %}
+              {% if c.last_note %}<span>{{ c.last_note.strftime('%b %-d') }}</span>{% endif %}
+            </div>
+          </a>
+          {% endfor %}
+        </div>
+        {% else %}
+        <p class="empty">No projects yet.</p>
+        {% endif %}
+      </section>
+      {% endif %}
+    {% else %}
+      <p class="empty">No areas found.</p>
+    {% endfor %}
+    {% if not areas.values()|select|list %}<p class="empty">Nothing matches.</p>{% endif %}
+  </div>
+
+  <aside class="col-side">
+    <section class="panel">
+      <h3>Recent notes</h3>
+      {% for n, p, url in recent %}
+        <a class="recent" href="{{ url }}">
+          <span class="muted">{{ n.date.strftime('%b %-d') }} · {{ p.title }}</span>
+          <span class="clip">{{ n.text.replace('- ', '', 1).split('\n')[0] }}</span>
+        </a>
+      {% else %}<p class="empty">No notes yet.</p>{% endfor %}
+    </section>
+    <section class="panel">
+      <h3>Idea backlog <a class="link-quiet" href="/ideas">Manage</a></h3>
+      <ul class="plain">
+        {% for i in ideas[:6] %}<li>{{ i }}</li>{% else %}<li class="empty">Empty.</li>{% endfor %}
+      </ul>
+    </section>
+  </aside>
+</div>
+{% endblock %}

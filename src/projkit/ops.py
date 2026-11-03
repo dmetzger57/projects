@@ -230,7 +230,54 @@ def add_link(p: Project, url: str, title: str | None = None) -> None:
     p.save()
 
 
+def remove_link(p: Project, index: int) -> dict:
+    links = _seq(p, "links")
+    if not 0 <= index < len(links):
+        raise OpError(f"no link #{index + 1}")
+    l = links.pop(index)
+    p.save()
+    return l
+
+
+# ---- body sections ---------------------------------------------------------
+EDITABLE_SECTIONS = ("Description", "Project Files")
+
+
+def set_section(p: Project, heading: str, text: str) -> None:
+    """Replace the content of `## heading` (created before Notes if missing)."""
+    if heading not in EDITABLE_SECTIONS:
+        raise OpError(f"section '{heading}' is not editable")
+    text = text.replace("\r\n", "\n").strip()
+    if any(ln.startswith("## ") for ln in text.splitlines()):
+        raise OpError("section text may not contain '## ' headings")
+    lines = p.body.rstrip("\n").splitlines()
+    start = next((i for i, l in enumerate(lines) if l.startswith("## ") and l[3:].strip().lower() == heading.lower()), None)
+    new = [f"## {heading}"] + (text.splitlines() if text else []) + [""]
+    if start is None:
+        notes = next((i for i, l in enumerate(lines) if l.strip().lower() == "## notes"), len(lines))
+        if notes and lines[notes - 1].strip():
+            new.insert(0, "")
+        lines[notes:notes] = new
+    else:
+        end = next((i for i in range(start + 1, len(lines)) if lines[i].startswith("## ")), len(lines))
+        lines[start:end] = new if end < len(lines) else new[:-1]
+    p.body = "\n".join(lines).rstrip("\n") + "\n"
+    if not p.body.startswith("\n"):
+        p.body = "\n" + p.body
+    p.save()
+
+
 # ---- receipts --------------------------------------------------------------
+def remove_receipt(p: Project, index: int) -> dict:
+    """Detach a receipt from the project (the file in the receipts folder is kept)."""
+    rec = _seq(p, "receipts")
+    if not 0 <= index < len(rec):
+        raise OpError(f"no receipt #{index + 1}")
+    r = rec.pop(index)
+    p.save()
+    return r
+
+
 def tag_file(path: Path, tag: str = RECEIPT_TAG) -> None:
     """Add a Finder tag (merging with existing tags)."""
     if shutil.which("tag"):

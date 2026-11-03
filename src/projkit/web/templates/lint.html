@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Health · Projects{% endblock %}
+{% block body %}
+<div class="narrow wide">
+  <h1>Folder health</h1>
+  <p class="muted">Structural checks on the projects folder (same as <code>proj lint</code>).</p>
+  {% if rows %}
+  <ul class="plain list issues">
+    {% for r in rows %}
+    <li>
+      <span class="pill sev-{{ r.i.severity }}">{{ r.i.severity }}</span>
+      <div>
+        <div>{{ r.i.message }}</div>
+        <div class="muted small">{{ r.i.code }} · {{ r.rel }}</div>
+      </div>
+      {% if r.i.fixable %}
+      <button class="btn small" hx-post="/lint/fix" hx-vals='{{ {"code": r.i.code, "path": r.i.path|string}|tojson }}'>Fix</button>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="panel">No issues. Everything is in order.</p>
+  {% endif %}
+</div>
+{% endblock %}

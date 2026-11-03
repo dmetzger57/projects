@@ -341,5 +341,24 @@ def idea_promote(idea: str, area: str = typer.Option(..., "--area", "-a"),
     console.print(f"[green]created[/] {p.dir}")
 
 
+@app.command()
+def serve(port: int = typer.Option(8765, "--port", "-p"),
+          open_browser: bool = typer.Option(True, "--open/--no-open", help="Open the browser"),
+          root: Optional[Path] = RootOpt, receipts: Optional[Path] = ReceiptsOpt):
+    """Run the local web UI (bound to 127.0.0.1 only)."""
+    import threading
+    import webbrowser
+
+    import uvicorn
+
+    from .web.app import create_app
+
+    url = f"http://127.0.0.1:{port}/"
+    console.print(f"Projects UI at [bold]{url}[/]  (Ctrl-C to stop)")
+    if open_browser:
+        threading.Timer(1.0, webbrowser.open, args=(url,)).start()
+    uvicorn.run(create_app(_ws(root, receipts)), host="127.0.0.1", port=port, log_level="warning")
+
+
 if __name__ == "__main__":
     app()

@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}New project · Projects{% endblock %}
+{% block body %}
+<section class="panel narrow">
+  <h1>New project</h1>
+  <form hx-post="/new" class="stack">
+    <label>Name<input name="title" required autofocus></label>
+    <label>Area
+      <select name="area">{% for a in areas %}<option {{ 'selected' if a == area }}>{{ a }}</option>{% endfor %}</select>
+    </label>
+    <label>Status
+      <select name="status">{% for s in STATUSES if s != 'closed' %}<option {{ 'selected' if s == 'active' }}>{{ s }}</option>{% endfor %}</select>
+    </label>
+    <div class="row-end"><a class="btn" href="/">Cancel</a><button class="btn primary">Create</button></div>
+  </form>
+</section>
+{% endblock %}

@@ -1,0 +1,26 @@
+<section class="panel" id="goals">
+  <div class="panel-head">
+    <h3>Goals</h3>
+    {% if card.total %}<span class="muted">{{ card.done }}/{{ card.total }}</span>{% endif %}
+  </div>
+  {% if card.total %}<div class="bar"><i style="width: {{ card.pct }}%"></i></div>{% endif %}
+  <ul class="goals">
+    {% for g in p.goals %}
+    <li class="{{ 'done' if g.get('done') }}">
+      <label>
+        <input type="checkbox" {{ 'checked' if g.get('done') }}
+               hx-post="{{ url }}/goals/{{ loop.index }}/toggle" hx-target="#goals" hx-swap="outerHTML">
+        <span>{{ g.get('text') }}</span>
+      </label>
+      {% if g.get('done_on') %}<span class="muted small">{{ g.get('done_on') }}</span>{% endif %}
+      <button class="x" title="Remove goal" aria-label="Remove goal"
+              hx-post="{{ url }}/goals/{{ loop.index }}/delete" hx-target="#goals" hx-swap="outerHTML"
+              hx-confirm="Remove goal “{{ g.get('text') }}”?">×</button>
+    </li>
+    {% endfor %}
+  </ul>
+  <form hx-post="{{ url }}/goals" hx-target="#goals" hx-swap="outerHTML" class="add-row">
+    <input name="text" placeholder="Add a goal" aria-label="New goal" required>
+    <button class="btn">Add</button>
+  </form>
+</section>

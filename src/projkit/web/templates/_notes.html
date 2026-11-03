@@ -1,0 +1,14 @@
+<section class="panel" id="notes">
+  <div class="panel-head"><h3>Notes</h3></div>
+  <form hx-post="{{ url }}/notes" hx-target="#notes" hx-swap="outerHTML" class="note-form">
+    <textarea name="text" rows="2" placeholder="Add a note for today…" aria-label="New note"
+              onkeydown="if((event.metaKey||event.ctrlKey)&&event.key==='Enter'){this.form.requestSubmit()}"></textarea>
+    <div class="row-end"><span class="hint">⌘↩ to save</span><button class="btn primary">Add note</button></div>
+  </form>
+  {% for n in notes if n.text %}
+    <div class="note">
+      <div class="note-date">{{ n.date.strftime('%A, %B %-d, %Y') }}</div>
+      <div class="md">{{ n.text|md|safe }}</div>
+    </div>
+  {% else %}<p class="empty">No notes yet.</p>{% endfor %}
+</section>

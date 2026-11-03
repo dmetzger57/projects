@@ -1,0 +1,19 @@
+<section class="panel" id="sec-{{ name|replace(' ', '-') }}" hx-target="this" hx-swap="outerHTML">
+  {% if edit %}
+  <form class="editing" hx-post="{{ url }}/section/{{ name|q }}">
+    <div class="panel-head"><h3>{{ name }}</h3></div>
+    <textarea name="text" rows="8" autofocus aria-label="{{ name }}">{{ text }}</textarea>
+    <div class="row-end">
+      <button type="button" class="btn" hx-get="{{ url }}/section/{{ name|q }}">Cancel</button>
+      <button class="btn primary">Save</button>
+    </div>
+    <p class="hint">Markdown. Use <code>- item</code> for lists, indent two spaces to nest.</p>
+  </form>
+  {% else %}
+  <div class="panel-head">
+    <h3>{{ name }}</h3>
+    <button class="btn small" hx-get="{{ url }}/section/{{ name|q }}?edit=true">Edit</button>
+  </div>
+  {% if text %}<div class="md">{{ text|md|safe }}</div>{% else %}<p class="empty">Nothing yet.</p>{% endif %}
+  {% endif %}
+</section>

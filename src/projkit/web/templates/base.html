@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Projects{% endblock %}</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/htmx.min.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/">Projects</a>
+    <nav>
+      <a href="/" class="{{ 'on' if nav == 'projects' }}">Overview</a>
+      <a href="/ideas" class="{{ 'on' if nav == 'ideas' }}">Ideas</a>
+      <a href="/lint" class="{{ 'on' if nav == 'lint' }}">Health{% if issue_count %} <span class="badge">{{ issue_count }}</span>{% endif %}</a>
+    </nav>
+    <a class="btn primary" href="/new">New<span class="long">&nbsp;project</span></a>
+  </header>
+  <main>{% block body %}{% endblock %}</main>
+  <div id="toast" role="status" aria-live="polite"></div>
+  <div hx-get="/api/fingerprint" hx-trigger="every 4s" hx-swap="none" id="fp"></div>
+  <script>
+    // errors from the server (OpError → 400) show as a toast
+    document.body.addEventListener("htmx:responseError", e => {
+      const t = document.getElementById("toast");
+      t.textContent = e.detail.xhr.responseText || "Something went wrong";
+      t.classList.add("show"); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove("show"), 5000);
+    });
+    // live refresh when files change on disk (CLI, Finder, iCloud) — skipped while you are typing
+    let fp = null;
+    document.body.addEventListener("htmx:afterRequest", e => {
+      if (e.detail.elt.id !== "fp" || !e.detail.successful) return;
+      const v = e.detail.xhr.responseText;
+      const typing = document.activeElement && /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)
+                     && document.activeElement.value;
+      if (fp && v !== fp && !typing && !document.querySelector("form.editing")) location.reload();
+      if (!typing) fp = v;
+    });
+    // our own edits change the fingerprint too; resync after each successful mutation
+    document.body.addEventListener("htmx:afterOnLoad", e => {
+      if (e.detail.elt.id !== "fp" && e.detail.requestConfig.verb !== "get") fp = null;
+    });
+  </script>
+</body>
+</html>

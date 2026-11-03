@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}{{ p.title }} · Projects{% endblock %}
+{% block body %}
+<div class="crumbs"><a href="/">Overview</a> / {{ card.area }}{% if closed %} / Closed{% endif %}</div>
+
+<div class="proj-head">
+  <div>
+    <h1>{{ p.title }}</h1>
+    <div class="muted">
+      {% if p.created %}Created {{ p.created.strftime('%b %-d, %Y') }}{% endif %}
+      {% if p.meta.get('closed') %} · Closed {{ p.meta.closed }}{% endif %}
+      · <span class="path" title="{{ p.dir }}">{{ p.dir|tilde }}</span>
+    </div>
+  </div>
+  <div class="actions">
+    {% if p.legacy %}
+      <span class="pill s-legacy">legacy</span>
+    {% elif closed %}
+      <form hx-post="{{ url }}/reopen" class="inline">
+        <select name="area" aria-label="Reopen into area">
+          {% for a in areas %}<option {{ 'selected' if a == p.area }}>{{ a }}</option>{% endfor %}
+        </select>
+        <button class="btn">Reopen</button>
+      </form>
+    {% else %}
+      <select name="status" hx-post="{{ url }}/status" hx-trigger="change" aria-label="Status">
+        {% for s in STATUSES if s != 'closed' %}<option value="{{ s }}" {{ 'selected' if s == p.status }}>{{ s }}</option>{% endfor %}
+      </select>
+      <button class="btn" hx-post="{{ url }}/close" hx-confirm="Close '{{ p.title }}'? It moves to '2 - Closed'.">Close</button>
+    {% endif %}
+    <button class="btn" hx-post="{{ url }}/rename" hx-prompt="New name for this project" hx-vals='js:{title: event.detail.prompt}'
+            {% if p.legacy %}disabled{% endif %}>Rename</button>
+    <button class="btn" hx-post="{{ url }}/reveal" hx-swap="none" title="Reveal in Finder">Finder</button>
+  </div>
+</div>
+
+{% if p.legacy %}
+  <p class="notice">This project has no README.md yet. Run <code>proj migrate</code>.</p>
+{% elif p.parse_error %}
+  <p class="notice">README.md could not be parsed: {{ p.parse_error }}</p>
+{% else %}
+<div class="layout">
+  <div class="col-main">
+    {% for name in EDITABLE %}
+      {% set text = p.section(name) or '' %}{% set edit = False %}
+      {% include "_section.html" %}
+    {% endfor %}
+    {% include "_notes.html" %}
+  </div>
+  <aside class="col-side">
+    {% include "_goals.html" %}
+    {% include "_links.html" %}
+    {% include "_receipts.html" %}
+  </aside>
+</div>
+{% endif %}
+{% endblock %}

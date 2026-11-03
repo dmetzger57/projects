@@ -1,0 +1,19 @@
+<section class="panel" id="ideas">
+  <form hx-post="/ideas" hx-target="#ideas" hx-swap="outerHTML" class="add-row">
+    <input name="text" placeholder="New idea" aria-label="New idea" required autofocus>
+    <button class="btn primary">Add</button>
+  </form>
+  <ul class="plain list ideas">
+    {% for i in ideas %}
+    <li>
+      <span>{{ i }}</span>
+      <form hx-post="/ideas/{{ loop.index }}/promote" class="inline">
+        <select name="area" aria-label="Area for new project">{% for a in areas %}<option>{{ a }}</option>{% endfor %}</select>
+        <button class="btn small">Make project</button>
+      </form>
+      <button class="x" aria-label="Delete idea" hx-post="/ideas/{{ loop.index }}/delete"
+              hx-target="#ideas" hx-swap="outerHTML" hx-confirm="Delete idea “{{ i }}”?">×</button>
+    </li>
+    {% else %}<li class="empty">No ideas yet.</li>{% endfor %}
+  </ul>
+</section>

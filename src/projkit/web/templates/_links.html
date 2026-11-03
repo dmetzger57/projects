@@ -1,0 +1,19 @@
+<section class="panel" id="links">
+  <div class="panel-head"><h3>Links</h3></div>
+  <ul class="plain list">
+    {% for l in p.links %}
+    <li>
+      <a href="{{ l.get('url')|safe_url }}" target="_blank" rel="noopener noreferrer">{{ l.get('title') or l.get('url') }}</a>
+      <button class="x" aria-label="Remove link" hx-post="{{ url }}/links/{{ loop.index }}/delete"
+              hx-target="#links" hx-swap="outerHTML" hx-confirm="Remove this link?">×</button>
+    </li>
+    {% else %}<li class="empty">No links.</li>{% endfor %}
+  </ul>
+  <form hx-post="{{ url }}/links" hx-target="#links" hx-swap="outerHTML" class="stack">
+    <input name="url" type="url" placeholder="https://…" aria-label="Link URL" required>
+    <div class="add-row">
+      <input name="title" placeholder="Title (optional)" aria-label="Link title">
+      <button class="btn">Add</button>
+    </div>
+  </form>
+</section>

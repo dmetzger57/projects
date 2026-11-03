@@ -1,0 +1,36 @@
+<section class="panel" id="receipts">
+  <div class="panel-head">
+    <h3>Receipts</h3>
+    {% if p.receipts %}<span class="muted">{{ p.total_cost|money }}</span>{% endif %}
+  </div>
+  <ul class="plain list">
+    {% for r in p.receipts %}
+    <li>
+      <div>
+        <a href="/receipt?path={{ r.get('path')|q }}" target="_blank">{{ r.get('path').split('/')[-1] }}</a>
+        <div class="muted small">
+          {{ r.get('date') or '' }}{% if r.get('vendor') %} · {{ r.get('vendor') }}{% endif %}
+          {% if r.get('amount') is not none %} · {{ r.get('amount')|money }}{% endif %}
+        </div>
+      </div>
+      <button class="x" aria-label="Detach receipt" hx-post="{{ url }}/receipts/{{ loop.index }}/delete"
+              hx-target="#receipts" hx-swap="outerHTML"
+              hx-confirm="Detach this receipt? The file stays in ~/Documents/Receipts.">×</button>
+    </li>
+    {% else %}<li class="empty">No receipts.</li>{% endfor %}
+  </ul>
+  <details>
+    <summary>Add receipt</summary>
+    <form hx-post="{{ url }}/receipts" hx-encoding="multipart/form-data" hx-target="#receipts" hx-swap="outerHTML" class="stack">
+      <input type="file" name="file" required aria-label="Receipt file">
+      <div class="add-row">
+        <input name="amount" inputmode="decimal" placeholder="Amount" aria-label="Amount">
+        <input name="date" type="date" value="{{ today }}" aria-label="Date">
+      </div>
+      <input name="vendor" placeholder="Vendor" aria-label="Vendor">
+      <input name="desc" placeholder="Description (used in file name)" aria-label="Description">
+      <button class="btn primary">Save to Receipts</button>
+      <p class="hint">Filed as Receipts/&lt;year&gt;/&lt;date&gt; &lt;description&gt; and tagged “receipt”.</p>
+    </form>
+  </details>
+</section>
