@@ -11,7 +11,7 @@ from pathlib import Path
 
 from ruamel.yaml.comments import CommentedMap, CommentedSeq
 
-from .project import (FORMAT_VERSION, README, STATUSES, URL_SCHEME_RE, Project, file_line_indices,
+from .project import (FORMAT_VERSION, ProjectError, README, STATUSES, URL_SCHEME_RE, Project, file_line_indices,
                       parse_file_line, section_bounds, task_line_indices)
 from .workspace import BACKLOG_STEM, Workspace
 
@@ -19,7 +19,7 @@ RECEIPT_TAG = "receipt"
 _BAD_NAME = re.compile(r'[/:\x00]')
 
 
-class OpError(Exception):
+class OpError(ProjectError):
     pass
 
 

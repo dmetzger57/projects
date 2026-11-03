@@ -17,7 +17,7 @@ from markdown_it import MarkdownIt
 
 from .. import ops
 from ..lint import lint_workspace
-from ..project import STATUSES, Project
+from ..project import STATUSES, Project, ProjectError
 from ..workspace import Workspace
 
 HERE = Path(__file__).parent
@@ -60,7 +60,7 @@ def create_app(ws: Workspace) -> FastAPI:
             return PlainTextResponse("missing HX-Request header", status_code=403)  # CSRF guard
         try:
             return await call_next(request)
-        except ops.OpError as e:
+        except ProjectError as e:          # OpError and unreadable-README refusals
             return PlainTextResponse(str(e), status_code=400)
 
     # ---- helpers -----------------------------------------------------------

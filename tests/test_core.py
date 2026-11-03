@@ -157,6 +157,48 @@ def test_unreadable_readme_does_not_crash(ws, monkeypatch):
         return real(self, *a, **k)
 
     monkeypatch.setattr(Path, "read_text", flaky)
+    monkeypatch.setattr("time.sleep", lambda s: None)
     p = ws.find("photo")[0]
     assert "could not be read right now" in p.parse_error
     assert any(i.code == "L009" for i in lint_workspace(ws))
+
+
+def test_never_overwrite_unreadable_readme(ws, monkeypatch):
+    """Regression: an unreadable README (iCloud EDEADLK) must not be replaced by an empty one."""
+    import errno
+    from projkit import ops
+    from projkit.project import ProjectError
+    p_dir = ws.find("photo")[0].dir
+    before = (p_dir / "README.md").read_text()
+    real = Path.read_text
+
+    def always_busy(self, *a, **k):
+        if self.name == "README.md" and self.parent == p_dir:
+            raise OSError(errno.EDEADLK, "Resource deadlock avoided")
+        return real(self, *a, **k)
+
+    monkeypatch.setattr(Path, "read_text", always_busy)
+    monkeypatch.setattr("time.sleep", lambda s: None)
+    p = Project.load(p_dir)
+    assert p.parse_error and p.body == ""
+    with pytest.raises(ProjectError):
+        ops.add_note(p, "would wipe the file")
+    monkeypatch.setattr(Path, "read_text", real)
+    assert (p_dir / "README.md").read_text() == before
+
+
+def test_transient_icloud_read_is_retried(ws, monkeypatch):
+    import errno
+    p_dir = ws.find("photo")[0].dir
+    real, calls = Path.read_text, {"n": 0}
+
+    def busy_twice(self, *a, **k):
+        if self.name == "README.md" and self.parent == p_dir and calls["n"] < 2:
+            calls["n"] += 1
+            raise OSError(errno.EDEADLK, "Resource deadlock avoided")
+        return real(self, *a, **k)
+
+    monkeypatch.setattr(Path, "read_text", busy_twice)
+    monkeypatch.setattr("time.sleep", lambda s: None)
+    p = Project.load(p_dir)
+    assert p.parse_error is None and p.title == "Digital Photo Archive" and calls["n"] == 2

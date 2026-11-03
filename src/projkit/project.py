@@ -68,6 +68,25 @@ class FrontMatterError(ValueError):
     pass
 
 
+class ProjectError(Exception):
+    """A user-facing problem with a project (shown as a message, never a crash)."""
+
+
+def read_text_retrying(path: Path, attempts: int = 8, delay: float = 0.25) -> str:
+    """Read a file that iCloud may still be downloading. macOS reports EDEADLK
+    ("Resource deadlock avoided") for an evicted file being fetched; retry briefly."""
+    import errno
+    import time
+    for i in range(attempts):
+        try:
+            return path.read_text(encoding="utf-8")
+        except OSError as e:
+            if e.errno not in (errno.EDEADLK, errno.EAGAIN, errno.EBUSY) or i == attempts - 1:
+                raise
+            time.sleep(delay)
+    raise AssertionError("unreachable")
+
+
 def split_front_matter(text: str) -> tuple[CommentedMap, str]:
     m = _FM_RE.match(text)
     if not m:
@@ -123,7 +142,7 @@ class Project:
             p.legacy = True
             return p
         try:
-            p.meta, p.body = split_front_matter(p.readme.read_text(encoding="utf-8"))
+            p.meta, p.body = split_front_matter(read_text_retrying(p.readme))
         except (FrontMatterError, UnicodeDecodeError) as e:
             p.parse_error = str(e)
         except OSError as e:
@@ -132,7 +151,11 @@ class Project:
         return p
 
     def save(self) -> None:
-        """Atomic write (temp file + rename) so iCloud never syncs a half-written file."""
+        """Atomic write (temp file + rename) so iCloud never syncs a half-written file.
+        Refuses to write a project whose README could not be read: its meta/body are
+        empty placeholders, and saving them would wipe the real file."""
+        if self.parse_error is not None:
+            raise ProjectError(f"'{self.dir.name}' was not saved: {self.parse_error}")
         text = join_front_matter(self.meta, self.body)
         fd, tmp = tempfile.mkstemp(dir=self.dir, prefix=".README.", suffix=".tmp")
         try:
