@@ -47,7 +47,9 @@ struct ProjectDetailView: View {
     @State private var editingTask: ProjectTask?
     @State private var editTaskText = ""
     @State private var showAddLink = false
-    @State private var importingReceipt = false
+    @State private var importing = false
+    @State private var importingDocumentsFolder = false   // the single file importer is shared
+    @State private var pendingOpen: ProjectFile?           // file to open once the Documents folder is chosen
     @State private var scanning = false
     @State private var pendingReceipt: PendingReceipt?
     @State private var preview: URL?
@@ -116,8 +118,17 @@ struct ProjectDetailView: View {
                 }
             }
         }
-        .fileImporter(isPresented: $importingReceipt, allowedContentTypes: [.pdf, .image]) { result in
+        .fileImporter(isPresented: $importing,
+                      allowedContentTypes: importingDocumentsFolder ? [.folder] : [.pdf, .image]) { result in
             guard case let .success(url) = result else { return }
+            if importingDocumentsFolder {
+                importingDocumentsFolder = false
+                Task {
+                    await model.setDocumentsFolder(url)
+                    if let f = pendingOpen { pendingOpen = nil; open(f) }
+                }
+                return
+            }
             let scoped = url.startAccessingSecurityScopedResource()
             defer { if scoped { url.stopAccessingSecurityScopedResource() } }
             do {
@@ -127,6 +138,13 @@ struct ProjectDetailView: View {
             } catch {
                 model.errorMessage = "Couldn't read \(url.lastPathComponent): \(error.localizedDescription)"
             }
+        }
+        .alert("Allow Access to Documents", isPresented: Binding(get: { pendingOpen != nil && !importing },
+                                                                set: { if !$0 && !importing { pendingOpen = nil } })) {
+            Button("Choose Documents Folder") { importingDocumentsFolder = true; importing = true }
+            Button("Cancel", role: .cancel) { pendingOpen = nil }
+        } message: {
+            Text("To open “\(pendingOpen?.name ?? "this file")”, choose iCloud Drive › Documents. Proj remembers it for all Project Files.")
         }
         .sheet(item: $fileSheet) { s in
             FileEntrySheet(sheet: s, documentsRoot: model.documentsRoot) { name, target in
@@ -374,8 +392,8 @@ struct ProjectDetailView: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(f.name).foregroundStyle(Color.accentColor)
                             if showPaths {
-                                Text(f.target).font(.caption.monospaced()).foregroundStyle(.secondary)
-                                    .lineLimit(3).textSelection(.enabled)
+                                Text(displayPath(f)).font(.caption.monospaced()).foregroundStyle(.secondary)
+                                    .lineLimit(4).textSelection(.enabled)
                             }
                         }
                     }
@@ -434,15 +452,26 @@ struct ProjectDetailView: View {
             if let u = URL(string: f.target) { openURL(u) } else { model.errorMessage = "Not a valid URL: \(f.target)" }
             return
         }
-        guard model.documentsRoot != nil else {
-            model.errorMessage = "To open files, choose iCloud Drive › Documents in Settings › Documents."
+        guard let url = model.fileURL(for: f) else {
+            if model.documentsRoot == nil {
+                pendingOpen = f              // ask for the Documents folder, then open
+            } else {
+                model.errorMessage = "Can't open \(f.target)"
+            }
             return
         }
-        guard let url = Ops.fileURL(f, documentsRoot: model.documentsRoot) else {
-            model.errorMessage = "Can't open \(f.target)"
-            return
+        Task {
+            if let ready = await model.prepareForViewing(url) {
+                preview = ready
+            } else {
+                model.errorMessage = "Couldn't open “\(f.name)”. Check that \(displayPath(f)) still exists."
+            }
         }
-        Task { preview = await model.prepareForViewing(url) }
+    }
+
+    /// Full location as the user sees it in the Files app.
+    private func displayPath(_ f: ProjectFile) -> String {
+        f.isURL ? f.target : "iCloud Drive › " + f.target.split(separator: "/").joined(separator: " › ")
     }
 
     private func textSection(_ p: Project, _ name: String) -> some View {
@@ -512,7 +541,7 @@ struct ProjectDetailView: View {
                 if DocumentScanner.isAvailable {
                     Button { scanning = true } label: { Label("Scan Document", systemImage: "doc.viewfinder") }
                 }
-                Button { importingReceipt = true } label: { Label("Choose File", systemImage: "folder") }
+                Button { importingDocumentsFolder = false; importing = true } label: { Label("Choose File", systemImage: "folder") }
             } label: {
                 Label("Add Receipt", systemImage: "plus.circle")
             }

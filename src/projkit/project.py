@@ -126,6 +126,9 @@ class Project:
             p.meta, p.body = split_front_matter(p.readme.read_text(encoding="utf-8"))
         except (FrontMatterError, UnicodeDecodeError) as e:
             p.parse_error = str(e)
+        except OSError as e:
+            # e.g. EDEADLK while iCloud is still downloading the file: report, don't crash
+            p.parse_error = f"README.md could not be read right now ({e.strerror or e}); try again shortly"
         return p
 
     def save(self) -> None:

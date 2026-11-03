@@ -23,6 +23,7 @@ final class AppModel {
     private static let projectsKey = "projectsBookmark"
     private static let receiptsKey = "receiptsBookmark"
     private static let documentsKey = "documentsBookmark"
+    private static let fileBookmarksKey = "fileBookmarks"     // [Project Files target: bookmark]
     private static let receiptsInsideKey = "receiptsInside"
 
     var receiptsRoot: URL? {
@@ -82,6 +83,34 @@ final class AppModel {
         } catch {
             errorMessage = "Couldn't remember that folder: \(error.localizedDescription)"
         }
+    }
+
+    // MARK: project files
+
+    /// Remembers access to a file picked with Browse, so it opens even without the Documents folder chosen.
+    func rememberFile(_ url: URL, as target: String) {
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        guard let data = try? url.bookmarkData(options: Self.createOptions, includingResourceValuesForKeys: nil, relativeTo: nil)
+        else { return }
+        var all = UserDefaults.standard.dictionary(forKey: Self.fileBookmarksKey) as? [String: Data] ?? [:]
+        all[target] = data
+        UserDefaults.standard.set(all, forKey: Self.fileBookmarksKey)
+    }
+
+    /// Where a Project Files entry lives on this phone: a remembered bookmark, else inside the Documents folder.
+    func fileURL(for f: ProjectFile) -> URL? {
+        guard !f.isURL else { return nil }
+        if let data = (UserDefaults.standard.dictionary(forKey: Self.fileBookmarksKey) as? [String: Data])?[f.target] {
+            var stale = false
+            if let url = try? URL(resolvingBookmarkData: data, options: Self.resolveOptions, relativeTo: nil,
+                                  bookmarkDataIsStale: &stale) {
+                _ = url.startAccessingSecurityScopedResource()   // held while the app runs
+                if stale { rememberFile(url, as: f.target) }
+                return url
+            }
+        }
+        return Ops.fileURL(f, documentsRoot: documentsRoot)
     }
 
     func setReceiptsFolder(_ url: URL) async {

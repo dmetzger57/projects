@@ -41,6 +41,7 @@ struct FileEntrySheet: View {
     let sheet: FileSheet
     let documentsRoot: URL?
     let save: (String?, String) async -> Bool
+    @Environment(AppModel.self) private var model
     @State private var isLink = false
     @State private var name = ""
     @State private var target = ""
@@ -104,6 +105,7 @@ struct FileEntrySheet: View {
                 guard case let .success(url) = result else { return }
                 do {
                     target = try ReadmeBody.normalizeFilePath(url.path, documentsRoot: documentsRoot)
+                    model.rememberFile(url, as: target)       // lets it open without the Documents folder
                     problem = nil
                 } catch {
                     problem = "That file isn't inside iCloud Drive › Documents."

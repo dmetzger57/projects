@@ -565,8 +565,10 @@ def open_file_entry(entry: dict) -> None:
     """Open a Project Files entry on this Mac (default app / browser)."""
     target = entry["target"] if entry["kind"] == "url" else str(resolve_file(entry["target"]))
     if entry["kind"] == "file" and not Path(target).exists():
-        raise OpError(f"file not found: {entry['target']}")
-    subprocess.run(["open", target], check=False)
+        raise OpError(f"file not found: {target}")
+    r = subprocess.run(["open", target], capture_output=True, text=True)
+    if r.returncode != 0:
+        raise OpError(f"could not open {target}: {r.stderr.strip() or r.returncode}")
 
 
 # ---- receipts --------------------------------------------------------------

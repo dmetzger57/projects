@@ -341,7 +341,8 @@ def file_ls(project: str, paths: bool = typer.Option(False, "--paths", "-p", hel
     p = _pick(_ws(root, receipts), project)
     for i, f in enumerate(p.files, 1):
         icon = "🔗" if f["kind"] == "url" else "📄"
-        extra = f"  [dim]{f['target']}[/]" if paths else ""
+        full = f["target"] if f["kind"] == "url" else str(ops.resolve_file(f["target"]))
+        extra = f"  [dim]{full}[/]" if paths else ""
         console.print(f"{i:3}. {icon} {f['name']}{extra}", highlight=False)
     if not p.files:
         console.print("[dim]No project files.[/]")

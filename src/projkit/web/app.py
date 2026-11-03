@@ -136,13 +136,14 @@ def create_app(ws: Workspace) -> FastAPI:
     def files_info(p: Project) -> list[dict]:
         out = []
         for f in p.files:
-            exists = True
+            exists, full = True, f["target"]
             if f["kind"] == "file":
                 try:
-                    exists = ops.resolve_file(f["target"]).exists()
+                    path = ops.resolve_file(f["target"])
+                    exists, full = path.exists(), str(path)
                 except ops.OpError:
                     exists = False
-            out.append({**f, "exists": exists})
+            out.append({**f, "exists": exists, "full": full})
         return out
 
     # ---- project partial updates -------------------------------------------

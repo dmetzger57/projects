@@ -33,11 +33,11 @@
           {% if f.kind == 'url' %}
           <a href="{{ f.target|safe_url }}" target="_blank" rel="noopener noreferrer" title="{{ f.target }}">{{ f.name }}</a>
           {% else %}
-          <button type="button" class="linklike" title="Open {{ f.target }}" {% if not f.exists %}disabled{% endif %}
+          <button type="button" class="linklike" title="Open {{ f.full }}" {% if not f.exists %}disabled{% endif %}
                   hx-post="{{ url }}/files/{{ loop.index }}/open" hx-swap="none">{{ f.name }}</button>
           {% if not f.exists %}<span class="muted small"> — file not found</span>{% endif %}
           {% endif %}
-          <div class="file-target muted small">{{ f.target }}</div>
+          <div class="file-target muted small">{{ f.full }}</div>
         </div>
       </div>
       <span class="tools">

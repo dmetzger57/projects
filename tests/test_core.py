@@ -145,3 +145,18 @@ def test_untagged_receipt_flagged_and_fixed(ws):
     issues[0].fix()
     assert "receipt" in file_tags(ws.receipts_root / "2026" / "scanner.pdf")
     assert [i for i in lint_workspace(ws) if i.code == "L013"] == []
+
+
+def test_unreadable_readme_does_not_crash(ws, monkeypatch):
+    import errno
+    real = Path.read_text
+
+    def flaky(self, *a, **k):
+        if self.name == "README.md" and "Digital Photo Archive" in str(self):
+            raise OSError(errno.EDEADLK, "Resource deadlock avoided")
+        return real(self, *a, **k)
+
+    monkeypatch.setattr(Path, "read_text", flaky)
+    p = ws.find("photo")[0]
+    assert "could not be read right now" in p.parse_error
+    assert any(i.code == "L009" for i in lint_workspace(ws))
