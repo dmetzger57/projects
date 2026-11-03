@@ -276,6 +276,59 @@ def goal_rm(project: str, goal: str, root: Optional[Path] = RootOpt, receipts: O
     console.print(f"removed: {g['text']}")
 
 
+task_app = typer.Typer(no_args_is_help=True, help="Manage the Tasks checklist (refer to a task by number or text).")
+app.add_typer(task_app, name="task")
+
+
+@task_app.command("ls")
+def task_ls(project: str, root: Optional[Path] = RootOpt, receipts: Optional[Path] = ReceiptsOpt):
+    p = _pick(_ws(root, receipts), project)
+    for i, t in enumerate(p.tasks, 1):
+        console.print(f"{i:3}. {'[green]✔[/]' if t['done'] else '☐'} {t['text']}", highlight=False)
+    if not p.tasks:
+        console.print("[dim]No tasks.[/]")
+
+
+@task_app.command("add")
+def task_add(project: str, text: str, root: Optional[Path] = RootOpt, receipts: Optional[Path] = ReceiptsOpt):
+    p = _pick(_ws(root, receipts), project)
+    _run(ops.add_task, p, text)
+    console.print(f"[green]added task #{len(p.tasks)}[/] to {p.title}")
+
+
+@task_app.command("done")
+def task_done(project: str, task: str, root: Optional[Path] = RootOpt, receipts: Optional[Path] = ReceiptsOpt):
+    t = _run(ops.set_task, _pick(_ws(root, receipts), project), task, True)
+    console.print(f"[green]✔[/] {t['text']}", highlight=False)
+
+
+@task_app.command("undo")
+def task_undo(project: str, task: str, root: Optional[Path] = RootOpt, receipts: Optional[Path] = ReceiptsOpt):
+    t = _run(ops.set_task, _pick(_ws(root, receipts), project), task, False)
+    console.print(f"☐ {t['text']}", highlight=False)
+
+
+@task_app.command("edit")
+def task_edit(project: str, task: str, text: str, root: Optional[Path] = RootOpt, receipts: Optional[Path] = ReceiptsOpt):
+    t = _run(ops.edit_task, _pick(_ws(root, receipts), project), task, text)
+    console.print(f"edited: {t['text']}", highlight=False)
+
+
+@task_app.command("mv")
+def task_mv(project: str, task: str, position: int,
+            root: Optional[Path] = RootOpt, receipts: Optional[Path] = ReceiptsOpt):
+    """Move a task to a 1-based position (1 = top)."""
+    p = _pick(_ws(root, receipts), project)
+    t = _run(ops.move_task, p, task, position)
+    console.print(f"moved to #{max(1, min(position, len(p.tasks)))}: {t['text']}", highlight=False)
+
+
+@task_app.command("rm")
+def task_rm(project: str, task: str, root: Optional[Path] = RootOpt, receipts: Optional[Path] = ReceiptsOpt):
+    t = _run(ops.remove_task, _pick(_ws(root, receipts), project), task)
+    console.print(f"removed: {t['text']}", highlight=False)
+
+
 link_app = typer.Typer(no_args_is_help=True, help="Manage links.")
 app.add_typer(link_app, name="link")
 

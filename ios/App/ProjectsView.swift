@@ -26,6 +26,7 @@ struct ProjectsView: View {
             let q = search.lowercased()
             return p.title.lowercased().contains(q)
                 || p.goals.contains { $0.text.lowercased().contains(q) }
+                || p.tasks.contains { $0.text.lowercased().contains(q) }
                 || (p.document?.body.lowercased().contains(q) ?? false)
         }
     }
@@ -141,6 +142,8 @@ struct ProjectRow: View {
             }
             HStack(spacing: 12) {
                 Text(total > 0 ? "\(done)/\(total) goals" : "No goals")
+                let openTasks = project.tasks.filter { !$0.done }.count
+                if openTasks > 0 { Text("\(openTasks) task\(openTasks == 1 ? "" : "s")") }
                 if !project.receipts.isEmpty { Text(money(project.totalCost)) }
                 if let last = project.notes.last(where: { !$0.text.isEmpty }) { Text(shortDate(last.date)) }
             }

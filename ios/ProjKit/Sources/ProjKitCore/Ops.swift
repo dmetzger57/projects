@@ -219,6 +219,28 @@ public enum Ops {
         try editBody(ws, p) { try ReadmeBody.setSection($0, heading: heading, text: text) }
     }
 
+    // MARK: tasks (## Tasks checklist in the body)
+
+    public static func addTask(_ ws: Workspace, _ p: Project, _ text: String) throws {
+        try editBody(ws, p) { try ReadmeBody.addTask($0, text: text) }
+    }
+
+    public static func setTask(_ ws: Workspace, _ p: Project, index: Int, done: Bool) throws {
+        try editBody(ws, p) { try ReadmeBody.setTask($0, index: index, done: done) }
+    }
+
+    public static func editTask(_ ws: Workspace, _ p: Project, index: Int, text: String) throws {
+        try editBody(ws, p) { try ReadmeBody.editTask($0, index: index, text: text) }
+    }
+
+    public static func moveTask(_ ws: Workspace, _ p: Project, from: Int, to: Int) throws {
+        try editBody(ws, p) { try ReadmeBody.moveTask($0, index: from, to: to) }
+    }
+
+    public static func removeTask(_ ws: Workspace, _ p: Project, index: Int) throws {
+        try editBody(ws, p) { try ReadmeBody.removeTask($0, index: index) }
+    }
+
     // MARK: goals
 
     public static func addGoal(_ ws: Workspace, _ p: Project, _ text: String) throws {

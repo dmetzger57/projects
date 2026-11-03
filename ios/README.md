@@ -6,7 +6,8 @@ without the Mac being on, and changes show up in `proj` on the Mac.
 
 **Setup:** an empty folder is set up for you (areas, template, Closed, backlog) · **New Area** ·
 **Projects:** projects by area, filters, search, goal progress and spending ·
-**Project:** status, goals (tap to tick off, swipe to delete), notes, editing
+**Project:** status, goals (tap to tick off, swipe to delete), a **Tasks** checklist (tap the box
+to tick, tap the text to edit, swipe or long-press to edit, move or delete; drag to reorder), notes, editing
 Description and Project Files, links, and receipts (scan with the camera or pick a file,
 preview, detach), rename, close and reopen · **Ideas:** add, delete, make into a project ·
 pull to refresh; reloads when you return to the app.

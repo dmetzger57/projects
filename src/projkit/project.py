@@ -18,6 +18,21 @@ FORMAT_VERSION = 1
 
 _FM_RE = re.compile(r"\A---[ \t]*\n(.*?\n)---[ \t]*\n?", re.S)
 _NOTE_HEAD = re.compile(r"^###\s+(\d{4}-\d{2}-\d{2})\s*$")
+TASK_RE = re.compile(r"^- \[([ xX])\] (.+)$")   # GitHub-style task list item
+
+
+def section_bounds(lines: list[str], heading: str) -> tuple[int, int] | None:
+    """(index of the `## heading` line, index of the next `## ` line or len(lines))."""
+    for i, ln in enumerate(lines):
+        if ln.startswith("## ") and ln[3:].strip().lower() == heading.lower():
+            end = next((j for j in range(i + 1, len(lines)) if lines[j].startswith("## ")), len(lines))
+            return i, end
+    return None
+
+
+def task_line_indices(lines: list[str]) -> list[int]:
+    b = section_bounds(lines, "Tasks")
+    return [i for i in range(b[0] + 1, b[1]) if TASK_RE.match(lines[i])] if b else []
 
 
 def _yaml() -> YAML:
@@ -165,6 +180,21 @@ class Project:
             if inside:
                 out.append(ln)
         return "\n".join(out).strip() if inside or out else None
+
+    @property
+    def tasks(self) -> list[dict]:
+        """`- [ ]` / `- [x]` items in the `## Tasks` section, in order."""
+        lines = self.body.splitlines()
+        out = []
+        for i in task_line_indices(lines):
+            m = TASK_RE.match(lines[i])
+            out.append({"text": m.group(2).strip(), "done": m.group(1) != " "})
+        return out
+
+    @property
+    def task_progress(self) -> tuple[int, int]:
+        t = self.tasks
+        return sum(1 for x in t if x["done"]), len(t)
 
     @property
     def notes(self) -> list[Note]:

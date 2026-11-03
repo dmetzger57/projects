@@ -37,6 +37,57 @@
       if (fp && v !== fp && !typing && !document.querySelector("form.editing")) location.reload();
       if (!typing) fp = v;
     });
+    // ---- task reordering: drag the ⋮⋮ handle, or focus it and press ↑/↓ ----
+    let dragFrom = null, focusAfter = null;
+    function moveTask(list, from, to) {
+      const n = list.querySelectorAll("li[data-task]").length;
+      if (to < 1 || to > n || to === from) return;
+      focusAfter = to;
+      htmx.ajax("POST", `${list.dataset.moveUrl}/${from}/move`,
+                {values: {to}, target: "#tasks", swap: "outerHTML"});
+    }
+    document.addEventListener("dragstart", e => {
+      const h = e.target.closest?.("[data-task-handle]");
+      if (!h) return;
+      dragFrom = +h.dataset.taskHandle;
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/plain", String(dragFrom));
+      h.closest("li").classList.add("dragging");
+    });
+    document.addEventListener("dragover", e => {
+      const li = e.target.closest?.("#tasks li[data-task]");
+      if (!li || dragFrom === null) return;
+      e.preventDefault();
+      document.querySelectorAll("#tasks li.drop-above, #tasks li.drop-below")
+        .forEach(x => x.classList.remove("drop-above", "drop-below"));
+      const r = li.getBoundingClientRect();
+      li.classList.add(e.clientY < r.top + r.height / 2 ? "drop-above" : "drop-below");
+    });
+    document.addEventListener("drop", e => {
+      const li = e.target.closest?.("#tasks li[data-task]");
+      if (!li || dragFrom === null) return;
+      e.preventDefault();
+      const over = +li.dataset.task, above = li.classList.contains("drop-above");
+      let to = above ? over : over + 1;          // position in the list before removal
+      if (to > dragFrom) to -= 1;                // ...adjusted for removing the dragged task
+      moveTask(li.closest("ul"), dragFrom, to);
+    });
+    document.addEventListener("dragend", () => {
+      dragFrom = null;
+      document.querySelectorAll("#tasks li").forEach(x => x.classList.remove("dragging", "drop-above", "drop-below"));
+    });
+    document.addEventListener("keydown", e => {
+      const h = e.target.closest?.("[data-task-handle]");
+      if (!h || !["ArrowUp", "ArrowDown"].includes(e.key)) return;
+      e.preventDefault();
+      const from = +h.dataset.taskHandle;
+      moveTask(h.closest("ul"), from, e.key === "ArrowUp" ? from - 1 : from + 1);
+    });
+    document.body.addEventListener("htmx:afterSwap", () => {
+      if (focusAfter === null) return;
+      document.querySelector(`[data-task-handle="${focusAfter}"]`)?.focus();
+      focusAfter = null;
+    });
     // our own edits change the fingerprint too; resync after each successful mutation
     document.body.addEventListener("htmx:afterOnLoad", e => {
       if (e.detail.elt.id !== "fp" && e.detail.requestConfig.verb !== "get") fp = null;

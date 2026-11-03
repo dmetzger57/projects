@@ -51,6 +51,14 @@ if args.count == 4, args[1] == "--mutate" {
         try Ops.setSection(ws, photo, "Description", "Consolidate **all** photos.\n\n- prints\n- slides")
         try Ops.addReceipt(ws, photo, data: Data("%PDF-1.4".utf8), fileExtension: "pdf",
                            description: "Epson scanner", amount: 649.99, vendor: "B&H", date: "2026-11-03")
+        try Ops.addTask(ws, photo, "Order scanner")
+        try Ops.addTask(ws, photo, "Pick storage")
+        try Ops.addTask(ws, photo, "Temporary")
+        try Ops.setTask(ws, photo, index: 1, done: true)
+        try Ops.editTask(ws, photo, index: 0, text: "Order Epson FF-680W")
+        try Ops.removeTask(ws, photo, index: 2)
+        try Ops.addTask(ws, photo, "Move me to the top")
+        try Ops.moveTask(ws, photo, from: 2, to: 0)
         try Ops.setStatus(ws, photo, "on-hold")
         photo = try Ops.rename(ws, photo, to: "Photo Archive")
         let p = try Ops.newProject(ws, title: "Swift Made", area: "Digital Infrastructure")
@@ -182,6 +190,46 @@ test("sections: replace, create before Notes, reject headings") {
     var threw = false
     do { _ = try ReadmeBody.setSection(b, heading: "Description", text: "## evil") } catch { threw = true }
     check(threw, "rejects headings")
+}
+
+test("tasks: identical output to projkit/ops.py (same literals as tests/test_tasks.py)") {
+    let body = "\n## Description\nx\n\n## Project Files\n\n## Notes\n### 2026-11-02\n- n\n"
+    var b = try ReadmeBody.addTask(body, text: "Order scanner")
+    eq(b, "\n## Description\nx\n\n## Project Files\n\n## Tasks\n- [ ] Order scanner\n\n## Notes\n### 2026-11-02\n- n\n")
+    b = try ReadmeBody.addTask(b, text: "Pick storage\nlocation  ")
+    check(b.contains("## Tasks\n- [ ] Order scanner\n- [ ] Pick storage location\n\n## Notes"), "append")
+    eq(try ReadmeBody.addTask("\n## Description\nx\n", text: "a"), "\n## Description\nx\n\n## Tasks\n- [ ] a\n")
+    eq(try ReadmeBody.addTask("\n## Tasks\nThings to do:\n\n## Notes\n", text: "a"),
+       "\n## Tasks\nThings to do:\n- [ ] a\n\n## Notes\n")
+
+    var c = "\n## Tasks\n- [ ] one\n  indented detail\n- [X] two\n* [ ] not a task\n\n## Notes\n"
+    eq(ReadmeBody.tasks(c).map(\.text), ["one", "two"])
+    eq(ReadmeBody.tasks(c).map(\.done), [false, true])
+    c = try ReadmeBody.setTask(c, index: 0, done: true)
+    c = try ReadmeBody.setTask(c, index: 1, done: false)
+    eq(c, "\n## Tasks\n- [x] one\n  indented detail\n- [ ] two\n* [ ] not a task\n\n## Notes\n")
+    c = try ReadmeBody.editTask(c, index: 0, text: "one, renamed")
+    check(c.contains("- [x] one, renamed\n"), "edit keeps checkbox")
+    c = try ReadmeBody.removeTask(c, index: 1)
+    eq(c, "\n## Tasks\n- [x] one, renamed\n  indented detail\n* [ ] not a task\n\n## Notes\n")
+    var threw = 0
+    do { _ = try ReadmeBody.removeTask(c, index: 5) } catch { threw += 1 }
+    do { _ = try ReadmeBody.editTask(c, index: 0, text: "   ") } catch { threw += 1 }
+    eq(threw, 2, "bad index / empty text rejected")
+}
+
+test("tasks: move and remove carry detail lines (same literals as tests/test_tasks.py)") {
+    let m = "\n## Tasks\nIntro\n- [ ] a\n  a detail\n- [x] b\n- [ ] c\n  c1\n  c2\n\n## Notes\n"
+    eq(try ReadmeBody.moveTask(m, index: 2, to: 0), "\n## Tasks\nIntro\n- [ ] c\n  c1\n  c2\n- [ ] a\n  a detail\n- [x] b\n\n## Notes\n")
+    eq(try ReadmeBody.moveTask(m, index: 0, to: 2), "\n## Tasks\nIntro\n- [x] b\n- [ ] c\n  c1\n  c2\n- [ ] a\n  a detail\n\n## Notes\n")
+    eq(try ReadmeBody.moveTask(m, index: 0, to: 1), "\n## Tasks\nIntro\n- [x] b\n- [ ] a\n  a detail\n- [ ] c\n  c1\n  c2\n\n## Notes\n")
+    eq(try ReadmeBody.moveTask(m, index: 1, to: 1), m)
+    eq(try ReadmeBody.moveTask(m, index: 1, to: 99), try ReadmeBody.moveTask(m, index: 1, to: 2))
+    eq(try ReadmeBody.removeTask(m, index: 2), "\n## Tasks\nIntro\n- [ ] a\n  a detail\n- [x] b\n\n## Notes\n")
+    eq(try ReadmeBody.removeTask(m, index: 0), "\n## Tasks\nIntro\n- [x] b\n- [ ] c\n  c1\n  c2\n\n## Notes\n")
+    var threw = false
+    do { _ = try ReadmeBody.moveTask(m, index: 3, to: 0) } catch { threw = true }
+    check(threw, "bad index rejected")
 }
 
 test("ops: new project, goals, close/reopen, rename, uniqueness") {

@@ -1,0 +1,42 @@
+<section class="panel" id="tasks">
+  {% set tasks = p.tasks %}
+  {% set open = tasks|rejectattr('done')|list|length %}
+  <div class="panel-head">
+    <h3>Tasks</h3>
+    {% if tasks %}<span class="muted">{{ open }} open · {{ tasks|length - open }} done</span>{% endif %}
+  </div>
+  <ul class="goals tasks" data-move-url="{{ url }}/tasks">
+    {% for t in tasks %}
+    <li class="{{ 'done' if t.done }}" data-task="{{ loop.index }}">
+      {% if task_edit == loop.index %}
+      <form class="task-edit editing" hx-post="{{ url }}/tasks/{{ loop.index }}/edit" hx-target="#tasks" hx-swap="outerHTML">
+        <input name="text" value="{{ t.text }}" aria-label="Task text" required autofocus
+               onkeydown="if(event.key==='Escape'){htmx.ajax('GET','{{ url }}/tasks',{target:'#tasks',swap:'outerHTML'})}">
+        <button class="btn small primary">Save</button>
+        <button type="button" class="btn small" hx-get="{{ url }}/tasks" hx-target="#tasks" hx-swap="outerHTML">Cancel</button>
+      </form>
+      {% else %}
+      {% if tasks|length > 1 %}
+      <button type="button" class="handle" draggable="true" data-task-handle="{{ loop.index }}"
+              title="Drag to reorder (or focus and press ↑/↓)"
+              aria-label="Reorder “{{ t.text }}”, position {{ loop.index }} of {{ tasks|length }}. Use up and down arrow keys.">⋮⋮</button>
+      {% endif %}
+      <label>
+        <input type="checkbox" {{ 'checked' if t.done }} aria-label="Done"
+               hx-post="{{ url }}/tasks/{{ loop.index }}/toggle" hx-target="#tasks" hx-swap="outerHTML">
+        <span>{{ t.text }}</span>
+      </label>
+      <button class="x edit" title="Edit task" aria-label="Edit task"
+              hx-get="{{ url }}/tasks?edit={{ loop.index }}" hx-target="#tasks" hx-swap="outerHTML">✎</button>
+      <button class="x" title="Delete task" aria-label="Delete task"
+              hx-post="{{ url }}/tasks/{{ loop.index }}/delete" hx-target="#tasks" hx-swap="outerHTML"
+              hx-confirm="Delete task “{{ t.text }}”?">×</button>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  <form hx-post="{{ url }}/tasks" hx-target="#tasks" hx-swap="outerHTML" class="add-row">
+    <input name="text" placeholder="Add a task" aria-label="New task" required>
+    <button class="btn">Add</button>
+  </form>
+</section>

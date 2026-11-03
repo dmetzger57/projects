@@ -54,6 +54,10 @@ receipts:
 ## Description
 Free text.
 
+## Tasks
+- [ ] Order scanner
+- [x] Pick storage location
+
 ## Project Files
 Free text describing contents of Documents/.
 
@@ -70,6 +74,13 @@ Rules:
   scalars or flat mappings); keys using other YAML (block scalars, anchors, nesting) are left as is.
 - Dates are ISO `YYYY-MM-DD`.
 - Notes are `### YYYY-MM-DD` headings under `## Notes`, newest last; writers append to today's heading or create it.
+- Tasks are GitHub-style task-list lines (`- [ ] text`, `- [x] text`) in an optional `## Tasks` section; any other
+  lines in that section (intro text, indented details) are kept. Tasks are numbered by order of their lines.
+  Writers add new tasks after the last task line, creating the section just before `## Notes` (or at the end)
+  when missing; editing or ticking changes only that line. Indented, non-blank lines directly under a task
+  are its details: moving or deleting a task moves or deletes them with it. List order is the file order,
+  so reordering moves lines. Goals (front matter) are longer-term outcomes;
+  tasks are the to-do checklist.
 - Unknown front-matter keys must be preserved (forward compatibility).
 
 Optional keys written by tools:

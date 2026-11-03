@@ -34,6 +34,9 @@ struct ProjectDetailView: View {
 
     @State private var edit: TextEdit?
     @State private var newGoal = ""
+    @State private var newTask = ""
+    @State private var editingTask: ProjectTask?
+    @State private var editTaskText = ""
     @State private var showAddLink = false
     @State private var importingReceipt = false
     @State private var scanning = false
@@ -67,6 +70,7 @@ struct ProjectDetailView: View {
             } else {
                 overview(p, closed: closed)
                 goals(p)
+                tasks(p)
                 notes(p)
                 ForEach(ReadmeBody.editableSections, id: \.self) { name in textSection(p, name) }
                 links(p)
@@ -125,6 +129,16 @@ struct ProjectDetailView: View {
             }
         } message: {
             Text("Renames the folder and the title.")
+        }
+        .alert("Edit Task", isPresented: Binding(get: { editingTask != nil },
+                                                 set: { if !$0 { editingTask = nil } })) {
+            TextField("Task", text: $editTaskText)
+            Button("Cancel", role: .cancel) {}
+            Button("Save") {
+                guard let t = editingTask else { return }
+                let text = editTaskText
+                Task { await model.perform { try Ops.editTask($0, p, index: t.index, text: text) } }
+            }
         }
         .confirmationDialog("Close “\(p.title)”?", isPresented: $confirmClose, titleVisibility: .visible) {
             Button("Close Project") { Task { await model.perform { try Ops.close($0, p) } } }
@@ -215,6 +229,86 @@ struct ProjectDetailView: View {
                 if total > 0 { Text("\(done)/\(total)") }
             }
         }
+    }
+
+    private func tasks(_ p: Project) -> some View {
+        let (done, total) = p.taskProgress
+        return Section {
+            ForEach(p.tasks) { t in
+                HStack(alignment: .firstTextBaseline, spacing: 10) {
+                    Button {
+                        Task { await model.perform { try Ops.setTask($0, p, index: t.index, done: !t.done) } }
+                    } label: {
+                        Image(systemName: t.done ? "checkmark.square.fill" : "square")
+                            .foregroundStyle(t.done ? Color.accentColor : .secondary)
+                            .imageScale(.large)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(t.done ? "Mark “\(t.text)” not done" : "Mark “\(t.text)” done")
+                    Text(markdown(t.text))
+                        .strikethrough(t.done)
+                        .foregroundStyle(t.done ? .secondary : .primary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
+                        .onTapGesture { startEditing(t) }
+                        .accessibilityHint("Double-tap to edit")
+                }
+                .swipeActions(edge: .trailing) {
+                    Button(role: .destructive) {
+                        Task { await model.perform { try Ops.removeTask($0, p, index: t.index) } }
+                    } label: { Label("Delete", systemImage: "trash") }
+                    Button { startEditing(t) } label: { Label("Edit", systemImage: "pencil") }
+                        .tint(.accentColor)
+                }
+                .contextMenu {
+                    Button { startEditing(t) } label: { Label("Edit", systemImage: "pencil") }
+                    if total > 1 {
+                        Section("Move") {
+                            Button { move(p, t.index, to: 0) } label: { Label("Move to Top", systemImage: "arrow.up.to.line") }
+                                .disabled(t.index == 0)
+                            Button { move(p, t.index, to: t.index - 1) } label: { Label("Move Up", systemImage: "arrow.up") }
+                                .disabled(t.index == 0)
+                            Button { move(p, t.index, to: t.index + 1) } label: { Label("Move Down", systemImage: "arrow.down") }
+                                .disabled(t.index == total - 1)
+                            Button { move(p, t.index, to: total - 1) } label: { Label("Move to Bottom", systemImage: "arrow.down.to.line") }
+                                .disabled(t.index == total - 1)
+                        }
+                    }
+                    Button(role: .destructive) {
+                        Task { await model.perform { try Ops.removeTask($0, p, index: t.index) } }
+                    } label: { Label("Delete", systemImage: "trash") }
+                }
+            }
+            .onMove { source, destination in
+                // SwiftUI gives the destination as an offset in the list *before* removal
+                guard let from = source.first else { return }
+                move(p, from, to: destination > from ? destination - 1 : destination)
+            }
+            TextField("Add a task", text: $newTask)
+                .submitLabel(.done)
+                .onSubmit {
+                    let text = newTask
+                    newTask = ""
+                    guard !text.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+                    Task { await model.perform { try Ops.addTask($0, p, text) } }
+                }
+        } header: {
+            HStack {
+                Text("Tasks")
+                Spacer()
+                if total > 0 { Text("\(total - done) open") }
+            }
+        }
+    }
+
+    private func move(_ p: Project, _ from: Int, to: Int) {
+        guard from != to else { return }
+        Task { await model.perform { try Ops.moveTask($0, p, from: from, to: to) } }
+    }
+
+    private func startEditing(_ t: ProjectTask) {
+        editTaskText = t.text
+        editingTask = t
     }
 
     private func notes(_ p: Project) -> some View {

@@ -40,6 +40,7 @@
             {% endif %}
             <div class="card-meta">
               {% if c.total %}<span>{{ c.done }}/{{ c.total }} goals</span>{% else %}<span>No goals</span>{% endif %}
+              {% if c.tasks_open %}<span>{{ c.tasks_open }} task{{ 's' if c.tasks_open != 1 }}</span>{% endif %}
               {% if c.p.receipts %}<span>{{ c.p.total_cost|money }}</span>{% endif %}
               {% if c.last_note %}<span>{{ c.last_note.strftime('%b %-d') }}</span>{% endif %}
             </div>

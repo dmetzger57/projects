@@ -135,3 +135,32 @@ def test_fingerprint_changes_on_edit(client, ws):
     import time; time.sleep(0.01)
     ops.add_note(proj(ws), "x")
     assert client.get("/api/fingerprint").text != a
+
+
+def test_tasks_add_toggle_edit_delete(client, ws):
+    url = "/p/Roof%20Repair"
+    r = client.post(f"{url}/tasks", data={"text": "Buy shingles"}, headers=HX)
+    assert r.status_code == 200 and "Buy shingles" in r.text and 'id="tasks"' in r.text
+    client.post(f"{url}/tasks", data={"text": "Hire roofer"}, headers=HX)
+    client.post(f"{url}/tasks/2/toggle", headers=HX)
+    assert proj(ws).tasks == [{"text": "Buy shingles", "done": False}, {"text": "Hire roofer", "done": True}]
+    r = client.get(f"{url}/tasks?edit=1")
+    assert 'value="Buy shingles"' in r.text and "/tasks/1/edit" in r.text
+    client.post(f"{url}/tasks/1/edit", data={"text": "Buy cedar shingles"}, headers=HX)
+    client.post(f"{url}/tasks/2/delete", headers=HX)
+    assert proj(ws).tasks == [{"text": "Buy cedar shingles", "done": False}]
+    assert client.post(f"{url}/tasks/1/edit", data={"text": "  "}, headers=HX).status_code == 400
+    page = client.get(url).text
+    assert "Buy cedar shingles" in page and page.index('id="tasks"') < page.index("Project Files")
+    assert "1 task<" in client.get("/").text
+
+
+def test_task_move_route(client, ws):
+    url = "/p/Roof%20Repair"
+    for t in ("one", "two", "three"):
+        client.post(f"{url}/tasks", data={"text": t}, headers=HX)
+    r = client.post(f"{url}/tasks/3/move", data={"to": "1"}, headers=HX)
+    assert r.status_code == 200 and 'data-task-handle="1"' in r.text
+    assert [t["text"] for t in proj(ws).tasks] == ["three", "one", "two"]
+    client.post(f"{url}/tasks/1/move", data={"to": "3"}, headers=HX)
+    assert [t["text"] for t in proj(ws).tasks] == ["one", "two", "three"]

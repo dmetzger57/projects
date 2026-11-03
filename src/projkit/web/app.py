@@ -87,6 +87,7 @@ def create_app(ws: Workspace) -> FastAPI:
         return dict(p=p, url=purl(p), area=p.area or ws.location_area(p) or "—",
                     status="legacy" if p.legacy else p.status, done=done, total=total,
                     pct=int(100 * done / total) if total else 0,
+                    tasks_open=sum(1 for t in p.tasks if not t["done"]),
                     last_note=notes[-1].date if notes else None)
 
     def matches(p: Project, q: str) -> bool:
@@ -148,6 +149,46 @@ def create_app(ws: Workspace) -> FastAPI:
         p = get_project(key)
         ops.remove_goal(p, str(n))
         return goals_partial(request, p)
+
+    # ---- tasks (## Tasks checklist in the README body) ---------------------
+    def tasks_partial(request: Request, p: Project, editing: int | None = None):
+        return partial(request, "_tasks.html", **_project_ctx(Project.load(p.dir)), task_edit=editing)
+
+    @app.get("/p/{key}/tasks", response_class=HTMLResponse)
+    def tasks_view(request: Request, key: str, edit: int | None = None):
+        return tasks_partial(request, get_project(key), edit)
+
+    @app.post("/p/{key}/tasks")
+    def task_add(request: Request, key: str, text: str = Form(...)):
+        p = get_project(key)
+        if text.strip():
+            ops.add_task(p, text)
+        return tasks_partial(request, p)
+
+    @app.post("/p/{key}/tasks/{n}/toggle")
+    def task_toggle(request: Request, key: str, n: int):
+        p = get_project(key)
+        tasks = p.tasks
+        ops.set_task(p, str(n), not tasks[n - 1]["done"] if 0 < n <= len(tasks) else True)
+        return tasks_partial(request, p)
+
+    @app.post("/p/{key}/tasks/{n}/edit")
+    def task_edit(request: Request, key: str, n: int, text: str = Form(...)):
+        p = get_project(key)
+        ops.edit_task(p, str(n), text)
+        return tasks_partial(request, p)
+
+    @app.post("/p/{key}/tasks/{n}/move")
+    def task_move(request: Request, key: str, n: int, to: int = Form(...)):
+        p = get_project(key)
+        ops.move_task(p, str(n), to)
+        return tasks_partial(request, p)
+
+    @app.post("/p/{key}/tasks/{n}/delete")
+    def task_delete(request: Request, key: str, n: int):
+        p = get_project(key)
+        ops.remove_task(p, str(n))
+        return tasks_partial(request, p)
 
     @app.post("/p/{key}/notes")
     def note_add(request: Request, key: str, text: str = Form(...)):
@@ -311,6 +352,7 @@ def create_app(ws: Workspace) -> FastAPI:
             done, total = p.goal_progress
             out.append(dict(folder=p.folder_name, title=p.title, area=p.area or ws.location_area(p),
                             status="legacy" if p.legacy else p.status, goals_done=done, goals_total=total,
+                            tasks_done=p.task_progress[0], tasks_total=p.task_progress[1],
                             cost=p.total_cost, path=str(p.dir)))
         return JSONResponse(out)
 

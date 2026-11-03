@@ -29,6 +29,11 @@ assert p.links[-1] == {"title": 'Example: "quoted"', "url": "https://example.com
 assert p.receipts[0]["amount"] == 649.99 and p.total_cost == 649.99
 assert p.section("Description") == "Consolidate **all** photos.\n\n- prints\n- slides"
 assert p.notes[-1].text.endswith("- Edited on iPhone\n  second line")
+assert p.tasks == [{"text": "Move me to the top", "done": False}, {"text": "Order Epson FF-680W", "done": False},
+                   {"text": "Pick storage", "done": True}], p.tasks
+ops.set_task(p, "Order", True)
+ops.move_task(p, "Pick", 1)
+assert [t["text"] for t in Project.load(p.dir).tasks] == ["Pick storage", "Move me to the top", "Order Epson FF-680W"]
 s = ws.find("Swift Made")[0]
 assert s.status == "closed" and s.area == "Digital Infrastructure" and s.goals[0]["text"] == "true"
 assert ops.ideas(ws)[-1] == "Idea from iPhone"

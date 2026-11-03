@@ -33,6 +33,14 @@ public struct Receipt: Identifiable, Hashable, Sendable {
     }
 }
 
+/// A `- [ ]` / `- [x]` item in the README's `## Tasks` section.
+public struct ProjectTask: Identifiable, Hashable, Sendable {
+    public let index: Int          // 0-based position among task lines
+    public let text: String
+    public let done: Bool
+    public var id: Int { index }
+}
+
 public struct Note: Identifiable, Hashable, Sendable {
     public let date: String        // YYYY-MM-DD
     public let text: String        // markdown under the heading
@@ -112,6 +120,13 @@ public struct Project: Identifiable, Hashable, Sendable {
     }
 
     public var notes: [Note] { document.map { ReadmeBody.notes($0.body) } ?? [] }
+
+    public var tasks: [ProjectTask] { document.map { ReadmeBody.tasks($0.body) } ?? [] }
+
+    public var taskProgress: (done: Int, total: Int) {
+        let t = tasks
+        return (t.filter(\.done).count, t.count)
+    }
 }
 
 // MARK: - Markdown body helpers (mirror projkit/project.py and ops.py)
@@ -188,6 +203,123 @@ public enum ReadmeBody {
             let block = (end > n + 1 ? [""] : []) + [head, bullet]
             lines.insert(contentsOf: block, at: end)
         }
+        return lines.joined(separator: "\n") + "\n"
+    }
+
+    // MARK: tasks — byte-identical with projkit/ops.py body_*_task (same expected strings in tests)
+
+    static func parseTask(_ line: String) -> (done: Bool, text: String)? {
+        guard line.count > 6, line.hasPrefix("- ["), line.dropFirst(4).hasPrefix("] ") else { return nil }
+        let mark = line[line.index(line.startIndex, offsetBy: 3)]
+        guard mark == " " || mark == "x" || mark == "X" else { return nil }
+        let text = String(line.dropFirst(6))
+        guard !text.isEmpty else { return nil }
+        return (mark != " ", text.trimmingCharacters(in: .whitespaces))
+    }
+
+    static func sectionBounds(_ lines: [String], _ heading: String) -> (start: Int, end: Int)? {
+        guard let s = lines.firstIndex(where: { isH2($0) && h2Name($0).lowercased() == heading.lowercased() }) else { return nil }
+        return (s, (s + 1..<lines.count).first { isH2(lines[$0]) } ?? lines.count)
+    }
+
+    static func taskLineIndices(_ lines: [String]) -> [Int] {
+        guard let b = sectionBounds(lines, "Tasks") else { return [] }
+        return (b.start + 1..<b.end).filter { parseTask(lines[$0]) != nil }
+    }
+
+    public static func tasks(_ body: String) -> [ProjectTask] {
+        let lines = body.components(separatedBy: "\n")
+        return taskLineIndices(lines).enumerated().map { n, i in
+            let t = parseTask(lines[i])!
+            return ProjectTask(index: n, text: t.text, done: t.done)
+        }
+    }
+
+    static func cleanTask(_ text: String) throws -> String {
+        let t = text.replacingOccurrences(of: "\r", with: "\n").components(separatedBy: "\n")
+            .joined(separator: " ").trimmingCharacters(in: .whitespaces)
+        guard !t.isEmpty else { throw OpError("task text is empty") }
+        return t
+    }
+
+    static func splitBody(_ body: String) -> [String] {
+        trimTrailingNewlines(body).components(separatedBy: "\n")
+    }
+
+    public static func addTask(_ body: String, text: String) throws -> String {
+        var lines = splitBody(body)
+        let bullet = "- [ ] " + (try cleanTask(text))
+        if let b = sectionBounds(lines, "Tasks") {
+            let idx = taskLineIndices(lines)
+            var pos: Int
+            if let last = idx.last {
+                pos = last + 1
+            } else {
+                pos = b.end
+                while pos > b.start + 1, lines[pos - 1].trimmingCharacters(in: .whitespaces).isEmpty { pos -= 1 }
+            }
+            lines.insert(bullet, at: pos)
+        } else {
+            let notes = lines.firstIndex { $0.trimmingCharacters(in: .whitespaces).lowercased() == "## notes" } ?? lines.count
+            var block = ["## Tasks", bullet] + (notes < lines.count ? [""] : [])
+            if notes > 0, !lines[notes - 1].trimmingCharacters(in: .whitespaces).isEmpty { block.insert("", at: 0) }
+            lines.insert(contentsOf: block, at: notes)
+        }
+        return lines.joined(separator: "\n") + "\n"
+    }
+
+    static func taskLine(_ body: String, _ index: Int) throws -> ([String], Int) {
+        let lines = splitBody(body)
+        let idx = taskLineIndices(lines)
+        guard idx.indices.contains(index) else { throw OpError("no task #\(index + 1)") }
+        return (lines, idx[index])
+    }
+
+    public static func setTask(_ body: String, index: Int, done: Bool) throws -> String {
+        var (lines, i) = try taskLine(body, index)
+        lines[i] = "- [" + (done ? "x" : " ") + "]" + lines[i].dropFirst(5)
+        return lines.joined(separator: "\n") + "\n"
+    }
+
+    public static func editTask(_ body: String, index: Int, text: String) throws -> String {
+        var (lines, i) = try taskLine(body, index)
+        lines[i] = String(lines[i].prefix(6)) + (try cleanTask(text))
+        return lines.joined(separator: "\n") + "\n"
+    }
+
+    /// (start, end) line ranges of each task: the task line plus its indented detail lines.
+    static func taskBlocks(_ lines: [String]) -> [(start: Int, end: Int)] {
+        guard let b = sectionBounds(lines, "Tasks") else { return [] }
+        return taskLineIndices(lines).map { i in
+            var end = i + 1
+            while end < b.end, let c = lines[end].first, c == " " || c == "\t",
+                  !lines[end].trimmingCharacters(in: .whitespaces).isEmpty { end += 1 }
+            return (i, end)
+        }
+    }
+
+    /// Removes the task line and its indented detail lines.
+    public static func removeTask(_ body: String, index: Int) throws -> String {
+        var lines = splitBody(body)
+        let blocks = taskBlocks(lines)
+        guard blocks.indices.contains(index) else { throw OpError("no task #\(index + 1)") }
+        lines.removeSubrange(blocks[index].start..<blocks[index].end)
+        return lines.joined(separator: "\n") + "\n"
+    }
+
+    /// Moves task `index` (with its detail lines) so it becomes task number `to` (0-based, clamped).
+    public static func moveTask(_ body: String, index: Int, to rawTo: Int) throws -> String {
+        var lines = splitBody(body)
+        let blocks = taskBlocks(lines)
+        guard blocks.indices.contains(index) else { throw OpError("no task #\(index + 1)") }
+        let to = max(0, min(rawTo, blocks.count - 1))
+        guard to != index else { return lines.joined(separator: "\n") + "\n" }
+        let range = blocks[index].start..<blocks[index].end
+        let moved = Array(lines[range])
+        lines.removeSubrange(range)
+        let rest = taskBlocks(lines)
+        let pos = to < rest.count ? rest[to].start : rest[rest.count - 1].end
+        lines.insert(contentsOf: moved, at: pos)
         return lines.joined(separator: "\n") + "\n"
     }
 

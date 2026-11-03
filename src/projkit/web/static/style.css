@@ -208,3 +208,16 @@ details summary { cursor: pointer; color: var(--accent); font-size: 14px; margin
   .search { flex-basis: 100%; }
   .stats { gap: 18px; }
 }
+
+/* tasks */
+.task-edit { display: flex; gap: 6px; flex: 1; align-items: center; }
+.x.edit { font-size: 15px; }
+.x.edit:hover { background: var(--accent-soft); color: var(--accent); }
+.handle {
+  flex: none; border: 0; background: none; color: var(--muted); cursor: grab; padding: 0 2px;
+  font-size: 13px; letter-spacing: -2px; line-height: 1.6; opacity: .45; border-radius: 4px;
+}
+.handle:hover, .handle:focus-visible { opacity: 1; background: var(--surface-2); }
+.tasks li.dragging { opacity: .4; }
+.tasks li.drop-above { box-shadow: inset 0 2px 0 var(--accent); }
+.tasks li.drop-below { box-shadow: inset 0 -2px 0 var(--accent); }

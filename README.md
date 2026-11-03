@@ -22,6 +22,10 @@ proj show photo
 proj new "Roof Repair" -a House
 proj note photo "Bought a scanner"
 proj goal add|done|undo|rm photo <goal>
+proj task ls photo                      # Tasks checklist (## Tasks in README.md)
+proj task add|done|undo|rm photo <task>
+proj task edit photo <task> "new text"
+proj task mv photo <task> 1             # reorder (1 = top); web: drag ⋮⋮ or ↑/↓; iPhone: drag or long-press
 proj link add web https://… -t "Docs"
 proj receipt add roof ~/Downloads/inv.pdf -$ 412.50 -v Lowes --desc "Shingles"
 proj status photo on-hold

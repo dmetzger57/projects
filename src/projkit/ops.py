@@ -11,7 +11,7 @@ from pathlib import Path
 
 from ruamel.yaml.comments import CommentedMap, CommentedSeq
 
-from .project import FORMAT_VERSION, README, STATUSES, Project
+from .project import FORMAT_VERSION, README, STATUSES, Project, section_bounds, task_line_indices
 from .workspace import BACKLOG_STEM, Workspace
 
 RECEIPT_TAG = "receipt"
@@ -265,6 +265,149 @@ def set_section(p: Project, heading: str, text: str) -> None:
     if not p.body.startswith("\n"):
         p.body = "\n" + p.body
     p.save()
+
+
+# ---- tasks (## Tasks section, GitHub task-list syntax) --------------------
+# Kept byte-identical with ios/ProjKit ReadmeBody task functions; both test suites
+# assert the same expected output.
+
+def _clean_task(text: str) -> str:
+    t = " ".join(text.replace("\r", "\n").split("\n")).strip()
+    if not t:
+        raise OpError("task text is empty")
+    return t
+
+
+def body_add_task(body: str, text: str) -> str:
+    lines = body.rstrip("\n").split("\n")
+    bullet = f"- [ ] {_clean_task(text)}"
+    b = section_bounds(lines, "Tasks")
+    if b is None:
+        notes = next((i for i, l in enumerate(lines) if l.strip().lower() == "## notes"), len(lines))
+        block = ["## Tasks", bullet] + ([""] if notes < len(lines) else [])
+        if notes > 0 and lines[notes - 1].strip():
+            block.insert(0, "")
+        lines[notes:notes] = block
+    else:
+        idx = task_line_indices(lines)
+        if idx:
+            pos = idx[-1] + 1
+        else:
+            pos = b[1]
+            while pos > b[0] + 1 and not lines[pos - 1].strip():
+                pos -= 1
+        lines.insert(pos, bullet)
+    return "\n".join(lines) + "\n"
+
+
+def _task_blocks(lines: list[str]) -> list[tuple[int, int]]:
+    """(start, end) line ranges of each task: the task line plus its indented detail lines."""
+    b = section_bounds(lines, "Tasks")
+    blocks = []
+    for i in task_line_indices(lines):
+        end = i + 1
+        while end < b[1] and lines[end][:1] in (" ", "\t") and lines[end].strip():
+            end += 1
+        blocks.append((i, end))
+    return blocks
+
+
+def _task_line(body: str, index: int) -> tuple[list[str], int]:
+    lines = body.rstrip("\n").split("\n")
+    idx = task_line_indices(lines)
+    if not 0 <= index < len(idx):
+        raise OpError(f"no task #{index + 1}")
+    return lines, idx[index]
+
+
+def body_set_task(body: str, index: int, done: bool) -> str:
+    lines, i = _task_line(body, index)
+    lines[i] = "- [" + ("x" if done else " ") + "]" + lines[i][5:]
+    return "\n".join(lines) + "\n"
+
+
+def body_edit_task(body: str, index: int, text: str) -> str:
+    lines, i = _task_line(body, index)
+    lines[i] = lines[i][:6] + _clean_task(text)
+    return "\n".join(lines) + "\n"
+
+
+def body_remove_task(body: str, index: int) -> str:
+    """Removes the task line and its indented detail lines."""
+    lines = body.rstrip("\n").split("\n")
+    blocks = _task_blocks(lines)
+    if not 0 <= index < len(blocks):
+        raise OpError(f"no task #{index + 1}")
+    start, end = blocks[index]
+    del lines[start:end]
+    return "\n".join(lines) + "\n"
+
+
+def body_move_task(body: str, index: int, to: int) -> str:
+    """Moves task `index` (with its detail lines) so it becomes task number `to` (0-based)."""
+    lines = body.rstrip("\n").split("\n")
+    blocks = _task_blocks(lines)
+    if not 0 <= index < len(blocks):
+        raise OpError(f"no task #{index + 1}")
+    to = max(0, min(to, len(blocks) - 1))
+    if to == index:
+        return "\n".join(lines) + "\n"
+    start, end = blocks[index]
+    moved = lines[start:end]
+    del lines[start:end]
+    rest = _task_blocks(lines)
+    pos = rest[to][0] if to < len(rest) else rest[-1][1]
+    lines[pos:pos] = moved
+    return "\n".join(lines) + "\n"
+
+
+def _task_index(p: Project, ref: str) -> int:
+    tasks = p.tasks
+    if ref.isdigit():
+        i = int(ref) - 1
+        if 0 <= i < len(tasks):
+            return i
+        raise OpError(f"no task #{ref} (project has {len(tasks)})")
+    hits = [i for i, t in enumerate(tasks) if ref.lower() in t["text"].lower()]
+    if len(hits) != 1:
+        raise OpError(f"task reference '{ref}' matches {len(hits)} tasks")
+    return hits[0]
+
+
+def add_task(p: Project, text: str) -> None:
+    p.body = body_add_task(p.body, text)
+    p.save()
+
+
+def set_task(p: Project, ref: str, done: bool) -> dict:
+    i = _task_index(p, ref)
+    p.body = body_set_task(p.body, i, done)
+    p.save()
+    return p.tasks[i]
+
+
+def edit_task(p: Project, ref: str, text: str) -> dict:
+    i = _task_index(p, ref)
+    p.body = body_edit_task(p.body, i, text)
+    p.save()
+    return p.tasks[i]
+
+
+def move_task(p: Project, ref: str, position: int) -> dict:
+    """Move a task to 1-based `position` in the list."""
+    i = _task_index(p, ref)
+    t = p.tasks[i]
+    p.body = body_move_task(p.body, i, position - 1)
+    p.save()
+    return t
+
+
+def remove_task(p: Project, ref: str) -> dict:
+    i = _task_index(p, ref)
+    t = p.tasks[i]
+    p.body = body_remove_task(p.body, i)
+    p.save()
+    return t
 
 
 # ---- receipts --------------------------------------------------------------
