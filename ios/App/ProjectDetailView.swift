@@ -208,6 +208,16 @@ struct ProjectDetailView: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityAddTraits(g.done ? .isSelected : [])
+                .contextMenu {
+                    Button {
+                        Task { await model.perform { try Ops.setGoal($0, p, index: g.index, done: !g.done) } }
+                    } label: {
+                        Label(g.done ? "Mark Not Done" : "Mark Done", systemImage: g.done ? "circle" : "checkmark.circle")
+                    }
+                    Button(role: .destructive) {
+                        Task { await model.perform { try Ops.removeGoal($0, p, index: g.index) } }
+                    } label: { Label("Delete Goal", systemImage: "trash") }
+                }
             }
             .onDelete { idx in
                 // delete from the end so earlier indices stay valid
