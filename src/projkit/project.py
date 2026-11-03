@@ -30,6 +30,27 @@ def section_bounds(lines: list[str], heading: str) -> tuple[int, int] | None:
     return None
 
 
+# Project Files entries: "- [Friendly name](<Documents/path/file.pdf>)" or "- [Name](https://…)"
+FILE_RE = re.compile(r"^- \[([^\]]*)\]\((<[^<>]*>|[^\s()<>]+)\)\s*$")
+URL_SCHEME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*://")
+
+
+def file_line_indices(lines: list[str]) -> list[int]:
+    b = section_bounds(lines, "Project Files")
+    return [i for i in range(b[0] + 1, b[1]) if FILE_RE.match(lines[i])] if b else []
+
+
+def parse_file_line(line: str) -> dict | None:
+    m = FILE_RE.match(line)
+    if not m:
+        return None
+    target = m.group(2)
+    if target.startswith("<"):
+        target = target[1:-1]
+    return {"name": m.group(1).strip(), "target": target,
+            "kind": "url" if URL_SCHEME_RE.match(target) else "file"}
+
+
 def task_line_indices(lines: list[str]) -> list[int]:
     b = section_bounds(lines, "Tasks")
     return [i for i in range(b[0] + 1, b[1]) if TASK_RE.match(lines[i])] if b else []
@@ -190,6 +211,22 @@ class Project:
             m = TASK_RE.match(lines[i])
             out.append({"text": m.group(2).strip(), "done": m.group(1) != " "})
         return out
+
+    @property
+    def files(self) -> list[dict]:
+        """Link entries in `## Project Files`: {name, target, kind: 'file'|'url'}."""
+        lines = self.body.splitlines()
+        return [parse_file_line(lines[i]) for i in file_line_indices(lines)]
+
+    @property
+    def files_other_text(self) -> str:
+        """Project Files content that isn't a link entry (kept and shown as-is)."""
+        lines = self.body.splitlines()
+        b = section_bounds(lines, "Project Files")
+        if not b:
+            return ""
+        keep = [lines[i] for i in range(b[0] + 1, b[1]) if not FILE_RE.match(lines[i])]
+        return "\n".join(keep).strip()
 
     @property
     def task_progress(self) -> tuple[int, int]:

@@ -59,7 +59,8 @@ Free text.
 - [x] Pick storage location
 
 ## Project Files
-Free text describing contents of Documents/.
+- [Scanner manual](<Documents/Manuals/Epson FF-680W.pdf>)
+- [Planning doc](https://docs.google.com/document/d/…/edit)
 
 ## Notes
 ### 2026-11-02
@@ -82,6 +83,15 @@ Rules:
   so reordering moves lines. Goals (front matter) are longer-term outcomes;
   tasks are the to-do checklist.
 - Unknown front-matter keys must be preserved (forward compatibility).
+
+- Project Files entries are Markdown links on their own line: `- [Friendly name](<target>)`. The target is
+  either a URL (`scheme://…`) or a file path relative to the home folder that starts with `Documents/`
+  (so it resolves to ~/Documents on the Mac and iCloud Drive › Documents on the iPhone). File targets are
+  always written in angle brackets; URLs only when they contain spaces or parentheses. Names never contain
+  `[` or `]` (writers replace them with parentheses); an empty name defaults to the file name without its
+  extension, or the URL's host without `www.`. Targets must not contain `<`, `>`, `..` segments or line
+  breaks. Other lines in the section are free text and are kept. `proj lint` reports links to missing
+  files as L014.
 
 Optional keys written by tools:
 - `migrated_from: Readme.pages` — set by `proj migrate`; the original is kept as `Readme.legacy.pages`.

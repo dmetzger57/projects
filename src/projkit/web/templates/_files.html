@@ -1,0 +1,68 @@
+<section class="panel" id="files">
+  <div class="panel-head">
+    <h3>Project Files</h3>
+    <div class="row-tools">
+      {% if files %}
+      <label class="toggle"><input type="checkbox" data-show-paths> Show paths</label>
+      {% endif %}
+      <button class="btn small" title="Edit the whole section as Markdown"
+              hx-get="{{ url }}/section/Project%20Files?edit=true" hx-target="#files" hx-swap="outerHTML">Edit text</button>
+    </div>
+  </div>
+  <ul class="plain list files">
+    {% for f in files %}
+    <li>
+      {% if file_edit == loop.index %}
+      <form class="stack file-form editing" hx-post="{{ url }}/files/{{ loop.index }}/edit" hx-target="#files" hx-swap="outerHTML">
+        <input name="name" value="{{ f.name }}" placeholder="Friendly name" aria-label="Friendly name">
+        <div class="add-row">
+          <input name="target" value="{{ f.target }}" required aria-label="Path or URL"
+                 placeholder="Documents/… or https://…">
+          {% if f.kind == 'file' %}<button type="button" class="btn small" data-browse>Browse…</button>{% endif %}
+        </div>
+        <div class="browser" hidden></div>
+        <div class="row-end">
+          <button type="button" class="btn small" hx-get="{{ url }}/files" hx-target="#files" hx-swap="outerHTML">Cancel</button>
+          <button class="btn small primary">Save</button>
+        </div>
+      </form>
+      {% else %}
+      <div class="file-entry">
+        <span class="file-icon" aria-hidden="true">{{ '🔗' if f.kind == 'url' else ('📄' if f.exists else '⚠️') }}</span>
+        <div>
+          {% if f.kind == 'url' %}
+          <a href="{{ f.target|safe_url }}" target="_blank" rel="noopener noreferrer" title="{{ f.target }}">{{ f.name }}</a>
+          {% else %}
+          <button type="button" class="linklike" title="Open {{ f.target }}" {% if not f.exists %}disabled{% endif %}
+                  hx-post="{{ url }}/files/{{ loop.index }}/open" hx-swap="none">{{ f.name }}</button>
+          {% if not f.exists %}<span class="muted small"> — file not found</span>{% endif %}
+          {% endif %}
+          <div class="file-target muted small">{{ f.target }}</div>
+        </div>
+      </div>
+      <span class="tools">
+        <button class="x edit" title="Edit" aria-label="Edit {{ f.name }}"
+                hx-get="{{ url }}/files?edit={{ loop.index }}" hx-target="#files" hx-swap="outerHTML">✎</button>
+        <button class="x" title="Remove link" aria-label="Remove {{ f.name }}"
+                hx-post="{{ url }}/files/{{ loop.index }}/delete" hx-target="#files" hx-swap="outerHTML"
+                hx-confirm="Remove link “{{ f.name }}”? The file itself is not deleted.">×</button>
+      </span>
+      {% endif %}
+    </li>
+    {% else %}<li class="empty">No project files.</li>{% endfor %}
+  </ul>
+  {% if p.files_other_text %}<div class="md other-text">{{ p.files_other_text|md|safe }}</div>{% endif %}
+  <details {% if not files %}open{% endif %}>
+    <summary>Add file or link</summary>
+    <form class="stack file-form" hx-post="{{ url }}/files" hx-target="#files" hx-swap="outerHTML">
+      <div class="add-row">
+        <input name="target" required aria-label="Path or URL"
+               placeholder="Documents/Folder/file.pdf  or  https://…">
+        <button type="button" class="btn" data-browse>Browse…</button>
+      </div>
+      <div class="browser" hidden></div>
+      <input name="name" placeholder="Friendly name (default: file name or website)" aria-label="Friendly name">
+      <div class="row-end"><button class="btn primary">Add</button></div>
+    </form>
+  </details>
+</section>

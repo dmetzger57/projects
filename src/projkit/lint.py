@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
-from .ops import RECEIPT_TAG, file_tags, tag_file
+from .ops import RECEIPT_TAG, OpError, file_tags, resolve_file, tag_file
 from .project import README, STATUSES, Project
 from .workspace import Workspace
 
@@ -131,6 +131,16 @@ def _check_meta(ws: Workspace, p: Project, template_goals: set[str]) -> list[Iss
         add("L007", "warn", f"template placeholder goal(s) still present: {leftovers}")
     if desc in PLACEHOLDERS or not desc:
         add("L007", "info", "Description is empty or TBD")
+
+    for entry in p.files:
+        if entry["kind"] == "file":
+            try:
+                missing = not resolve_file(entry["target"]).exists()
+            except OpError as e:
+                add("L014", "warn", f"Project Files link '{entry['name']}': {e}")
+                continue
+            if missing:
+                add("L014", "warn", f"Project Files link '{entry['name']}' points to a missing file: {entry['target']}")
 
     rroot = ws.receipts_root.resolve()
     for r in p.receipts:

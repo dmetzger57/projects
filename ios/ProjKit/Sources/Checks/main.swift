@@ -59,6 +59,9 @@ if args.count == 4, args[1] == "--mutate" {
         try Ops.removeTask(ws, photo, index: 2)
         try Ops.addTask(ws, photo, "Move me to the top")
         try Ops.moveTask(ws, photo, from: 2, to: 0)
+        try Ops.addFile(ws, photo, target: "Documents/Manuals/Epson FF-680W.pdf", name: "Scanner manual")
+        try Ops.addFile(ws, photo, target: "https://docs.google.com/document/d/abc/edit?tab=t.0", name: nil)
+        try Ops.editFile(ws, photo, index: 1, name: "Plan", target: nil)
         try Ops.setStatus(ws, photo, "on-hold")
         photo = try Ops.rename(ws, photo, to: "Photo Archive")
         let p = try Ops.newProject(ws, title: "Swift Made", area: "Digital Infrastructure")
@@ -230,6 +233,53 @@ test("tasks: move and remove carry detail lines (same literals as tests/test_tas
     var threw = false
     do { _ = try ReadmeBody.moveTask(m, index: 3, to: 0) } catch { threw = true }
     check(threw, "bad index rejected")
+}
+
+test("project files: identical output to projkit/ops.py (same literals as tests/test_files.py)") {
+    let body = "\n## Description\nx\n\n## Project Files\nSome notes about files.\n\n## Notes\n### 2026-11-02\n- n\n"
+    let gdoc = "https://docs.google.com/document/d/1nkS9byPzwlKPAzqg9kLi-mdR3Z8tiebexaJj-OPYE3Q/edit?tab=t.0"
+    var b = try ReadmeBody.addFile(body, name: "Scanner manual", target: "Documents/Manuals/Epson FF-680W.pdf")
+    b = try ReadmeBody.addFile(b, name: "", target: gdoc)
+    eq(b, "\n## Description\nx\n\n## Project Files\nSome notes about files.\n"
+        + "- [Scanner manual](<Documents/Manuals/Epson FF-680W.pdf>)\n"
+        + "- [docs.google.com](\(gdoc))\n\n## Notes\n### 2026-11-02\n- n\n")
+    eq(ReadmeBody.files(b).map(\.name), ["Scanner manual", "docs.google.com"])
+    eq(ReadmeBody.files(b).map(\.isURL), [false, true])
+    eq(ReadmeBody.filesOtherText(b), "Some notes about files.")
+
+    var c = try ReadmeBody.addFile("\n## Description\nx\n", name: nil, target: "Documents/Taxes/2025 [final].pdf")
+    eq(c, "\n## Description\nx\n\n## Project Files\n- [2025 (final)](<Documents/Taxes/2025 [final].pdf>)\n")
+    c = try ReadmeBody.addFile(c, name: "My (odd) [name]", target: "https://example.com/a b")
+    check(c.hasSuffix("- [My (odd) (name)](<https://example.com/a b>)\n"), "angle brackets for spaces")
+    eq(ReadmeBody.files(c)[1].target, "https://example.com/a b")
+
+    var d = try ReadmeBody.addFile(body, name: "A", target: "Documents/a.pdf")
+    d = try ReadmeBody.addFile(d, name: "B", target: "https://b.example")
+    d = try ReadmeBody.editFile(d, index: 0, name: "Renamed", target: nil)
+    d = try ReadmeBody.editFile(d, index: 1, name: nil, target: "https://c.example/x")
+    check(d.contains("- [Renamed](<Documents/a.pdf>)\n- [B](https://c.example/x)\n"), "edit")
+    d = try ReadmeBody.removeFile(d, index: 0)
+    check(d.contains("Some notes about files.\n- [B](https://c.example/x)\n") && !d.contains("Renamed"), "remove")
+
+    var rejected = 0
+    for bad in ["/etc/passwd", "Downloads/x.pdf", "Documents/../x", "Documents/", "", "Documents/a<b"] {
+        do { _ = try ReadmeBody.addFile(body, name: "x", target: bad) } catch { rejected += 1 }
+    }
+    eq(rejected, 6, "bad targets rejected")
+
+    eq(try ReadmeBody.normalizeFilePath("~/Documents/a/b.pdf"), "Documents/a/b.pdf")
+    eq(try ReadmeBody.normalizeFilePath("/private/var/mobile/Library/Mobile Documents/com~apple~CloudDocs/Documents/a.pdf"),
+       "Documents/a.pdf")
+    eq(try ReadmeBody.normalizeFilePath("/x/Docs/sub/f.txt", documentsRoot: URL(fileURLWithPath: "/x/Docs")),
+       "Documents/sub/f.txt")
+    eq(try ReadmeBody.normalizeFilePath("  'Documents/x y.txt' "), "Documents/x y.txt")
+    eq(try ReadmeBody.normalizeFilePath(gdoc), gdoc)
+    eq(ReadmeBody.defaultFileName(".bashrc"), ".bashrc")
+    eq(ReadmeBody.defaultFileName("Documents/a.tar.gz"), "a.tar")
+    eq(ReadmeBody.defaultFileName("https://www.example.com/x?y"), "example.com")
+    let root = URL(fileURLWithPath: "/x/Docs")
+    eq(Ops.fileURL(ProjectFile(index: 0, name: "", target: "Documents/a/b.pdf"), documentsRoot: root)?.path, "/x/Docs/a/b.pdf")
+    eq(Ops.fileURL(ProjectFile(index: 0, name: "", target: gdoc), documentsRoot: root), nil)
 }
 
 test("ops: new project, goals, close/reopen, rename, uniqueness") {

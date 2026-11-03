@@ -330,6 +330,57 @@ def task_rm(project: str, task: str, root: Optional[Path] = RootOpt, receipts: O
     console.print(f"removed: {t['text']}", highlight=False)
 
 
+file_app = typer.Typer(no_args_is_help=True,
+                       help="Manage Project Files links (files under ~/Documents or URLs; refer by number or name).")
+app.add_typer(file_app, name="file")
+
+
+@file_app.command("ls")
+def file_ls(project: str, paths: bool = typer.Option(False, "--paths", "-p", help="Show the actual path/URL"),
+            root: Optional[Path] = RootOpt, receipts: Optional[Path] = ReceiptsOpt):
+    p = _pick(_ws(root, receipts), project)
+    for i, f in enumerate(p.files, 1):
+        icon = "🔗" if f["kind"] == "url" else "📄"
+        extra = f"  [dim]{f['target']}[/]" if paths else ""
+        console.print(f"{i:3}. {icon} {f['name']}{extra}", highlight=False)
+    if not p.files:
+        console.print("[dim]No project files.[/]")
+
+
+@file_app.command("add")
+def file_add(project: str, target: str = typer.Argument(..., help="Documents/… path, ~/Documents/… path, or URL"),
+             name: Optional[str] = typer.Option(None, "--name", "-n", help="Friendly name (default: file name / site)"),
+             root: Optional[Path] = RootOpt, receipts: Optional[Path] = ReceiptsOpt):
+    """Add a link to a file under ~/Documents or to a URL."""
+    p = _pick(_ws(root, receipts), project)
+    f = _run(ops.add_file, p, target, name)
+    if f["kind"] == "file" and not ops.resolve_file(f["target"]).exists():
+        console.print(f"[yellow]note: {f['target']} does not exist (yet)[/]")
+    console.print(f"[green]added[/] {f['name']}  [dim]{f['target']}[/]", highlight=False)
+
+
+@file_app.command("edit")
+def file_edit(project: str, entry: str,
+              name: Optional[str] = typer.Option(None, "--name", "-n"),
+              target: Optional[str] = typer.Option(None, "--target", "-t", help="New path or URL"),
+              root: Optional[Path] = RootOpt, receipts: Optional[Path] = ReceiptsOpt):
+    f = _run(ops.edit_file, _pick(_ws(root, receipts), project), entry, name, target)
+    console.print(f"edited: {f['name']}  [dim]{f['target']}[/]", highlight=False)
+
+
+@file_app.command("rm")
+def file_rm(project: str, entry: str, root: Optional[Path] = RootOpt, receipts: Optional[Path] = ReceiptsOpt):
+    f = _run(ops.remove_file, _pick(_ws(root, receipts), project), entry)
+    console.print(f"removed: {f['name']}", highlight=False)
+
+
+@file_app.command("open")
+def file_open(project: str, entry: str, root: Optional[Path] = RootOpt, receipts: Optional[Path] = ReceiptsOpt):
+    """Open the file (default app) or URL (browser)."""
+    p = _pick(_ws(root, receipts), project)
+    _run(ops.open_file_entry, p.files[_run(ops._file_index, p, entry)])
+
+
 link_app = typer.Typer(no_args_is_help=True, help="Manage links.")
 app.add_typer(link_app, name="link")
 

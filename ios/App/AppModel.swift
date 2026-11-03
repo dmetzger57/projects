@@ -8,6 +8,8 @@ import ProjKitCore
 final class AppModel {
     private(set) var projectsRoot: URL?
     private var pickedReceiptsRoot: URL?
+    /// iCloud Drive › Documents — needed to open Project Files links ("Documents/…") on the phone.
+    private(set) var documentsRoot: URL?
     /// Keep receipts in `3 - Receipts` inside the projects folder (for people without ~/Documents/Receipts).
     private(set) var receiptsInside = false
     private(set) var needsSetup = false
@@ -20,6 +22,7 @@ final class AppModel {
 
     private static let projectsKey = "projectsBookmark"
     private static let receiptsKey = "receiptsBookmark"
+    private static let documentsKey = "documentsBookmark"
     private static let receiptsInsideKey = "receiptsInside"
 
     var receiptsRoot: URL? {
@@ -31,6 +34,7 @@ final class AppModel {
     init() {
         projectsRoot = Self.restore(Self.projectsKey)
         pickedReceiptsRoot = Self.restore(Self.receiptsKey)
+        documentsRoot = Self.restore(Self.documentsKey)
         receiptsInside = UserDefaults.standard.bool(forKey: Self.receiptsInsideKey)
     }
 
@@ -67,6 +71,14 @@ final class AppModel {
         do {
             projectsRoot = try remember(url, key: Self.projectsKey)
             await reload()
+        } catch {
+            errorMessage = "Couldn't remember that folder: \(error.localizedDescription)"
+        }
+    }
+
+    func setDocumentsFolder(_ url: URL) async {
+        do {
+            documentsRoot = try remember(url, key: Self.documentsKey)
         } catch {
             errorMessage = "Couldn't remember that folder: \(error.localizedDescription)"
         }

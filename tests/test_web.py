@@ -167,3 +167,34 @@ def test_task_move_route(client, ws):
     assert [t["text"] for t in proj(ws).tasks] == ["three", "one", "two"]
     client.post(f"{url}/tasks/1/move", data={"to": "3"}, headers=HX)
     assert [t["text"] for t in proj(ws).tasks] == ["one", "two", "three"]
+
+
+def test_project_files_panel(client, ws, tmp_path, monkeypatch):
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    docs = tmp_path / "Documents"
+    (docs / "Manuals").mkdir(parents=True)
+    (docs / "Manuals" / "Epson FF-680W.pdf").write_bytes(b"%PDF")
+    (docs / "Plan.pages").mkdir()                       # package: shown as a file
+    url = "/p/Roof%20Repair"
+    r = client.post(f"{url}/files", data={"target": "Documents/Manuals/Epson FF-680W.pdf", "name": ""}, headers=HX)
+    assert r.status_code == 200 and "Epson FF-680W" in r.text and "📄" in r.text
+    gdoc = "https://docs.google.com/document/d/abc/edit?tab=t.0"
+    client.post(f"{url}/files", data={"target": gdoc, "name": "Plan"}, headers=HX)
+    client.post(f"{url}/files", data={"target": "Documents/missing.pdf", "name": "Gone"}, headers=HX)
+    page = client.get(url).text
+    assert f'href="{gdoc}"' in page and ">Plan</a>" in page and "file not found" in page
+    assert page.index('id="tasks"') < page.index('id="files"')
+    assert client.get(f"{url}/files?edit=2").text.count(f'value="{gdoc}"') == 1
+    client.post(f"{url}/files/2/edit", data={"target": gdoc, "name": "Planning doc"}, headers=HX)
+    client.post(f"{url}/files/3/delete", headers=HX)
+    assert [f["name"] for f in proj(ws).files] == ["Epson FF-680W", "Planning doc"]
+    assert client.post(f"{url}/files", data={"target": "/etc/passwd"}, headers=HX).status_code == 400
+    # browser
+    b = client.get("/browse", params={"path": "Documents"}).text
+    assert 'data-browse-to="Documents/Manuals"' in b and 'data-pick-path="Documents/Plan.pages"' in b
+    assert 'data-browse-to="Documents/Plan.pages"' not in b
+    assert 'data-pick-path="Documents/Manuals/Epson FF-680W.pdf"' in client.get("/browse", params={"path": "Documents/Manuals"}).text
+    assert client.get("/browse", params={"path": "Documents/../.."}).status_code == 400
+    # raw text edit of the section still works and returns the panel
+    r = client.post(f"{url}/section/Project%20Files", data={"text": "Notes about files\n\n- [X](https://x.example)"}, headers=HX)
+    assert 'id="files"' in r.text and "Notes about files" in r.text and proj(ws).files[0]["name"] == "X"

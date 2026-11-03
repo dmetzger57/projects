@@ -21,6 +21,9 @@ from ..project import STATUSES, Project
 from ..workspace import Workspace
 
 HERE = Path(__file__).parent
+# macOS document packages: folders on disk, but files to the user
+PACKAGE_SUFFIXES = {".pages", ".numbers", ".key", ".app", ".bundle", ".photoslibrary", ".rtfd", ".band",
+                    ".logicx", ".fcpbundle", ".imovielibrary", ".playground", ".xcodeproj"}
 STATUS_ORDER = {"active": 0, "on-hold": 1, "idea": 2, "closed": 3}
 _md = MarkdownIt("commonmark", {"html": False, "linkify": False}).enable(["strikethrough", "table"])
 
@@ -127,7 +130,20 @@ def create_app(ws: Workspace) -> FastAPI:
 
     def _project_ctx(p: Project) -> dict:
         return dict(p=p, url=purl(p), card=card(p), areas=ws.areas(), closed=ws.is_in_closed(p),
-                    notes=list(reversed(p.notes)), today=dt.date.today().isoformat())
+                    notes=list(reversed(p.notes)), today=dt.date.today().isoformat(),
+                    files=files_info(p), file_edit=None)
+
+    def files_info(p: Project) -> list[dict]:
+        out = []
+        for f in p.files:
+            exists = True
+            if f["kind"] == "file":
+                try:
+                    exists = ops.resolve_file(f["target"]).exists()
+                except ops.OpError:
+                    exists = False
+            out.append({**f, "exists": exists})
+        return out
 
     # ---- project partial updates -------------------------------------------
     def goals_partial(request: Request, p: Project):
@@ -247,6 +263,8 @@ def create_app(ws: Workspace) -> FastAPI:
     @app.get("/p/{key}/section/{name}", response_class=HTMLResponse)
     def section_view(request: Request, key: str, name: str, edit: bool = False):
         p = get_project(key)
+        if name == "Project Files" and not edit:
+            return files_partial(request, p)
         return partial(request, "_section.html", **_project_ctx(p), name=name,
                        text=p.section(name) or "", edit=edit)
 
@@ -255,8 +273,69 @@ def create_app(ws: Workspace) -> FastAPI:
         p = get_project(key)
         ops.set_section(p, name, text)
         p = Project.load(p.dir)
+        if name == "Project Files":
+            return files_partial(request, p)
         return partial(request, "_section.html", **_project_ctx(p), name=name,
                        text=p.section(name) or "", edit=False)
+
+    # ---- project files (named links to ~/Documents files or URLs) ------------
+    def files_partial(request: Request, p: Project, editing: int | None = None):
+        return partial(request, "_files.html", **{**_project_ctx(Project.load(p.dir)), "file_edit": editing})
+
+    @app.get("/p/{key}/files", response_class=HTMLResponse)
+    def files_view(request: Request, key: str, edit: int | None = None):
+        return files_partial(request, get_project(key), edit)
+
+    @app.post("/p/{key}/files")
+    def file_add(request: Request, key: str, target: str = Form(...), name: str = Form("")):
+        p = get_project(key)
+        ops.add_file(p, target, name.strip() or None)
+        return files_partial(request, p)
+
+    @app.post("/p/{key}/files/{n}/edit")
+    def file_edit(request: Request, key: str, n: int, target: str = Form(...), name: str = Form("")):
+        p = get_project(key)
+        ops.edit_file(p, str(n), name.strip() or "", target)
+        return files_partial(request, p)
+
+    @app.post("/p/{key}/files/{n}/delete")
+    def file_delete(request: Request, key: str, n: int):
+        p = get_project(key)
+        ops.remove_file(p, str(n))
+        return files_partial(request, p)
+
+    @app.post("/p/{key}/files/{n}/open")
+    def file_open(key: str, n: int):
+        p = get_project(key)
+        files = p.files
+        if not 0 < n <= len(files):
+            raise ops.OpError(f"no project file #{n}")
+        ops.open_file_entry(files[n - 1])
+        return Response(status_code=204)
+
+    @app.get("/browse", response_class=HTMLResponse)
+    def browse(request: Request, path: str = "Documents"):
+        """Folder listing under ~/Documents for picking a Project Files target."""
+        rel = ops.check_file_target(path) if path != "Documents" else "Documents"
+        home = Path.home().resolve()
+        d = (home / rel).resolve()
+        if not d.is_relative_to(home / "Documents") or not d.is_dir():
+            raise HTTPException(404)
+        entries = []
+        try:
+            for c in sorted(d.iterdir(), key=lambda c: (not c.is_dir(), c.name.lower())):
+                name = c.name
+                if name.startswith(".") and name.endswith(".icloud"):   # evicted iCloud file
+                    name = name[1:-7]
+                elif name.startswith("."):
+                    continue
+                is_dir = c.is_dir() and c.suffix.lower() not in PACKAGE_SUFFIXES
+                entries.append(dict(name=name, rel=f"{rel}/{name}", is_dir=is_dir))
+        except PermissionError:
+            raise ops.OpError(f"cannot read {rel}")
+        parts = rel.split("/")
+        crumbs = [dict(name=parts[i], rel="/".join(parts[:i + 1])) for i in range(len(parts))]
+        return partial(request, "_browse.html", entries=entries, crumbs=crumbs, rel=rel)
 
     @app.post("/p/{key}/status")
     def status_set(request: Request, key: str, status: str = Form(...)):

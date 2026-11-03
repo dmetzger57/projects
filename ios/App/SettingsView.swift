@@ -2,7 +2,7 @@ import SwiftUI
 import ProjKitCore
 
 struct SettingsView: View {
-    enum Target { case projects, receipts }
+    enum Target { case projects, receipts, documents }
     @Environment(AppModel.self) private var model
     @State private var picking: Target?
     @State private var receiptsOptions = false
@@ -12,6 +12,7 @@ struct SettingsView: View {
             Form {
                 Section {
                     folderRow("Projects", model.projectsRoot, target: .projects)
+                    folderRow("Documents (for Project Files)", model.documentsRoot, target: .documents)
                     Button { receiptsOptions = true } label: {
                         folderLabel("Receipts", model.receiptsInside ? "Inside Projects › \(internalReceiptsDirName)"
                                                                      : model.receiptsRoot.map(displayPath))
@@ -25,7 +26,7 @@ struct SettingsView: View {
                 } header: {
                     Text("Folders")
                 } footer: {
-                    Text("Pick iCloud Drive › Documents › Projects and › Receipts. Proj edits the files in place; changes appear in `proj` on the Mac. To share projects with family, share the Projects folder in iCloud Drive and have them choose it here.")
+                    Text("Pick iCloud Drive › Documents › Projects and › Receipts, and iCloud Drive › Documents itself so Project Files links can be opened. Proj edits the files in place; changes appear in `proj` on the Mac. To share projects with family, share the Projects folder in iCloud Drive and have them choose it here.")
                 }
                 Section("Status") {
                     LabeledContent("Projects", value: "\(model.projects.count)")
@@ -49,6 +50,7 @@ struct SettingsView: View {
                     switch target {
                     case .projects: await model.setProjectsFolder(url)
                     case .receipts: await model.setReceiptsFolder(url)
+                    case .documents: await model.setDocumentsFolder(url)
                     }
                 }
             }

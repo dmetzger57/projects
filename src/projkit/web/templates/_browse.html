@@ -1,0 +1,17 @@
+<div class="browse" data-browse-root>
+  <div class="crumbs small">
+    {% for c in crumbs %}{% if not loop.first %} / {% endif %}<button type="button" class="linklike" data-browse-to="{{ c.rel }}">{{ c.name }}</button>{% endfor %}
+  </div>
+  <ul class="plain browse-list">
+    {% for e in entries %}
+    <li>
+      {% if e.is_dir %}
+      <button type="button" class="linklike" data-browse-to="{{ e.rel }}">📁 {{ e.name }}</button>
+      <button type="button" class="btn small" data-pick-path="{{ e.rel }}" title="Link to this folder">Choose</button>
+      {% else %}
+      <button type="button" class="linklike" data-pick-path="{{ e.rel }}">📄 {{ e.name }}</button>
+      {% endif %}
+    </li>
+    {% else %}<li class="empty">Empty folder.</li>{% endfor %}
+  </ul>
+</div>

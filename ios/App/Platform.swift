@@ -44,6 +44,15 @@ extension View {
     }
 }
 
+func copyToClipboard(_ s: String) {
+    #if os(iOS)
+    UIPasteboard.general.string = s
+    #else
+    NSPasteboard.general.clearContents()
+    NSPasteboard.general.setString(s, forType: .string)
+    #endif
+}
+
 #if os(iOS)
 import UIKit
 import VisionKit

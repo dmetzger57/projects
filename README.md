@@ -27,6 +27,9 @@ proj task add|done|undo|rm photo <task>
 proj task edit photo <task> "new text"
 proj task mv photo <task> 1             # reorder (1 = top); web: drag ⋮⋮ or ↑/↓; iPhone: drag or long-press
 proj link add web https://… -t "Docs"
+proj file add photo "Documents/Manuals/scanner.pdf" -n "Scanner manual"   # Project Files link
+proj file add photo https://docs.google.com/… -n "Plan"                    # …or a URL
+proj file ls|edit|rm|open photo <entry>   # ls --paths shows targets
 proj receipt add roof ~/Downloads/inv.pdf -$ 412.50 -v Lowes --desc "Shingles"
 proj status photo on-hold
 proj rename web "Web-Check Service"

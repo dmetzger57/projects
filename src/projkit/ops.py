@@ -11,7 +11,8 @@ from pathlib import Path
 
 from ruamel.yaml.comments import CommentedMap, CommentedSeq
 
-from .project import FORMAT_VERSION, README, STATUSES, Project, section_bounds, task_line_indices
+from .project import (FORMAT_VERSION, README, STATUSES, URL_SCHEME_RE, Project, file_line_indices,
+                      parse_file_line, section_bounds, task_line_indices)
 from .workspace import BACKLOG_STEM, Workspace
 
 RECEIPT_TAG = "receipt"
@@ -408,6 +409,164 @@ def remove_task(p: Project, ref: str) -> dict:
     p.body = body_remove_task(p.body, i)
     p.save()
     return t
+
+
+# ---- project files (## Project Files: named links to ~/Documents files or URLs) ----
+# body_* functions are byte-identical with ios/ProjKit ReadmeBody file functions.
+
+def is_url(target: str) -> bool:
+    return bool(URL_SCHEME_RE.match(target))
+
+
+def check_file_target(target: str) -> str:
+    """A stored target is a URL or a path relative to the home folder starting 'Documents/'."""
+    t = target.strip()
+    if not t or any(c in t for c in "<>\n\r"):
+        raise OpError(f"invalid link target: {target!r}")
+    if is_url(t):
+        return t
+    if not t.startswith("Documents/") or len(t) <= len("Documents/"):
+        raise OpError(f"file paths must be under Documents/ (got {t!r})")
+    if any(part in ("..", ".") for part in t.split("/")):
+        raise OpError(f"'..' is not allowed in file paths: {t!r}")
+    return t.rstrip("/")
+
+
+def default_file_name(target: str) -> str:
+    if is_url(target):
+        host = re.sub(r"^[A-Za-z][A-Za-z0-9+.-]*://", "", target).split("/")[0].split("?")[0]
+        return host.removeprefix("www.") or target
+    name = target.rsplit("/", 1)[-1]
+    return name.rsplit(".", 1)[0] if "." in name.lstrip(".") else name
+
+
+def _clean_name(name: str | None, target: str) -> str:
+    n = " ".join((name or "").replace("\r", "\n").split("\n")).strip() or default_file_name(target)
+    return n.replace("[", "(").replace("]", ")")     # brackets would break the [name](target) syntax
+
+
+def format_file_line(name: str | None, target: str) -> str:
+    t = check_file_target(target)
+    dest = t if is_url(t) and not any(c in t for c in " ()") else f"<{t}>"
+    return f"- [{_clean_name(name, t)}]({dest})"
+
+
+def body_add_file(body: str, name: str | None, target: str) -> str:
+    line = format_file_line(name, target)
+    lines = body.rstrip("\n").split("\n")
+    b = section_bounds(lines, "Project Files")
+    if b is None:
+        notes = next((i for i, l in enumerate(lines) if l.strip().lower() == "## notes"), len(lines))
+        block = ["## Project Files", line] + ([""] if notes < len(lines) else [])
+        if notes > 0 and lines[notes - 1].strip():
+            block.insert(0, "")
+        lines[notes:notes] = block
+    else:
+        idx = file_line_indices(lines)
+        if idx:
+            pos = idx[-1] + 1
+        else:
+            pos = b[1]
+            while pos > b[0] + 1 and not lines[pos - 1].strip():
+                pos -= 1
+        lines.insert(pos, line)
+    return "\n".join(lines) + "\n"
+
+
+def _file_line(body: str, index: int) -> tuple[list[str], int]:
+    lines = body.rstrip("\n").split("\n")
+    idx = file_line_indices(lines)
+    if not 0 <= index < len(idx):
+        raise OpError(f"no project file #{index + 1}")
+    return lines, idx[index]
+
+
+def body_edit_file(body: str, index: int, name: str | None, target: str | None) -> str:
+    """Change the name and/or target of entry `index` (None keeps the current value)."""
+    lines, i = _file_line(body, index)
+    cur = parse_file_line(lines[i])
+    t = cur["target"] if target is None else target
+    lines[i] = format_file_line(cur["name"] if name is None else name, t)
+    return "\n".join(lines) + "\n"
+
+
+def body_remove_file(body: str, index: int) -> str:
+    lines, i = _file_line(body, index)
+    del lines[i]
+    return "\n".join(lines) + "\n"
+
+
+def normalize_file_path(raw: str, home: Path | None = None) -> str:
+    """Accepts 'Documents/…', '~/Documents/…', an absolute path under ~/Documents, or the
+    iCloud Drive form (…/com~apple~CloudDocs/Documents/…) and returns 'Documents/…'."""
+    home = home or Path.home()
+    t = raw.strip().strip('"').strip("'")
+    if is_url(t):
+        return t
+    if t.startswith("~/"):
+        t = str(home) + t[1:]
+    marker = "/com~apple~CloudDocs/Documents/"
+    if marker in t:
+        return check_file_target("Documents/" + t.split(marker, 1)[1])
+    if t.startswith("/"):
+        try:
+            rel = Path(t).relative_to(home)
+        except ValueError:
+            raise OpError(f"file must be under {home}/Documents: {t}")
+        t = str(rel)
+    return check_file_target(t)
+
+
+def resolve_file(target: str, home: Path | None = None) -> Path:
+    """Absolute path of a 'Documents/…' target (refuses anything outside ~/Documents)."""
+    home = (home or Path.home()).resolve()
+    p = (home / check_file_target(target)).resolve()
+    if not p.is_relative_to(home / "Documents"):
+        raise OpError(f"not under ~/Documents: {target}")
+    return p
+
+
+def _file_index(p: Project, ref: str) -> int:
+    files = p.files
+    if ref.isdigit():
+        i = int(ref) - 1
+        if 0 <= i < len(files):
+            return i
+        raise OpError(f"no project file #{ref} (project has {len(files)})")
+    hits = [i for i, f in enumerate(files) if ref.lower() in f["name"].lower() or ref.lower() in f["target"].lower()]
+    if len(hits) != 1:
+        raise OpError(f"file reference '{ref}' matches {len(hits)} entries")
+    return hits[0]
+
+
+def add_file(p: Project, target: str, name: str | None = None) -> dict:
+    t = normalize_file_path(target)
+    p.body = body_add_file(p.body, name, t)
+    p.save()
+    return p.files[-1]          # new entries always go after the last link
+
+
+def edit_file(p: Project, ref: str, name: str | None = None, target: str | None = None) -> dict:
+    i = _file_index(p, ref)
+    p.body = body_edit_file(p.body, i, name, normalize_file_path(target) if target else None)
+    p.save()
+    return p.files[i]
+
+
+def remove_file(p: Project, ref: str) -> dict:
+    i = _file_index(p, ref)
+    f = p.files[i]
+    p.body = body_remove_file(p.body, i)
+    p.save()
+    return f
+
+
+def open_file_entry(entry: dict) -> None:
+    """Open a Project Files entry on this Mac (default app / browser)."""
+    target = entry["target"] if entry["kind"] == "url" else str(resolve_file(entry["target"]))
+    if entry["kind"] == "file" and not Path(target).exists():
+        raise OpError(f"file not found: {entry['target']}")
+    subprocess.run(["open", target], check=False)
 
 
 # ---- receipts --------------------------------------------------------------

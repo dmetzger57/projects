@@ -41,6 +41,19 @@ public struct ProjectTask: Identifiable, Hashable, Sendable {
     public var id: Int { index }
 }
 
+/// A named link in `## Project Files`: a file under ~/Documents ("Documents/…") or a URL.
+public struct ProjectFile: Identifiable, Hashable, Sendable {
+    public let index: Int
+    public let name: String
+    public let target: String
+    public var isURL: Bool { ReadmeBody.isURL(target) }
+    public var id: Int { index }
+
+    public init(index: Int, name: String, target: String) {
+        self.index = index; self.name = name; self.target = target
+    }
+}
+
 public struct Note: Identifiable, Hashable, Sendable {
     public let date: String        // YYYY-MM-DD
     public let text: String        // markdown under the heading
@@ -122,6 +135,11 @@ public struct Project: Identifiable, Hashable, Sendable {
     public var notes: [Note] { document.map { ReadmeBody.notes($0.body) } ?? [] }
 
     public var tasks: [ProjectTask] { document.map { ReadmeBody.tasks($0.body) } ?? [] }
+
+    public var files: [ProjectFile] { document.map { ReadmeBody.files($0.body) } ?? [] }
+
+    /// Project Files content that isn't a link entry.
+    public var filesOtherText: String { document.map { ReadmeBody.filesOtherText($0.body) } ?? "" }
 
     public var taskProgress: (done: Int, total: Int) {
         let t = tasks
@@ -321,6 +339,143 @@ public enum ReadmeBody {
         let pos = to < rest.count ? rest[to].start : rest[rest.count - 1].end
         lines.insert(contentsOf: moved, at: pos)
         return lines.joined(separator: "\n") + "\n"
+    }
+
+    // MARK: project files — byte-identical with projkit/ops.py body_*_file (same literals in tests)
+
+    static let fileRegex = try! NSRegularExpression(pattern: #"^- \[([^\]]*)\]\((<[^<>]*>|[^\s()<>]+)\)\s*$"#)
+
+    public static func isURL(_ t: String) -> Bool {
+        t.range(of: #"^[A-Za-z][A-Za-z0-9+.-]*://"#, options: .regularExpression) != nil
+    }
+
+    static func parseFileLine(_ line: String) -> (name: String, target: String)? {
+        let ns = line as NSString
+        guard let m = fileRegex.firstMatch(in: line, range: NSRange(location: 0, length: ns.length)) else { return nil }
+        var target = ns.substring(with: m.range(at: 2))
+        if target.hasPrefix("<") { target = String(target.dropFirst().dropLast()) }
+        return (ns.substring(with: m.range(at: 1)).trimmingCharacters(in: .whitespaces), target)
+    }
+
+    static func fileLineIndices(_ lines: [String]) -> [Int] {
+        guard let b = sectionBounds(lines, "Project Files") else { return [] }
+        return (b.start + 1..<b.end).filter { parseFileLine(lines[$0]) != nil }
+    }
+
+    public static func files(_ body: String) -> [ProjectFile] {
+        let lines = body.components(separatedBy: "\n")
+        return fileLineIndices(lines).enumerated().map { n, i in
+            let f = parseFileLine(lines[i])!
+            return ProjectFile(index: n, name: f.name, target: f.target)
+        }
+    }
+
+    public static func filesOtherText(_ body: String) -> String {
+        let lines = body.components(separatedBy: "\n")
+        guard let b = sectionBounds(lines, "Project Files") else { return "" }
+        return (b.start + 1..<b.end).filter { parseFileLine(lines[$0]) == nil }.map { lines[$0] }
+            .joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// A stored target is a URL or a path relative to the home folder starting "Documents/".
+    public static func checkFileTarget(_ target: String) throws -> String {
+        let t = target.trimmingCharacters(in: .whitespacesAndNewlines)
+        if t.isEmpty || t.contains(where: { "<>\n\r".contains($0) }) { throw OpError("invalid link target: \(target)") }
+        if isURL(t) { return t }
+        guard t.hasPrefix("Documents/"), t.count > "Documents/".count else {
+            throw OpError("file paths must be under Documents/ (got \(t))")
+        }
+        if t.split(separator: "/", omittingEmptySubsequences: false).contains(where: { $0 == ".." || $0 == "." }) {
+            throw OpError("'..' is not allowed in file paths: \(t)")
+        }
+        var out = t
+        while out.hasSuffix("/") { out.removeLast() }
+        return out
+    }
+
+    public static func defaultFileName(_ target: String) -> String {
+        if isURL(target) {
+            let rest = target.replacingOccurrences(of: #"^[A-Za-z][A-Za-z0-9+.-]*://"#, with: "", options: .regularExpression)
+            var host = String(rest.split(separator: "/", omittingEmptySubsequences: false).first ?? "")
+            host = String(host.split(separator: "?", omittingEmptySubsequences: false).first ?? "")
+            if host.hasPrefix("www.") { host = String(host.dropFirst(4)) }
+            return host.isEmpty ? target : host
+        }
+        let name = String(target.split(separator: "/", omittingEmptySubsequences: false).last ?? "")
+        guard name.drop(while: { $0 == "." }).contains("."), let dot = name.lastIndex(of: ".") else { return name }
+        return String(name[..<dot])
+    }
+
+    static func cleanFileName(_ name: String?, target: String) -> String {
+        var n = (name ?? "").replacingOccurrences(of: "\r", with: "\n").components(separatedBy: "\n")
+            .joined(separator: " ").trimmingCharacters(in: .whitespaces)
+        if n.isEmpty { n = defaultFileName(target) }
+        return n.replacingOccurrences(of: "[", with: "(").replacingOccurrences(of: "]", with: ")")
+    }
+
+    public static func formatFileLine(name: String?, target: String) throws -> String {
+        let t = try checkFileTarget(target)
+        let dest = isURL(t) && !t.contains(where: { " ()".contains($0) }) ? t : "<\(t)>"
+        return "- [\(cleanFileName(name, target: t))](\(dest))"
+    }
+
+    public static func addFile(_ body: String, name: String?, target: String) throws -> String {
+        let line = try formatFileLine(name: name, target: target)
+        var lines = splitBody(body)
+        if let b = sectionBounds(lines, "Project Files") {
+            var pos: Int
+            if let last = fileLineIndices(lines).last {
+                pos = last + 1
+            } else {
+                pos = b.end
+                while pos > b.start + 1, lines[pos - 1].trimmingCharacters(in: .whitespaces).isEmpty { pos -= 1 }
+            }
+            lines.insert(line, at: pos)
+        } else {
+            let notes = lines.firstIndex { $0.trimmingCharacters(in: .whitespaces).lowercased() == "## notes" } ?? lines.count
+            var block = ["## Project Files", line] + (notes < lines.count ? [""] : [])
+            if notes > 0, !lines[notes - 1].trimmingCharacters(in: .whitespaces).isEmpty { block.insert("", at: 0) }
+            lines.insert(contentsOf: block, at: notes)
+        }
+        return lines.joined(separator: "\n") + "\n"
+    }
+
+    static func fileLine(_ body: String, _ index: Int) throws -> ([String], Int) {
+        let lines = splitBody(body)
+        let idx = fileLineIndices(lines)
+        guard idx.indices.contains(index) else { throw OpError("no project file #\(index + 1)") }
+        return (lines, idx[index])
+    }
+
+    /// Change the name and/or target of entry `index` (nil keeps the current value).
+    public static func editFile(_ body: String, index: Int, name: String?, target: String?) throws -> String {
+        var (lines, i) = try fileLine(body, index)
+        let cur = parseFileLine(lines[i])!
+        lines[i] = try formatFileLine(name: name ?? cur.name, target: target ?? cur.target)
+        return lines.joined(separator: "\n") + "\n"
+    }
+
+    public static func removeFile(_ body: String, index: Int) throws -> String {
+        var (lines, i) = try fileLine(body, index)
+        lines.remove(at: i)
+        return lines.joined(separator: "\n") + "\n"
+    }
+
+    /// Turns a typed path or a picked file's URL path into "Documents/…" (URLs pass through).
+    /// Accepts "Documents/…", "~/Documents/…", iCloud Drive paths (…/com~apple~CloudDocs/Documents/…),
+    /// and paths inside `documentsRoot` (the user-picked Documents folder).
+    public static func normalizeFilePath(_ raw: String, documentsRoot: URL? = nil) throws -> String {
+        var t = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
+        if isURL(t) { return t }
+        if t.hasPrefix("~/") { t = String(t.dropFirst(2)) }
+        let marker = "/com~apple~CloudDocs/Documents/"
+        if let r = t.range(of: marker) { return try checkFileTarget("Documents/" + t[r.upperBound...]) }
+        if let root = documentsRoot?.standardizedFileURL.path, t.hasPrefix(root + "/") {
+            return try checkFileTarget("Documents/" + t.dropFirst(root.count + 1))
+        }
+        if t.hasPrefix("/") { throw OpError("file must be inside your Documents folder: \(t)") }
+        return try checkFileTarget(t)
     }
 
     public static let editableSections = ["Description", "Project Files"]

@@ -241,6 +241,29 @@ public enum Ops {
         try editBody(ws, p) { try ReadmeBody.removeTask($0, index: index) }
     }
 
+    // MARK: project files
+
+    public static func addFile(_ ws: Workspace, _ p: Project, target: String, name: String?) throws {
+        try editBody(ws, p) { try ReadmeBody.addFile($0, name: name, target: target) }
+    }
+
+    public static func editFile(_ ws: Workspace, _ p: Project, index: Int, name: String?, target: String?) throws {
+        try editBody(ws, p) { try ReadmeBody.editFile($0, index: index, name: name, target: target) }
+    }
+
+    public static func removeFile(_ ws: Workspace, _ p: Project, index: Int) throws {
+        try editBody(ws, p) { try ReadmeBody.removeFile($0, index: index) }
+    }
+
+    /// Location of a "Documents/…" entry inside the user-picked Documents folder (nil for URLs
+    /// or anything escaping it).
+    public static func fileURL(_ f: ProjectFile, documentsRoot: URL?) -> URL? {
+        guard !f.isURL, let root = documentsRoot?.standardizedFileURL,
+              let t = try? ReadmeBody.checkFileTarget(f.target) else { return nil }
+        let u = root.appendingPathComponent(String(t.dropFirst("Documents/".count))).standardizedFileURL
+        return u.path.hasPrefix(root.path + "/") ? u : nil
+    }
+
     // MARK: goals
 
     public static func addGoal(_ ws: Workspace, _ p: Project, _ text: String) throws {

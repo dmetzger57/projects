@@ -31,6 +31,11 @@ assert p.section("Description") == "Consolidate **all** photos.\n\n- prints\n- s
 assert p.notes[-1].text.endswith("- Edited on iPhone\n  second line")
 assert p.tasks == [{"text": "Move me to the top", "done": False}, {"text": "Order Epson FF-680W", "done": False},
                    {"text": "Pick storage", "done": True}], p.tasks
+assert [(f["name"], f["target"], f["kind"]) for f in p.files] == [
+    ("Scanner manual", "Documents/Manuals/Epson FF-680W.pdf", "file"),
+    ("Plan", "https://docs.google.com/document/d/abc/edit?tab=t.0", "url")], p.files
+ops.edit_file(p, "Plan", name="Planning doc")
+assert Project.load(p.dir).files[1]["name"] == "Planning doc"
 ops.set_task(p, "Order", True)
 ops.move_task(p, "Pick", 1)
 assert [t["text"] for t in Project.load(p.dir).tasks] == ["Pick storage", "Move me to the top", "Order Epson FF-680W"]

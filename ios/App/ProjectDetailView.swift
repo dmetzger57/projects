@@ -21,6 +21,15 @@ struct TextEdit: Identifiable {
     }
 }
 
+struct FileSheet: Identifiable {
+    enum Mode { case add, edit(Int) }
+    let id = UUID()
+    let mode: Mode
+    var isLink: Bool
+    var name: String = ""
+    var target: String = ""
+}
+
 struct PendingReceipt: Identifiable {
     let id = UUID()
     let data: Data
@@ -42,6 +51,9 @@ struct ProjectDetailView: View {
     @State private var scanning = false
     @State private var pendingReceipt: PendingReceipt?
     @State private var preview: URL?
+    @State private var fileSheet: FileSheet?
+    @AppStorage("showPaths") private var showPaths = false
+    @Environment(\.openURL) private var openURL
     @State private var renaming = false
     @State private var renameText = ""
     @State private var confirmClose = false
@@ -72,7 +84,9 @@ struct ProjectDetailView: View {
                 goals(p)
                 tasks(p)
                 notes(p)
-                ForEach(ReadmeBody.editableSections, id: \.self) { name in textSection(p, name) }
+                ForEach(ReadmeBody.editableSections, id: \.self) { name in
+                    if name == "Project Files" { projectFiles(p) } else { textSection(p, name) }
+                }
                 links(p)
                 receipts(p)
             }
@@ -112,6 +126,16 @@ struct ProjectDetailView: View {
                                                 suggestedName: url.deletingPathExtension().lastPathComponent)
             } catch {
                 model.errorMessage = "Couldn't read \(url.lastPathComponent): \(error.localizedDescription)"
+            }
+        }
+        .sheet(item: $fileSheet) { s in
+            FileEntrySheet(sheet: s, documentsRoot: model.documentsRoot) { name, target in
+                switch s.mode {
+                case .add:
+                    await model.perform { try Ops.addFile($0, p, target: target, name: name) } != nil
+                case let .edit(i):
+                    await model.perform { try Ops.editFile($0, p, index: i, name: name, target: target) } != nil
+                }
             }
         }
         .documentScanner(isPresented: $scanning) { pdf in
@@ -337,6 +361,88 @@ struct ProjectDetailView: View {
                 .padding(.vertical, 2)
             }
         }
+    }
+
+    private func projectFiles(_ p: Project) -> some View {
+        Section {
+            ForEach(p.files) { f in
+                Button { open(f) } label: {
+                    HStack(alignment: .firstTextBaseline, spacing: 10) {
+                        Image(systemName: f.isURL ? "link" : "doc")
+                            .foregroundStyle(.secondary)
+                            .frame(width: 20)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(f.name).foregroundStyle(Color.accentColor)
+                            if showPaths {
+                                Text(f.target).font(.caption.monospaced()).foregroundStyle(.secondary)
+                                    .lineLimit(3).textSelection(.enabled)
+                            }
+                        }
+                    }
+                }
+                .accessibilityHint(f.isURL ? "Opens the link" : "Opens the file")
+                .swipeActions(edge: .trailing) {
+                    Button(role: .destructive) {
+                        Task { await model.perform { try Ops.removeFile($0, p, index: f.index) } }
+                    } label: { Label("Remove", systemImage: "trash") }
+                    Button { editFile(f) } label: { Label("Edit", systemImage: "pencil") }.tint(.accentColor)
+                }
+                .contextMenu {
+                    Button { open(f) } label: { Label("Open", systemImage: f.isURL ? "safari" : "doc.text.magnifyingglass") }
+                    Button { editFile(f) } label: { Label("Edit", systemImage: "pencil") }
+                    Button { copyToClipboard(f.target) } label: {
+                        Label(f.isURL ? "Copy URL" : "Copy Path", systemImage: "doc.on.doc")
+                    }
+                    Button(role: .destructive) {
+                        Task { await model.perform { try Ops.removeFile($0, p, index: f.index) } }
+                    } label: { Label("Remove Link", systemImage: "trash") }
+                }
+            }
+            let other = p.filesOtherText
+            if !other.isEmpty {
+                Text(markdown(other)).font(.callout).foregroundStyle(.secondary).textSelection(.enabled)
+            }
+            Menu {
+                Button { fileSheet = FileSheet(mode: .add, isLink: false) } label: { Label("Add File…", systemImage: "doc.badge.plus") }
+                Button { fileSheet = FileSheet(mode: .add, isLink: true) } label: { Label("Add Link…", systemImage: "link.badge.plus") }
+                Divider()
+                Button { edit = TextEdit(kind: .section("Project Files"), initial: p.section("Project Files") ?? "") } label: {
+                    Label("Edit as Text", systemImage: "text.alignleft")
+                }
+            } label: {
+                Label("Add File or Link", systemImage: "plus.circle")
+            }
+        } header: {
+            HStack {
+                Text("Project Files")
+                Spacer()
+                if !p.files.isEmpty {
+                    Button(showPaths ? "Hide Paths" : "Show Paths") { showPaths.toggle() }
+                        .font(.caption.weight(.semibold))
+                        .textCase(nil)
+                }
+            }
+        }
+    }
+
+    private func editFile(_ f: ProjectFile) {
+        fileSheet = FileSheet(mode: .edit(f.index), isLink: f.isURL, name: f.name, target: f.target)
+    }
+
+    private func open(_ f: ProjectFile) {
+        if f.isURL {
+            if let u = URL(string: f.target) { openURL(u) } else { model.errorMessage = "Not a valid URL: \(f.target)" }
+            return
+        }
+        guard model.documentsRoot != nil else {
+            model.errorMessage = "To open files, choose iCloud Drive › Documents in Settings › Documents."
+            return
+        }
+        guard let url = Ops.fileURL(f, documentsRoot: model.documentsRoot) else {
+            model.errorMessage = "Can't open \(f.target)"
+            return
+        }
+        Task { preview = await model.prepareForViewing(url) }
     }
 
     private func textSection(_ p: Project, _ name: String) -> some View {

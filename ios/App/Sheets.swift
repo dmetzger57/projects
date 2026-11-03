@@ -36,6 +36,110 @@ struct TextEditSheet: View {
     }
 }
 
+/// Add or edit a Project Files entry: a file under Documents (typed or browsed) or a URL.
+struct FileEntrySheet: View {
+    let sheet: FileSheet
+    let documentsRoot: URL?
+    let save: (String?, String) async -> Bool
+    @State private var isLink = false
+    @State private var name = ""
+    @State private var target = ""
+    @State private var browsing = false
+    @State private var problem: String?
+    @State private var saving = false
+    @Environment(\.dismiss) private var dismiss
+
+    private var isAdd: Bool { if case .add = sheet.mode { true } else { false } }
+
+    /// The stored form of what's typed, or the reason it's not acceptable.
+    private var normalized: Result<String, Error> {
+        Result { try ReadmeBody.normalizeFilePath(target, documentsRoot: documentsRoot) }
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                if isAdd {
+                    Picker("Type", selection: $isLink) {
+                        Text("File").tag(false)
+                        Text("Link").tag(true)
+                    }
+                    .pickerStyle(.segmented)
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets())
+                }
+                Section {
+                    if isLink {
+                        TextField("https://…", text: $target, axis: .vertical).urlField()
+                    } else {
+                        TextField("Documents/Folder/file.pdf", text: $target, axis: .vertical).urlField()
+                        Button { browsing = true } label: { Label("Browse Files…", systemImage: "folder") }
+                    }
+                } header: {
+                    Text(isLink ? "URL" : "File")
+                } footer: {
+                    if !isLink { Text("Choose a file in iCloud Drive › Documents, or type its path starting with “Documents/”.") }
+                }
+                Section {
+                    TextField(defaultName.isEmpty ? "Friendly name" : defaultName, text: $name)
+                } header: {
+                    Text("Name")
+                } footer: {
+                    Text("Shown instead of the \(isLink ? "URL" : "path"). Leave empty to use “\(defaultName.isEmpty ? "…" : defaultName)”.")
+                }
+                if let problem {
+                    Section { Label(problem, systemImage: "exclamationmark.triangle").foregroundStyle(.orange) }
+                }
+            }
+            .navigationTitle(isAdd ? (isLink ? "Add Link" : "Add File") : "Edit")
+            .inlineTitle()
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(isAdd ? "Add" : "Save") { submit() }
+                        .disabled(saving || target.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+            }
+            .fileImporter(isPresented: $browsing, allowedContentTypes: [.item]) { result in
+                guard case let .success(url) = result else { return }
+                do {
+                    target = try ReadmeBody.normalizeFilePath(url.path, documentsRoot: documentsRoot)
+                    problem = nil
+                } catch {
+                    problem = "That file isn't inside iCloud Drive › Documents."
+                }
+            }
+        }
+        .onAppear {
+            isLink = sheet.isLink
+            name = sheet.name
+            target = sheet.target.isEmpty && sheet.isLink ? "https://" : sheet.target
+        }
+    }
+
+    private var defaultName: String {
+        (try? normalized.get()).map(ReadmeBody.defaultFileName) ?? ""
+    }
+
+    private func submit() {
+        switch normalized {
+        case let .failure(e):
+            problem = e.localizedDescription
+        case let .success(t):
+            if isLink != ReadmeBody.isURL(t) {
+                problem = isLink ? "Enter a full URL starting with https://" : "Enter a path starting with Documents/"
+                return
+            }
+            saving = true
+            let n = name.trimmingCharacters(in: .whitespaces)
+            Task {
+                if await save(n.isEmpty ? "" : n, t) { dismiss() }
+                saving = false
+            }
+        }
+    }
+}
+
 struct AddLinkSheet: View {
     let save: (String, String?) async -> Void
     @State private var url = "https://"

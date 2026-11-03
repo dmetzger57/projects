@@ -43,7 +43,7 @@
   <div class="col-main">
     {% for name in EDITABLE %}
       {% set text = p.section(name) or '' %}{% set edit = False %}
-      {% include "_section.html" %}
+      {% if name == "Project Files" %}{% include "_files.html" %}{% else %}{% include "_section.html" %}{% endif %}
       {% if loop.first %}{% set task_edit = None %}{% include "_tasks.html" %}{% endif %}
     {% endfor %}
     {% include "_notes.html" %}

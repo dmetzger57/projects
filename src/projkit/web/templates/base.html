@@ -88,6 +88,49 @@
       document.querySelector(`[data-task-handle="${focusAfter}"]`)?.focus();
       focusAfter = null;
     });
+    // ---- Project Files: browse ~/Documents, pick a path, show/hide actual paths ----
+    function loadBrowser(box, path) {
+      htmx.ajax("GET", "/browse?path=" + encodeURIComponent(path), {target: box, swap: "innerHTML"});
+    }
+    document.addEventListener("click", e => {
+      const browseBtn = e.target.closest?.("[data-browse]");
+      if (browseBtn) {
+        const box = browseBtn.closest("form").querySelector(".browser");
+        box.hidden = !box.hidden;
+        if (!box.hidden) {
+          const cur = browseBtn.closest("form").elements.target.value.trim();
+          const dir = cur.startsWith("Documents/") ? cur.split("/").slice(0, -1).join("/") || "Documents" : "Documents";
+          loadBrowser(box, dir);
+        }
+        return;
+      }
+      const to = e.target.closest?.("[data-browse-to]");
+      if (to) { loadBrowser(to.closest(".browser"), to.dataset.browseTo); return; }
+      const pick = e.target.closest?.("[data-pick-path]");
+      if (pick) {
+        const form = pick.closest("form"), path = pick.dataset.pickPath;
+        form.elements.target.value = path;
+        if (!form.elements.name.value.trim()) {
+          const base = path.split("/").pop();
+          form.elements.name.value = base.includes(".") ? base.slice(0, base.lastIndexOf(".")) || base : base;
+        }
+        pick.closest(".browser").hidden = true;
+        form.elements.name.focus();
+      }
+    });
+    function applyShowPaths() {
+      let on = false;
+      try { on = localStorage.getItem("showPaths") === "1"; } catch {}
+      document.querySelectorAll("#files").forEach(f => f.classList.toggle("show-paths", on));
+      document.querySelectorAll("[data-show-paths]").forEach(c => c.checked = on);
+    }
+    document.addEventListener("change", e => {
+      if (!e.target.matches?.("[data-show-paths]")) return;
+      try { localStorage.setItem("showPaths", e.target.checked ? "1" : "0"); } catch {}
+      applyShowPaths();
+    });
+    document.body.addEventListener("htmx:afterSwap", applyShowPaths);
+    applyShowPaths();
     // our own edits change the fingerprint too; resync after each successful mutation
     document.body.addEventListener("htmx:afterOnLoad", e => {
       if (e.detail.elt.id !== "fp" && e.detail.requestConfig.verb !== "get") fp = null;
