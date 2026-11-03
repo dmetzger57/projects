@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "projkit/project.schema.json",
+  "title": "Project README front matter (format 1)",
+  "type": "object",
+  "required": ["title", "area", "status"],
+  "properties": {
+    "format": {"const": 1},
+    "title": {"type": "string", "minLength": 1},
+    "area": {"type": "string", "minLength": 1},
+    "status": {"enum": ["idea", "active", "on-hold", "closed"]},
+    "created": {"type": ["string", "null"], "format": "date"},
+    "closed": {"type": ["string", "null"], "format": "date"},
+    "tags": {"type": "array", "items": {"type": "string"}},
+    "goals": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["text"],
+        "properties": {
+          "text": {"type": "string"},
+          "done": {"type": "boolean"},
+          "done_on": {"type": ["string", "null"], "format": "date"}
+        }
+      }
+    },
+    "links": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["url"],
+        "properties": {"title": {"type": "string"}, "url": {"type": "string"}}
+      }
+    },
+    "receipts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path"],
+        "properties": {
+          "path": {"type": "string"},
+          "amount": {"type": ["number", "null"]},
+          "vendor": {"type": ["string", "null"]},
+          "date": {"type": ["string", "null"], "format": "date"}
+        }
+      }
+    }
+  },
+  "additionalProperties": true
+}
