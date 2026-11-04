@@ -612,37 +612,40 @@ def tag_file(path: Path, tag: str = RECEIPT_TAG) -> None:
         subprocess.run(["xattr", "-wx", attr, data, str(path)], check=True)
 
 
-def receipt_filename(src: Path, date: dt.date, description: str | None) -> str:
-    desc = _BAD_NAME.sub("-", (description or src.stem).strip())
-    if re.match(r"^\d{4}-\d{2}-\d{2} ", desc):
-        desc = desc[11:]
-    return f"{date.isoformat()} {desc}{src.suffix.lower()}"
+def receipt_target(ws: Workspace, path: str, home: Path | None = None) -> Path:
+    """Absolute location of a receipt entry's path: 'Documents/…' is relative to the home folder
+    (same form as Project Files); anything else is relative to the receipts root."""
+    if path.startswith("Documents/"):
+        return resolve_file(path, home)
+    root = ws.receipts_root.expanduser().resolve()
+    t = (root / path).resolve()
+    if not path or not t.is_relative_to(root):
+        raise OpError(f"receipt outside {ws.receipts_root}: {path}")
+    return t
+
+
+def receipt_ref(ws: Workspace, src: Path, home: Path | None = None) -> str:
+    """How a receipt file is referenced: relative to the receipts root when it lives there,
+    otherwise as 'Documents/…' (it must be under ~/Documents so every device can reach it)."""
+    root = ws.receipts_root.expanduser().resolve()
+    if src.is_relative_to(root):
+        return str(src.relative_to(root))
+    return normalize_file_path(str(src), home)
 
 
 def add_receipt(ws: Workspace, p: Project, src: Path, amount: float | None = None,
-                vendor: str | None = None, date: dt.date | None = None,
-                description: str | None = None, move: bool = False, tag: bool = True) -> dict:
-    """Reference a receipt. Files outside the receipts root are filed as
-    <receipts>/<year>/<YYYY-MM-DD description>.<ext> (copied, or moved with move=True)."""
-    src = src.expanduser().resolve()
+                vendor: str | None = None, date: dt.date | None = None, tag: bool = True) -> dict:
+    """Reference a receipt by path. The file is the single source of truth: it is never
+    copied or moved, only referenced where it is (and given the Finder tag 'receipt')."""
+    src = src.expanduser().absolute()
     if not src.is_file():
         raise OpError(f"not a file: {src}")
-    root = ws.receipts_root.expanduser().resolve()
-    date = date or _today()
-    if src.is_relative_to(root):
-        target = src
-    else:
-        target = root / str(date.year) / receipt_filename(src, date, description or vendor)
-        if target.exists():
-            raise OpError(f"receipt already exists: {target}")
-        target.parent.mkdir(parents=True, exist_ok=True)
-        (shutil.move if move else shutil.copy2)(src, target)
-    rel = str(target.relative_to(root))
+    rel = receipt_ref(ws, src.resolve())
     if any(r.get("path") == rel for r in p.receipts):
         raise OpError(f"receipt already attached: {rel}")
     if tag:
-        tag_file(target)
-    entry = CommentedMap(path=rel, amount=amount, vendor=vendor, date=date)
+        tag_file(src)
+    entry = CommentedMap(path=rel, amount=amount, vendor=vendor, date=date or _today())
     _seq(p, "receipts").append(entry)
     p.save()
     return entry

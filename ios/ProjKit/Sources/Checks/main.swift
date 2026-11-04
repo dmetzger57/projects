@@ -328,6 +328,32 @@ test("ops: receipts are filed by year and referenced") {
     eq(Ops.receiptURL(ws, Receipt(index: 0, path: "../../etc/passwd", amount: nil, vendor: nil, date: nil)), nil)
 }
 
+test("ops: existing files are referenced by path, never copied") {
+    let ws = try tempWorkspace()
+    let p = try Ops.newProject(ws, title: "R", area: "House")
+    let rec = ws.receiptsRoot!
+    let inRoot = rec.appendingPathComponent("2026/invoice.pdf")
+    try FileManager.default.createDirectory(at: inRoot.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try Data("%PDF".utf8).write(to: inRoot)
+    let docs = rec.deletingLastPathComponent().appendingPathComponent("Documents")
+    let elsewhere = docs.appendingPathComponent("Finance/Lowes.pdf")
+    try FileManager.default.createDirectory(at: elsewhere.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try Data("%PDF".utf8).write(to: elsewhere)
+    let before = FileManager.default.enumerator(atPath: rec.path)?.allObjects.count
+    let r1 = try Ops.receiptReference(ws, fileURL: inRoot, documentsRoot: docs)
+    let r2 = try Ops.receiptReference(ws, fileURL: elsewhere, documentsRoot: docs)
+    eq(r1, "2026/invoice.pdf")
+    eq(r2, "Documents/Finance/Lowes.pdf")
+    try Ops.addReceiptReference(ws, p, path: r1, amount: 1, vendor: nil, date: "2026-10-09")
+    try Ops.addReceiptReference(ws, ws.load(p.url), path: r2, amount: 2, vendor: "Lowes", date: "2026-10-09")
+    eq(FileManager.default.enumerator(atPath: rec.path)?.allObjects.count, before)   // nothing copied
+    let q = ws.load(p.url)
+    eq(q.receipts.map(\.path), [r1, r2])
+    eq(Ops.receiptURL(ws, q.receipts[1], documentsRoot: docs)?.resolvingSymlinksInPath().path,
+       elsewhere.resolvingSymlinksInPath().path)
+    do { try Ops.addReceiptReference(ws, q, path: r1, amount: nil, vendor: nil); check(false, "duplicate allowed") } catch {}
+}
+
 test("ops: ideas and promote") {
     let ws = try tempWorkspace()
     try Ops.addIdea(ws, "Backyard Sequoia tree")

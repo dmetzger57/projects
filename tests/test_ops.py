@@ -96,17 +96,43 @@ def test_rename(ws):
     assert not (ws.root / "House" / "Old Name").exists()
 
 
-def test_receipt_filed_by_year_and_referenced(ws, tmp_path):
-    src = tmp_path / "scan.PDF"
+def _files_under(d):
+    return sorted(str(x.relative_to(d)) for x in d.rglob("*") if x.is_file())
+
+
+def test_receipt_in_receipts_root_referenced_not_copied(ws):
+    src = ws.receipts_root / "2026" / "scan.PDF"
+    src.parent.mkdir(parents=True)
     src.write_bytes(b"%PDF")
+    before = _files_under(ws.receipts_root)
     p = ops.new_project(ws, "R", "House")
-    e = ops.add_receipt(ws, p, src, amount=12.5, vendor="Lowes", date=dt.date(2026, 10, 9), description="Shingles")
-    assert e["path"] == "2026/2026-10-09 Shingles.pdf"
-    assert (ws.receipts_root / e["path"]).exists() and src.exists()
+    e = ops.add_receipt(ws, p, src, amount=12.5, vendor="Lowes", date=dt.date(2026, 10, 9))
+    assert e["path"] == "2026/scan.PDF"
+    assert _files_under(ws.receipts_root) == before            # nothing copied
+    assert ops.receipt_target(ws, e["path"]) == src.resolve()
     assert Project.load(p.dir).total_cost == 12.5
     with pytest.raises(ops.OpError):  # same file again
-        ops.add_receipt(ws, p, ws.receipts_root / e["path"])
+        ops.add_receipt(ws, p, src)
     assert [i for i in lint_workspace(ws) if i.code == "L008"] == []
+
+
+def test_receipt_elsewhere_in_documents_referenced_by_path(ws, tmp_path, monkeypatch):
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    src = tmp_path / "Documents" / "Finance" / "Lowes invoice.pdf"
+    src.parent.mkdir(parents=True)
+    src.write_bytes(b"%PDF")
+    before = _files_under(ws.receipts_root)
+    p = ops.new_project(ws, "R", "House")
+    e = ops.add_receipt(ws, p, src, amount=3.0)
+    assert e["path"] == "Documents/Finance/Lowes invoice.pdf"
+    assert _files_under(ws.receipts_root) == before and src.exists()
+    assert ops.receipt_target(ws, e["path"]) == src.resolve()
+    assert [i for i in lint_workspace(ws) if i.code == "L008"] == []
+    outside = tmp_path / "Desktop" / "x.pdf"
+    outside.parent.mkdir()
+    outside.write_bytes(b"%PDF")
+    with pytest.raises(ops.OpError):  # not reachable from other devices
+        ops.add_receipt(ws, p, outside)
 
 
 def test_ideas_roundtrip_and_promote(ws):

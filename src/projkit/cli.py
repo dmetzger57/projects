@@ -403,17 +403,15 @@ def receipt_add(project: str, file: Path,
                 amount: Optional[float] = typer.Option(None, "--amount", "-$"),
                 vendor: Optional[str] = typer.Option(None, "--vendor", "-v"),
                 date: Optional[str] = typer.Option(None, "--date", "-d", help="YYYY-MM-DD (default today)"),
-                desc: Optional[str] = typer.Option(None, "--desc", help="Description used in the file name"),
-                move: bool = typer.Option(False, "--move", help="Move instead of copy into the receipts folder"),
                 root: Optional[Path] = RootOpt, receipts: Optional[Path] = ReceiptsOpt):
-    """Attach a receipt; files outside ~/Documents/Receipts are filed there as <year>/<date> <desc>.pdf and tagged 'receipt'."""
+    """Attach a receipt by reference: the file stays where it is (it must be under ~/Documents) and is tagged 'receipt'. Nothing is copied."""
     ws = _ws(root, receipts)
     try:
         d = dt.date.fromisoformat(date) if date else None
     except ValueError:
         console.print(f"[red]bad date: {date}[/]")
         raise typer.Exit(1)
-    e = _run(ops.add_receipt, ws, _pick(ws, project), file, amount, vendor, d, desc, move)
+    e = _run(ops.add_receipt, ws, _pick(ws, project), file, amount, vendor, d)
     console.print(f"[green]attached[/] {e['path']}")
 
 

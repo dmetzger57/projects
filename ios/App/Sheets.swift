@@ -187,14 +187,18 @@ struct ReceiptDetailsSheet: View {
         NavigationStack {
             Form {
                 Section {
-                    TextField("Description", text: $desc)
+                    if pending.reference == nil { TextField("Description", text: $desc) }
                     TextField("Vendor", text: $vendor)
                     TextField("Amount", text: $amount).decimalField()
                     DatePicker("Date", selection: $date, displayedComponents: .date)
                 } footer: {
-                    let name = Ops.receiptFileName(description: desc.isEmpty ? (vendor.isEmpty ? "Receipt" : vendor) : desc,
-                                                   date: ISODate.string(date), ext: pending.fileExtension)
-                    Text("Saved as Receipts/\(ISODate.string(date).prefix(4))/\(name)")
+                    if let ref = pending.reference {
+                        Text("Links to \(ref.hasPrefix("Documents/") ? ref : "Receipts/" + ref). The file stays where it is — no copy is made.")
+                    } else {
+                        let name = Ops.receiptFileName(description: desc.isEmpty ? (vendor.isEmpty ? "Receipt" : vendor) : desc,
+                                                       date: ISODate.string(date), ext: pending.fileExtension)
+                        Text("Saved as Receipts/\(ISODate.string(date).prefix(4))/\(name)")
+                    }
                 }
             }
             .navigationTitle("Receipt")

@@ -101,16 +101,24 @@ final class AppModel {
     /// Where a Project Files entry lives on this phone: a remembered bookmark, else inside the Documents folder.
     func fileURL(for f: ProjectFile) -> URL? {
         guard !f.isURL else { return nil }
-        if let data = (UserDefaults.standard.dictionary(forKey: Self.fileBookmarksKey) as? [String: Data])?[f.target] {
-            var stale = false
-            if let url = try? URL(resolvingBookmarkData: data, options: Self.resolveOptions, relativeTo: nil,
-                                  bookmarkDataIsStale: &stale) {
-                _ = url.startAccessingSecurityScopedResource()   // held while the app runs
-                if stale { rememberFile(url, as: f.target) }
-                return url
-            }
-        }
-        return Ops.fileURL(f, documentsRoot: documentsRoot)
+        return bookmarkedFile(f.target) ?? Ops.fileURL(f, documentsRoot: documentsRoot)
+    }
+
+    /// Where a receipt lives on this phone: a remembered bookmark, else the Documents or Receipts folder.
+    func receiptURL(for r: Receipt) -> URL? {
+        guard let ws = workspace else { return nil }
+        return bookmarkedFile(r.path) ?? Ops.receiptURL(ws, r, documentsRoot: documentsRoot)
+    }
+
+    private func bookmarkedFile(_ target: String) -> URL? {
+        guard let data = (UserDefaults.standard.dictionary(forKey: Self.fileBookmarksKey) as? [String: Data])?[target]
+        else { return nil }
+        var stale = false
+        guard let url = try? URL(resolvingBookmarkData: data, options: Self.resolveOptions, relativeTo: nil,
+                                 bookmarkDataIsStale: &stale) else { return nil }
+        _ = url.startAccessingSecurityScopedResource()   // held while the app runs
+        if stale { rememberFile(url, as: target) }
+        return url
     }
 
     func setReceiptsFolder(_ url: URL) async {

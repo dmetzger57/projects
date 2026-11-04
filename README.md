@@ -30,7 +30,7 @@ proj link add web https://… -t "Docs"
 proj file add photo "Documents/Manuals/scanner.pdf" -n "Scanner manual"   # Project Files link
 proj file add photo https://docs.google.com/… -n "Plan"                    # …or a URL
 proj file ls|edit|rm|open photo <entry>   # ls --paths shows targets
-proj receipt add roof ~/Downloads/inv.pdf -$ 412.50 -v Lowes --desc "Shingles"
+proj receipt add roof ~/Documents/Receipts/2026/inv.pdf -$ 412.50 -v Lowes   # records the path; no copy
 proj status photo on-hold
 proj rename web "Web-Check Service"
 proj close roof            # → 2 - Closed, area kept
@@ -46,7 +46,7 @@ proj serve [-p 8765] [--no-open]   # web UI
 ## Web UI
 
 `proj serve` opens http://127.0.0.1:8765/ — overview by area (filters, search, goal progress, spend),
-project pages (edit Description/Project Files, goals, notes, links, receipt upload, status/close/rename,
+project pages (edit Description/Project Files, goals, notes, links, receipts by path, status/close/rename,
 reveal in Finder), idea backlog with "Make project", and a Health page with one-click lint fixes.
 
 - Reads the files on every request and polls for changes, so CLI/Finder/iCloud edits appear live.

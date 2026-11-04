@@ -21,7 +21,7 @@ public struct ProjectLink: Identifiable, Hashable, Sendable {
 
 public struct Receipt: Identifiable, Hashable, Sendable {
     public let index: Int
-    public let path: String        // relative to the receipts root
+    public let path: String        // "Documents/…" (relative to home) or relative to the receipts root
     public let amount: Double?
     public let vendor: String?
     public let date: String?

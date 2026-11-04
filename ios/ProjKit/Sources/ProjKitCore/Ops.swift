@@ -320,7 +320,9 @@ public enum Ops {
         return "\(date) \(desc)" + (e.isEmpty ? "" : ".\(e)")
     }
 
-    /// Files `data` as <receipts>/<year>/<date> <description>.<ext> and references it.
+    /// Saves a newly scanned document (it has no other original) as
+    /// <receipts>/<year>/<date> <description>.<ext> and references it.
+    /// Existing files are never copied: use `addReceiptReference` for those.
     /// (Finder tag `receipt` can't be set on iOS; `proj lint --fix` on the Mac adds it.)
     @discardableResult
     public static func addReceipt(_ ws: Workspace, _ p: Project, data: Data, fileExtension: String,
@@ -337,6 +339,35 @@ public enum Ops {
         if p.receipts.contains(where: { $0.path == rel }) { throw OpError("receipt already attached: \(rel)") }
         if !ws.fs.isDirectory(yearDir) { try ws.fs.createDirectory(yearDir) }
         try ws.fs.writeData(data, to: target)
+        try appendReceipt(ws, p, path: rel, amount: amount, vendor: vendor, date: date)
+        return rel
+    }
+
+    /// How an existing file is referenced as a receipt: relative to the receipts root when it lives
+    /// there, otherwise "Documents/…" (same form as Project Files).
+    public static func receiptReference(_ ws: Workspace, fileURL: URL, documentsRoot: URL?) throws -> String {
+        func clean(_ u: URL) -> String {
+            let p = u.standardizedFileURL.resolvingSymlinksInPath().path
+            return p.hasPrefix("/private/") ? String(p.dropFirst("/private".count)) : p
+        }
+        let path = clean(fileURL)
+        if let root = ws.receiptsRoot.map(clean), path.hasPrefix(root + "/") {
+            return String(path.dropFirst(root.count + 1))
+        }
+        return try ReadmeBody.normalizeFilePath(path, documentsRoot: documentsRoot.map { URL(fileURLWithPath: clean($0)) })
+    }
+
+    /// References an existing file as a receipt by its path. The file is the single source of
+    /// truth: it is never copied or moved.
+    public static func addReceiptReference(_ ws: Workspace, _ p: Project, path rel: String, amount: Double?,
+                                           vendor: String?, date: String = ISODate.string()) throws {
+        guard ISODate.isValid(date) else { throw OpError("bad date: \(date)") }
+        if p.receipts.contains(where: { $0.path == rel }) { throw OpError("receipt already attached: \(rel)") }
+        try appendReceipt(ws, p, path: rel, amount: amount, vendor: vendor, date: date)
+    }
+
+    static func appendReceipt(_ ws: Workspace, _ p: Project, path rel: String, amount: Double?,
+                              vendor: String?, date: String) throws {
         let v = vendor?.trimmingCharacters(in: .whitespacesAndNewlines)
         try editList(ws, p, "receipts") {
             $0.append(.map(YAMLMap([("path", .string(rel)),
@@ -344,10 +375,9 @@ public enum Ops {
                                     ("vendor", v?.isEmpty == false ? .string(v!) : .null),
                                     ("date", .date(date))])))
         }
-        return rel
     }
 
-    /// Detach a receipt (the file stays in the receipts folder).
+    /// Detach a receipt (the file itself is not touched).
     public static func removeReceipt(_ ws: Workspace, _ p: Project, index: Int) throws {
         try editList(ws, p, "receipts") { r in
             guard r.indices.contains(index) else { throw OpError("no receipt #\(index + 1)") }
@@ -355,7 +385,12 @@ public enum Ops {
         }
     }
 
-    public static func receiptURL(_ ws: Workspace, _ r: Receipt) -> URL? {
+    /// Location of a receipt: "Documents/…" inside the user-picked Documents folder, anything
+    /// else inside the receipts root (nil if it would escape them).
+    public static func receiptURL(_ ws: Workspace, _ r: Receipt, documentsRoot: URL? = nil) -> URL? {
+        if r.path.hasPrefix("Documents/") {
+            return fileURL(ProjectFile(index: r.index, name: r.fileName, target: r.path), documentsRoot: documentsRoot)
+        }
         guard let root = ws.receiptsRoot else { return nil }
         let u = root.appendingPathComponent(r.path).standardizedFileURL
         return u.path.hasPrefix(root.standardizedFileURL.path + "/") ? u : nil

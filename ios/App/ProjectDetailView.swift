@@ -30,9 +30,12 @@ struct FileSheet: Identifiable {
     var target: String = ""
 }
 
+/// A receipt waiting for its details: either a fresh scan (`data`, saved as a new file) or an
+/// existing file (`reference`, recorded by path and never copied).
 struct PendingReceipt: Identifiable {
     let id = UUID()
-    let data: Data
+    var data: Data? = nil
+    var reference: String? = nil
     let fileExtension: String
     let suggestedName: String
 }
@@ -113,8 +116,12 @@ struct ProjectDetailView: View {
         .sheet(item: $pendingReceipt) { r in
             ReceiptDetailsSheet(pending: r) { desc, vendor, amount, date in
                 await model.perform {
-                    try Ops.addReceipt($0, p, data: r.data, fileExtension: r.fileExtension, description: desc,
-                                       amount: amount, vendor: vendor, date: date)
+                    if let ref = r.reference {
+                        try Ops.addReceiptReference($0, p, path: ref, amount: amount, vendor: vendor, date: date)
+                    } else if let data = r.data {
+                        try Ops.addReceipt($0, p, data: data, fileExtension: r.fileExtension, description: desc,
+                                           amount: amount, vendor: vendor, date: date)
+                    }
                 }
             }
         }
@@ -129,14 +136,16 @@ struct ProjectDetailView: View {
                 }
                 return
             }
-            let scoped = url.startAccessingSecurityScopedResource()
-            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+            // The picked file is the source of truth: record where it is, never copy it.
+            guard let ws = model.workspace else { return }
             do {
-                let data = try Data(contentsOf: url)
-                pendingReceipt = PendingReceipt(data: data, fileExtension: url.pathExtension.isEmpty ? "pdf" : url.pathExtension,
+                let ref = try Ops.receiptReference(ws, fileURL: url, documentsRoot: model.documentsRoot)
+                model.rememberFile(url, as: ref)          // lets it open later without re-picking
+                pendingReceipt = PendingReceipt(reference: ref, fileExtension: url.pathExtension,
                                                 suggestedName: url.deletingPathExtension().lastPathComponent)
             } catch {
-                model.errorMessage = "Couldn't read \(url.lastPathComponent): \(error.localizedDescription)"
+                model.errorMessage = "Can't use \(url.lastPathComponent) as a receipt: \(error.localizedDescription). "
+                    + "Pick a file in iCloud Drive › Documents."
             }
         }
         .alert("Allow Access to Documents", isPresented: Binding(get: { pendingOpen != nil && !importing },
@@ -519,8 +528,10 @@ struct ProjectDetailView: View {
         Section {
             ForEach(p.receipts) { r in
                 Button {
-                    guard let ws = model.workspace, let url = Ops.receiptURL(ws, r) else {
-                        model.errorMessage = "Choose the Receipts folder in Settings to view receipts."
+                    guard let url = model.receiptURL(for: r) else {
+                        model.errorMessage = r.path.hasPrefix("Documents/")
+                            ? "Choose iCloud Drive › Documents in Settings to view \(r.fileName)."
+                            : "Choose the Receipts folder in Settings to view receipts."
                         return
                     }
                     Task { preview = await model.prepareForViewing(url) }
@@ -556,7 +567,7 @@ struct ProjectDetailView: View {
                 if !p.receipts.isEmpty { Text(money(p.totalCost)) }
             }
         } footer: {
-            if !p.receipts.isEmpty { Text("Swipe to detach. Files stay in the Receipts folder.") }
+            if !p.receipts.isEmpty { Text("Swipe to detach. The files themselves are not touched.") }
         }
     }
 }

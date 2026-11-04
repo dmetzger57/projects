@@ -110,12 +110,13 @@
       if (pick) {
         const form = pick.closest("form"), path = pick.dataset.pickPath;
         form.elements.target.value = path;
-        if (!form.elements.name.value.trim()) {
+        const next = form.elements.name || form.elements.amount;
+        if (form.elements.name && !form.elements.name.value.trim()) {
           const base = path.split("/").pop();
           form.elements.name.value = base.includes(".") ? base.slice(0, base.lastIndexOf(".")) || base : base;
         }
         pick.closest(".browser").hidden = true;
-        form.elements.name.focus();
+        next?.focus();
       }
     });
     function applyShowPaths() {

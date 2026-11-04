@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
-from .ops import RECEIPT_TAG, OpError, file_tags, resolve_file, tag_file
+from .ops import RECEIPT_TAG, OpError, file_tags, receipt_target, resolve_file, tag_file
 from .project import README, STATUSES, Project
 from .workspace import Workspace
 
@@ -142,15 +142,17 @@ def _check_meta(ws: Workspace, p: Project, template_goals: set[str]) -> list[Iss
             if missing:
                 add("L014", "warn", f"Project Files link '{entry['name']}' points to a missing file: {entry['target']}")
 
-    rroot = ws.receipts_root.resolve()
     for r in p.receipts:
         rel = str(r.get("path", ""))
-        target = (ws.receipts_root / rel).expanduser()
         if not rel:
             add("L008", "error", "receipt entry without path")
-        elif not target.resolve().is_relative_to(rroot):
-            add("L008", "error", f"receipt outside {ws.receipts_root}: {rel}")
-        elif not target.exists():
+            continue
+        try:
+            target = receipt_target(ws, rel)
+        except OpError as e:
+            add("L008", "error", str(e))
+            continue
+        if not target.exists():
             add("L008", "error", f"receipt not found: {rel}")
         elif _is_dataless(target):
             add("L011", "info", f"receipt not downloaded from iCloud: {rel}")

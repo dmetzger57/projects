@@ -87,17 +87,20 @@ def test_section_rejects_headings_and_unknown(client):
     assert client.post("/p/Roof%20Repair/section/Notes", data={"text": "x"}, headers=HX).status_code == 400
 
 
-def test_receipt_upload_serve_detach(client, ws):
+def test_receipt_reference_serve_detach(client, ws):
+    src = ws.receipts_root / "2026" / "invoice.pdf"
+    src.parent.mkdir(parents=True)
+    src.write_bytes(b"%PDF-1.4")
     r = client.post("/p/Roof%20Repair/receipts", headers=HX,
-                    files={"file": ("invoice.pdf", b"%PDF-1.4", "application/pdf")},
-                    data={"amount": "$1,234.50", "vendor": "Lowes", "date": "2026-10-09", "desc": "Shingles"})
+                    data={"target": str(src), "amount": "$1,234.50", "vendor": "Lowes", "date": "2026-10-09"})
     assert r.status_code == 200, r.text
     rec = proj(ws).receipts[0]
-    assert rec["path"] == "2026/2026-10-09 Shingles.pdf" and rec["amount"] == 1234.5
-    assert client.get("/receipt", params={"path": rec["path"]}).content == b"%PDF-1.4"
-    assert client.get("/receipt", params={"path": "../Projects/House/Roof Repair/README.md"}).status_code == 404
+    assert rec["path"] == "2026/invoice.pdf" and rec["amount"] == 1234.5
+    assert [f.name for f in ws.receipts_root.rglob("*") if f.is_file()] == ["invoice.pdf"]   # no copy
+    assert client.get("/p/Roof%20Repair/receipts/1").content == b"%PDF-1.4"
+    assert client.get("/p/Roof%20Repair/receipts/2").status_code == 404
     client.post("/p/Roof%20Repair/receipts/1/delete", headers=HX)
-    assert proj(ws).receipts == [] and (ws.receipts_root / rec["path"]).exists()
+    assert proj(ws).receipts == [] and src.exists()
 
 
 def test_status_close_reopen_rename(client, ws):

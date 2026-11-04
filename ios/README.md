@@ -90,7 +90,8 @@ The build appears in App Store Connect → **TestFlight** after processing.
   and keeps edits from other devices from interleaving. Each edit re-reads the README first.
 - `App/`: the SwiftUI app (iOS 17+). iPhone-only code (the document scanner) is in
   `App/Platform.swift`.
-- Receipts are saved as `Receipts/<year>/<date> <description>.pdf`. iOS can't set Finder tags,
+- A receipt picked with **Choose File** is linked by its path, never copied (pick it from iCloud Drive › Documents).
+  Only scanned receipts become new files, saved as `Receipts/<year>/<date> <description>.pdf`. iOS can't set Finder tags,
   so run `proj lint --fix` on the Mac to add the `receipt` tag (lint reports it as L013).
 
 ## Checks (no Xcode needed)

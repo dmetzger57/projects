@@ -3,13 +3,11 @@ from __future__ import annotations
 
 import datetime as dt
 import hashlib
-import shutil
 import subprocess
-import tempfile
 from pathlib import Path
 from urllib.parse import quote
 
-from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi import FastAPI, Form, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -229,22 +227,18 @@ def create_app(ws: Workspace) -> FastAPI:
         return partial(request, "_links.html", **_project_ctx(Project.load(p.dir)))
 
     @app.post("/p/{key}/receipts")
-    async def receipt_add(request: Request, key: str, file: UploadFile = File(...),
-                          amount: str = Form(""), vendor: str = Form(""), date: str = Form(""),
-                          desc: str = Form("")):
+    def receipt_add(request: Request, key: str, target: str = Form(...),
+                    amount: str = Form(""), vendor: str = Form(""), date: str = Form("")):
+        """Reference an existing file by path (never copied: the file is the source of truth)."""
         p = get_project(key)
-        name = Path(file.filename or "receipt.pdf").name
         try:
             amt = float(amount.replace("$", "").replace(",", "")) if amount.strip() else None
             d = dt.date.fromisoformat(date) if date else None
         except ValueError as e:
             raise ops.OpError(f"invalid amount or date: {e}")
-        with tempfile.TemporaryDirectory() as td:
-            tmp = Path(td) / name
-            with tmp.open("wb") as f:
-                shutil.copyfileobj(file.file, f)
-            ops.add_receipt(ws, p, tmp, amt, vendor.strip() or None, d,
-                            desc.strip() or Path(name).stem, move=True)
+        t = target.strip().strip('"').strip("'")
+        src = Path.home() / t if t.startswith("Documents/") else Path(t).expanduser()
+        ops.add_receipt(ws, p, src, amt, vendor.strip() or None, d)
         return partial(request, "_receipts.html", **_project_ctx(Project.load(p.dir)))
 
     @app.post("/p/{key}/receipts/{n}/delete")
@@ -253,11 +247,17 @@ def create_app(ws: Workspace) -> FastAPI:
         ops.remove_receipt(p, n - 1)
         return partial(request, "_receipts.html", **_project_ctx(Project.load(p.dir)))
 
-    @app.get("/receipt")
-    def receipt_file(path: str):
-        root = ws.receipts_root.resolve()
-        f = (root / path).resolve()
-        if not f.is_relative_to(root) or not f.is_file():
+    @app.get("/p/{key}/receipts/{n}")
+    def receipt_file(key: str, n: int):
+        """Serve a receipt the project references (only paths listed in its README)."""
+        rec = get_project(key).receipts
+        if not 0 < n <= len(rec):
+            raise HTTPException(404)
+        try:
+            f = ops.receipt_target(ws, str(rec[n - 1].get("path", "")))
+        except ops.OpError:
+            raise HTTPException(404)
+        if not f.is_file():
             raise HTTPException(404)
         return FileResponse(f, content_disposition_type="inline", filename=f.name)
 
