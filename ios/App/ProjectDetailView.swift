@@ -132,8 +132,8 @@ struct ProjectDetailView: View {
             if importingDocumentsFolder {
                 importingDocumentsFolder = false
                 Task {
-                    await model.setDocumentsFolder(url)
-                    if let f = pendingOpen { pendingOpen = nil; open(f) }
+                    let ok = await model.setDocumentsFolder(url)
+                    if let f = pendingOpen { pendingOpen = nil; if ok { open(f) } }
                 }
                 return
             }
@@ -505,7 +505,7 @@ struct ProjectDetailView: View {
             if let ready = await model.prepareForViewing(url) {
                 preview = ready
             } else {
-                model.errorMessage = "Couldn't open “\(f.name)”. Check that \(displayPath(f)) still exists."
+                model.errorMessage = "Couldn't open “\(f.name)”. Check that \(displayPath(f)) exists, or try again once iCloud has downloaded it."
             }
         }
     }

@@ -36,6 +36,12 @@ final class AppModel {
         projectsRoot = Self.restore(Self.projectsKey)
         pickedReceiptsRoot = Self.restore(Self.receiptsKey)
         documentsRoot = Self.restore(Self.documentsKey)
+        if let d = documentsRoot, !Self.isDocumentsFolder(d) {
+            // An earlier build accepted a folder inside Documents (e.g. Documents/Misc); every
+            // "Documents/…" path then resolved to the wrong place. Forget it so the app asks again.
+            documentsRoot = nil
+            UserDefaults.standard.removeObject(forKey: Self.documentsKey)
+        }
         receiptsInside = UserDefaults.standard.bool(forKey: Self.receiptsInsideKey)
         #if DEBUG
         // Simulator testing: PROJ_DEBUG_ROOT=<projects folder> skips the folder picker.
@@ -81,11 +87,21 @@ final class AppModel {
         }
     }
 
-    func setDocumentsFolder(_ url: URL) async {
+    /// Project Files paths start with "Documents/", so the folder must be iCloud Drive › Documents itself.
+    static func isDocumentsFolder(_ url: URL) -> Bool { url.standardizedFileURL.lastPathComponent == "Documents" }
+
+    @discardableResult
+    func setDocumentsFolder(_ url: URL) async -> Bool {
+        guard Self.isDocumentsFolder(url) else {
+            errorMessage = "Choose the Documents folder itself (iCloud Drive › Documents), not “\(url.lastPathComponent)”."
+            return false
+        }
         do {
             documentsRoot = try remember(url, key: Self.documentsKey)
+            return true
         } catch {
             errorMessage = "Couldn't remember that folder: \(error.localizedDescription)"
+            return false
         }
     }
 
@@ -187,16 +203,40 @@ final class AppModel {
         }
     }
 
-    /// Makes sure an iCloud file is downloaded (coordinated read) before Quick Look opens it.
+    /// Downloads an iCloud file and hands Quick Look a local copy of its bytes.
+    /// A file the phone hasn't synced yet (e.g. just added on the Mac) has no local data; a bare
+    /// coordinated read "succeeds" on it and Quick Look then shows an empty "data" page. So: ask
+    /// iCloud for it, copy it inside a coordinated read, and retry for a while until it arrives.
     func prepareForViewing(_ url: URL) async -> URL? {
-        let ok = await Task.detached {
-            var err: NSError?
-            var done = false
-            NSFileCoordinator(filePresenter: nil).coordinate(readingItemAt: url, options: [], error: &err) { _ in done = true }
-            return done && err == nil
+        let copy = await Task.detached(priority: .userInitiated) { () -> URL? in
+            let fm = FileManager.default
+            let dir = fm.temporaryDirectory.appendingPathComponent("Preview", isDirectory: true)
+                .appendingPathComponent(UUID().uuidString, isDirectory: true)
+            for attempt in 0..<20 {                          // up to ~10 s for iCloud to deliver it
+                if attempt > 0 { try? await Task.sleep(for: .milliseconds(500)) }
+                try? fm.startDownloadingUbiquitousItem(at: url)
+                // Listing the folder makes iCloud materialize entries the phone hasn't seen yet.
+                _ = try? fm.contentsOfDirectory(atPath: url.deletingLastPathComponent().path)
+                var err: NSError?
+                var result: URL?
+                NSFileCoordinator(filePresenter: nil).coordinate(readingItemAt: url, options: [], error: &err) { real in
+                    guard let data = try? Data(contentsOf: real), !data.isEmpty || Self.isEmptyFile(real) else { return }
+                    try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
+                    let dest = dir.appendingPathComponent(url.lastPathComponent)
+                    if (try? data.write(to: dest)) != nil { result = dest }
+                }
+                if let result { return result }
+            }
+            return nil
         }.value
-        if !ok { errorMessage = "Couldn't open \(url.lastPathComponent)" }
-        return ok ? url : nil
+        if copy == nil {
+            errorMessage = "Couldn't open “\(url.lastPathComponent)”. It may not have downloaded from iCloud yet — try again in a moment."
+        }
+        return copy
+    }
+
+    private nonisolated static func isEmptyFile(_ url: URL) -> Bool {
+        ((try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? -1) == 0
     }
 
     var isConfigured: Bool { projectsRoot != nil }
