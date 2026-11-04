@@ -38,6 +38,8 @@ public struct ProjectTask: Identifiable, Hashable, Sendable {
     public let index: Int          // 0-based position among task lines
     public let text: String
     public let done: Bool
+    /// Attachments: indented links under the task (files under Documents/ or URLs); index is per task.
+    public var files: [ProjectFile] = []
     public var id: Int { index }
 }
 
@@ -247,9 +249,13 @@ public enum ReadmeBody {
 
     public static func tasks(_ body: String) -> [ProjectTask] {
         let lines = body.components(separatedBy: "\n")
-        return taskLineIndices(lines).enumerated().map { n, i in
-            let t = parseTask(lines[i])!
-            return ProjectTask(index: n, text: t.text, done: t.done)
+        return taskBlocks(lines).enumerated().map { n, b in
+            let t = parseTask(lines[b.start])!
+            let files = taskFileIndices(lines, b).enumerated().map { k, j in
+                let f = parseFileLine(stripIndent(lines[j]))!
+                return ProjectFile(index: k, name: f.name, target: f.target)
+            }
+            return ProjectTask(index: n, text: t.text, done: t.done, files: files)
         }
     }
 
@@ -268,10 +274,9 @@ public enum ReadmeBody {
         var lines = splitBody(body)
         let bullet = "- [ ] " + (try cleanTask(text))
         if let b = sectionBounds(lines, "Tasks") {
-            let idx = taskLineIndices(lines)
             var pos: Int
-            if let last = idx.last {
-                pos = last + 1
+            if let last = taskBlocks(lines).last {
+                pos = last.end           // after the last task's detail lines (attachments stay with it)
             } else {
                 pos = b.end
                 while pos > b.start + 1, lines[pos - 1].trimmingCharacters(in: .whitespaces).isEmpty { pos -= 1 }
@@ -338,6 +343,52 @@ public enum ReadmeBody {
         let rest = taskBlocks(lines)
         let pos = to < rest.count ? rest[to].start : rest[rest.count - 1].end
         lines.insert(contentsOf: moved, at: pos)
+        return lines.joined(separator: "\n") + "\n"
+    }
+
+    // MARK: task attachments — byte-identical with projkit/ops.py body_*_task_file
+
+    static let taskFileIndent = "  "
+
+    static func stripIndent(_ l: String) -> String { String(l.drop { $0 == " " || $0 == "\t" }) }
+
+    /// Attachment lines of a task: indented Project-Files-style links among its detail lines.
+    static func taskFileIndices(_ lines: [String], _ b: (start: Int, end: Int)) -> [Int] {
+        (b.start + 1..<b.end).filter { parseFileLine(stripIndent(lines[$0])) != nil }
+    }
+
+    static func taskFileLine(_ body: String, task: Int, index: Int) throws -> ([String], Int) {
+        let lines = splitBody(body)
+        let blocks = taskBlocks(lines)
+        guard blocks.indices.contains(task) else { throw OpError("no task #\(task + 1)") }
+        let idx = taskFileIndices(lines, blocks[task])
+        guard idx.indices.contains(index) else { throw OpError("task #\(task + 1) has no attachment #\(index + 1)") }
+        return (lines, idx[index])
+    }
+
+    /// Adds an attachment after the task's last attachment (or at the end of its detail lines).
+    public static func addTaskFile(_ body: String, task: Int, name: String?, target: String) throws -> String {
+        let line = taskFileIndent + (try formatFileLine(name: name, target: target))
+        var lines = splitBody(body)
+        let blocks = taskBlocks(lines)
+        guard blocks.indices.contains(task) else { throw OpError("no task #\(task + 1)") }
+        let idx = taskFileIndices(lines, blocks[task])
+        lines.insert(line, at: idx.last.map { $0 + 1 } ?? blocks[task].end)
+        return lines.joined(separator: "\n") + "\n"
+    }
+
+    public static func editTaskFile(_ body: String, task: Int, index: Int, name: String?, target: String?) throws -> String {
+        var (lines, i) = try taskFileLine(body, task: task, index: index)
+        let stripped = stripIndent(lines[i])
+        let cur = parseFileLine(stripped)!
+        let indent = String(lines[i].prefix(lines[i].count - stripped.count))
+        lines[i] = indent + (try formatFileLine(name: name ?? cur.name, target: target ?? cur.target))
+        return lines.joined(separator: "\n") + "\n"
+    }
+
+    public static func removeTaskFile(_ body: String, task: Int, index: Int) throws -> String {
+        var (lines, i) = try taskFileLine(body, task: task, index: index)
+        lines.remove(at: i)
         return lines.joined(separator: "\n") + "\n"
     }
 

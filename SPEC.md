@@ -56,6 +56,8 @@ Free text.
 
 ## Tasks
 - [ ] Order scanner
+  - [Quote](<Documents/Quotes/Epson FF-680W.pdf>)
+  - [Product page](https://epson.com/ff-680w)
 - [x] Pick storage location
 
 ## Project Files
@@ -80,7 +82,11 @@ Rules:
   Writers add new tasks after the last task line, creating the section just before `## Notes` (or at the end)
   when missing; editing or ticking changes only that line. Indented, non-blank lines directly under a task
   are its details: moving or deleting a task moves or deletes them with it. List order is the file order,
-  so reordering moves lines. Goals (front matter) are longer-term outcomes;
+  so reordering moves lines. A task's attachments are detail lines that are indented Project Files links
+  (`  - [Friendly name](<Documents/…>)` or `  - [Name](https://…)`, same target rules as Project Files below);
+  writers indent them two spaces and add new ones after the task's last attachment (else at the end of its
+  detail lines), and a new task goes after the last task's detail lines. Files are referenced by path, never
+  copied; `proj lint` reports attachments pointing at missing files as L014. Goals (front matter) are longer-term outcomes;
   tasks are the to-do checklist.
 - Unknown front-matter keys must be preserved (forward compatibility).
 

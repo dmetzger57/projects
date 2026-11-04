@@ -26,6 +26,7 @@ struct FileSheet: Identifiable {
     let id = UUID()
     let mode: Mode
     var isLink: Bool
+    var task: Int? = nil          // set when attaching to a task instead of Project Files
     var name: String = ""
     var target: String = ""
 }
@@ -157,11 +158,14 @@ struct ProjectDetailView: View {
         }
         .sheet(item: $fileSheet) { s in
             FileEntrySheet(sheet: s, documentsRoot: model.documentsRoot) { name, target in
+                if let task = s.task {
+                    return await model.perform { try Ops.addTaskFile($0, p, task: task, target: target, name: name) } != nil
+                }
                 switch s.mode {
                 case .add:
-                    await model.perform { try Ops.addFile($0, p, target: target, name: name) } != nil
+                    return await model.perform { try Ops.addFile($0, p, target: target, name: name) } != nil
                 case let .edit(i):
-                    await model.perform { try Ops.editFile($0, p, index: i, name: name, target: target) } != nil
+                    return await model.perform { try Ops.editFile($0, p, index: i, name: name, target: target) } != nil
                 }
             }
         }
@@ -309,13 +313,24 @@ struct ProjectDetailView: View {
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel(t.done ? "Mark “\(t.text)” not done" : "Mark “\(t.text)” done")
-                    Text(markdown(t.text))
-                        .strikethrough(t.done)
-                        .foregroundStyle(t.done ? .secondary : .primary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .contentShape(Rectangle())
-                        .onTapGesture { startEditing(t) }
-                        .accessibilityHint("Double-tap to edit")
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(markdown(t.text))
+                            .strikethrough(t.done)
+                            .foregroundStyle(t.done ? .secondary : .primary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(Rectangle())
+                            .onTapGesture { startEditing(t) }
+                            .accessibilityHint("Double-tap to edit")
+                        ForEach(t.files) { f in
+                            Button { open(f) } label: {
+                                Label(f.name, systemImage: f.isURL ? "link" : "paperclip")
+                                    .font(.callout)
+                                    .foregroundStyle(Color.accentColor)
+                            }
+                            .buttonStyle(.borderless)
+                            .accessibilityHint(f.isURL ? "Opens the link" : "Opens the file")
+                        }
+                    }
                 }
                 .swipeActions(edge: .trailing) {
                     Button(role: .destructive) {
@@ -326,6 +341,23 @@ struct ProjectDetailView: View {
                 }
                 .contextMenu {
                     Button { startEditing(t) } label: { Label("Edit", systemImage: "pencil") }
+                    Section("Attachments") {
+                        Button { fileSheet = FileSheet(mode: .add, isLink: false, task: t.index) } label: {
+                            Label("Attach File…", systemImage: "paperclip")
+                        }
+                        Button { fileSheet = FileSheet(mode: .add, isLink: true, task: t.index) } label: {
+                            Label("Attach Link…", systemImage: "link.badge.plus")
+                        }
+                        if !t.files.isEmpty {
+                            Menu {
+                                ForEach(t.files) { f in
+                                    Button(role: .destructive) {
+                                        Task { await model.perform { try Ops.removeTaskFile($0, p, task: t.index, index: f.index) } }
+                                    } label: { Label(f.name, systemImage: f.isURL ? "link" : "doc") }
+                                }
+                            } label: { Label("Remove Attachment", systemImage: "minus.circle") }
+                        }
+                    }
                     if total > 1 {
                         Section("Move") {
                             Button { move(p, t.index, to: 0) } label: { Label("Move to Top", systemImage: "arrow.up.to.line") }

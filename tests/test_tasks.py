@@ -24,7 +24,7 @@ def test_add_without_notes_and_into_section_with_intro_text():
 def test_toggle_edit_remove_keep_other_lines():
     b = "\n## Tasks\n- [ ] one\n  indented detail\n- [X] two\n* [ ] not a task\n\n## Notes\n"
     p = Project(dir=None, body=b)
-    assert p.tasks == [{"text": "one", "done": False}, {"text": "two", "done": True}]
+    assert p.tasks == [{"text": "one", "done": False, "files": []}, {"text": "two", "done": True, "files": []}]
     b = ops.body_set_task(b, 0, True)
     b = ops.body_set_task(b, 1, False)
     assert b == "\n## Tasks\n- [x] one\n  indented detail\n- [ ] two\n* [ ] not a task\n\n## Notes\n"
@@ -46,13 +46,13 @@ def test_project_level_ops(tmp_path):
     p.save()
     ops.add_task(p, "Buy shingles")
     ops.add_task(p, "Hire roofer")
-    assert ops.set_task(p, "roofer", True) == {"text": "Hire roofer", "done": True}
+    assert ops.set_task(p, "roofer", True) == {"text": "Hire roofer", "done": True, "files": []}
     ops.edit_task(p, "1", "Buy cedar shingles")
     q = Project.load(d)
-    assert q.tasks == [{"text": "Buy cedar shingles", "done": False}, {"text": "Hire roofer", "done": True}]
+    assert q.tasks == [{"text": "Buy cedar shingles", "done": False, "files": []}, {"text": "Hire roofer", "done": True, "files": []}]
     assert q.task_progress == (1, 2)
     ops.remove_task(q, "cedar")
-    assert Project.load(d).tasks == [{"text": "Hire roofer", "done": True}]
+    assert Project.load(d).tasks == [{"text": "Hire roofer", "done": True, "files": []}]
     assert Project.load(d).notes[0].text == "- n"          # notes untouched
 
 
@@ -84,3 +84,61 @@ def test_move_task_project_level(tmp_path):
         ops.add_task(p, t)
     ops.move_task(p, "three", 1)
     assert [t["text"] for t in Project.load(d).tasks] == ["three", "one", "two"]
+
+
+# ---- task attachments (indented links under a task) -------------------------
+ATT = "\n## Tasks\n- [ ] A\n  note\n- [x] B\n\n## Notes\n"
+
+
+def test_attachments_add_edit_remove_byte_exact():
+    b = ops.body_add_task_file(ATT, 0, "Quote", "Documents/Q/x y.pdf")
+    b = ops.body_add_task_file(b, 0, None, "https://epson.com/ff")
+    assert b == ("\n## Tasks\n- [ ] A\n  note\n  - [Quote](<Documents/Q/x y.pdf>)\n"
+                 "  - [epson.com](https://epson.com/ff)\n- [x] B\n\n## Notes\n")
+    assert Project(dir=None, body=b).tasks[0]["files"] == [
+        {"name": "Quote", "target": "Documents/Q/x y.pdf", "kind": "file"},
+        {"name": "epson.com", "target": "https://epson.com/ff", "kind": "url"}]
+    b = ops.body_add_task(b, "C")                     # appended after the last task block
+    assert b.endswith("- [x] B\n- [ ] C\n\n## Notes\n")
+    b = ops.body_add_task_file(b, 1, "Manual", "Documents/M.pdf")
+    assert "- [x] B\n  - [Manual](<Documents/M.pdf>)\n- [ ] C\n" in b
+    b = ops.body_edit_task_file(b, 0, 1, "Epson [site]", None)
+    assert "  - [Epson (site)](https://epson.com/ff)\n" in b
+    b = ops.body_remove_task_file(b, 0, 0)
+    assert b.startswith("\n## Tasks\n- [ ] A\n  note\n  - [Epson (site)](https://epson.com/ff)\n- [x] B\n")
+    with pytest.raises(ops.OpError):
+        ops.body_add_task_file(b, 9, None, "https://x.org")
+    with pytest.raises(ops.OpError):
+        ops.body_remove_task_file(b, 2, 0)
+    with pytest.raises(ops.OpError):
+        ops.body_add_task_file(b, 0, None, "Documents/../etc/passwd")
+
+
+def test_add_task_after_last_task_with_attachment():
+    b = "\n## Tasks\n- [ ] A\n  - [x](https://x.org)\n\n## Notes\n"
+    assert ops.body_add_task(b, "B") == "\n## Tasks\n- [ ] A\n  - [x](https://x.org)\n- [ ] B\n\n## Notes\n"
+
+
+def test_attachments_move_and_delete_with_task():
+    b = "\n## Tasks\n- [ ] A\n  - [a](https://a.org)\n- [ ] B\n  - [b](<Documents/b.pdf>)\n"
+    assert ops.body_move_task(b, 1, 0) == "\n## Tasks\n- [ ] B\n  - [b](<Documents/b.pdf>)\n- [ ] A\n  - [a](https://a.org)\n"
+    assert ops.body_remove_task(b, 0) == "\n## Tasks\n- [ ] B\n  - [b](<Documents/b.pdf>)\n"
+
+
+def test_task_file_project_ops(tmp_path, monkeypatch):
+    from pathlib import Path
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    d = tmp_path / "P"
+    d.mkdir()
+    (d / "README.md").write_text("---\ntitle: P\nstatus: active\n---\n\n## Tasks\n- [ ] Order scanner\n- [ ] Other\n")
+    p = Project.load(d)
+    f = ops.add_task_file(p, "scanner", f"{tmp_path}/Documents/Quotes/Epson.pdf")
+    assert f == {"name": "Epson", "target": "Documents/Quotes/Epson.pdf", "kind": "file"}
+    ops.add_task_file(p, "1", "https://epson.com", "Product page")
+    assert [x["name"] for x in Project.load(d).tasks[0]["files"]] == ["Epson", "Product page"]
+    with pytest.raises(ops.OpError):                   # outside ~/Documents
+        ops.add_task_file(p, "1", f"{tmp_path}/Desktop/a.pdf")
+    ops.edit_task_file(p, "1", "product", name="Epson site")
+    assert ops.remove_task_file(p, "1", "1")["name"] == "Epson"
+    assert Project.load(d).tasks[0]["files"] == [{"name": "Epson site", "target": "https://epson.com", "kind": "url"}]
+    assert Project.load(d).tasks[1]["files"] == []

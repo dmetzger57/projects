@@ -286,6 +286,9 @@ def task_ls(project: str, root: Optional[Path] = RootOpt, receipts: Optional[Pat
     p = _pick(_ws(root, receipts), project)
     for i, t in enumerate(p.tasks, 1):
         console.print(f"{i:3}. {'[green]✔[/]' if t['done'] else '☐'} {t['text']}", highlight=False)
+        for j, f in enumerate(t["files"], 1):
+            icon = "🔗" if f["kind"] == "url" else "📄"
+            console.print(f"       {j}. {icon} {f['name']}  [dim]{f['target']}[/]", highlight=False)
     if not p.tasks:
         console.print("[dim]No tasks.[/]")
 
@@ -328,6 +331,32 @@ def task_mv(project: str, task: str, position: int,
 def task_rm(project: str, task: str, root: Optional[Path] = RootOpt, receipts: Optional[Path] = ReceiptsOpt):
     t = _run(ops.remove_task, _pick(_ws(root, receipts), project), task)
     console.print(f"removed: {t['text']}", highlight=False)
+
+
+@task_app.command("attach")
+def task_attach(project: str, task: str, target: str,
+                name: Optional[str] = typer.Option(None, "--name", "-n", help="Friendly name (default: file name or website)"),
+                root: Optional[Path] = RootOpt, receipts: Optional[Path] = ReceiptsOpt):
+    """Attach a file under ~/Documents or a URL to a task (linked by path; nothing is copied)."""
+    f = _run(ops.add_task_file, _pick(_ws(root, receipts), project), task, target, name)
+    console.print(f"[green]attached[/] {f['name']}  [dim]{f['target']}[/]", highlight=False)
+
+
+@task_app.command("detach")
+def task_detach(project: str, task: str, attachment: str,
+                root: Optional[Path] = RootOpt, receipts: Optional[Path] = ReceiptsOpt):
+    """Remove an attachment (by number or name) from a task. The file itself is not touched."""
+    f = _run(ops.remove_task_file, _pick(_ws(root, receipts), project), task, attachment)
+    console.print(f"detached: {f['name']}", highlight=False)
+
+
+@task_app.command("open")
+def task_open(project: str, task: str, attachment: str = typer.Argument("1"),
+              root: Optional[Path] = RootOpt, receipts: Optional[Path] = ReceiptsOpt):
+    """Open a task's attachment (default: the first) in its default app or browser."""
+    p = _pick(_ws(root, receipts), project)
+    t = p.tasks[_run(ops._task_index, p, task)]
+    _run(ops.open_file_entry, t["files"][_run(ops._task_file_index, t, attachment)])
 
 
 file_app = typer.Typer(no_args_is_help=True,

@@ -141,6 +141,17 @@ def _check_meta(ws: Workspace, p: Project, template_goals: set[str]) -> list[Iss
                 continue
             if missing:
                 add("L014", "warn", f"Project Files link '{entry['name']}' points to a missing file: {entry['target']}")
+    for n, task in enumerate(p.tasks, 1):
+        for entry in task["files"]:
+            if entry["kind"] != "file":
+                continue
+            try:
+                missing = not resolve_file(entry["target"]).exists()
+            except OpError as e:
+                add("L014", "warn", f"task #{n} attachment '{entry['name']}': {e}")
+                continue
+            if missing:
+                add("L014", "warn", f"task #{n} attachment '{entry['name']}' points to a missing file: {entry['target']}")
 
     for r in p.receipts:
         rel = str(r.get("path", ""))

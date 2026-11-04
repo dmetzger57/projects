@@ -13,7 +13,13 @@ struct ProjectsView: View {
     @State private var showNew = false
     @State private var showNewArea = false
     @State private var newAreaName = ""
-    @State private var path: [String] = []
+    @State private var path: [String] = {
+        #if DEBUG
+        // Simulator testing: PROJ_DEBUG_OPEN=<project folder name> opens that project at launch.
+        if let f = ProcessInfo.processInfo.environment["PROJ_DEBUG_OPEN"] { return [f] }
+        #endif
+        return []
+    }()
 
     private var filtered: [Project] {
         model.projects.filter { p in

@@ -129,11 +129,13 @@ def create_app(ws: Workspace) -> FastAPI:
     def _project_ctx(p: Project) -> dict:
         return dict(p=p, url=purl(p), card=card(p), areas=ws.areas(), closed=ws.is_in_closed(p),
                     notes=list(reversed(p.notes)), today=dt.date.today().isoformat(),
-                    files=files_info(p), file_edit=None)
+                    files=files_info(p.files), file_edit=None,
+                    task_files=[files_info(t["files"]) for t in p.tasks], task_attach=None)
 
-    def files_info(p: Project) -> list[dict]:
+    def files_info(entries: list[dict]) -> list[dict]:
+        """Link entries plus whether the file exists and its full path (for display)."""
         out = []
-        for f in p.files:
+        for f in entries:
             exists, full = True, f["target"]
             if f["kind"] == "file":
                 try:
@@ -168,12 +170,35 @@ def create_app(ws: Workspace) -> FastAPI:
         return goals_partial(request, p)
 
     # ---- tasks (## Tasks checklist in the README body) ---------------------
-    def tasks_partial(request: Request, p: Project, editing: int | None = None):
-        return partial(request, "_tasks.html", **_project_ctx(Project.load(p.dir)), task_edit=editing)
+    def tasks_partial(request: Request, p: Project, editing: int | None = None, attach: int | None = None):
+        return partial(request, "_tasks.html", **{**_project_ctx(Project.load(p.dir)),
+                                                  "task_edit": editing, "task_attach": attach})
 
     @app.get("/p/{key}/tasks", response_class=HTMLResponse)
-    def tasks_view(request: Request, key: str, edit: int | None = None):
-        return tasks_partial(request, get_project(key), edit)
+    def tasks_view(request: Request, key: str, edit: int | None = None, attach: int | None = None):
+        return tasks_partial(request, get_project(key), edit, attach)
+
+    # task attachments: links to files under ~/Documents or URLs (referenced, never copied)
+    @app.post("/p/{key}/tasks/{n}/files")
+    def task_file_add(request: Request, key: str, n: int, target: str = Form(...), name: str = Form("")):
+        p = get_project(key)
+        ops.add_task_file(p, str(n), target, name.strip() or None)
+        return tasks_partial(request, p)
+
+    @app.post("/p/{key}/tasks/{n}/files/{m}/delete")
+    def task_file_delete(request: Request, key: str, n: int, m: int):
+        p = get_project(key)
+        ops.remove_task_file(p, str(n), str(m))
+        return tasks_partial(request, p)
+
+    @app.post("/p/{key}/tasks/{n}/files/{m}/open")
+    def task_file_open(key: str, n: int, m: int):
+        p = get_project(key)
+        tasks = p.tasks
+        if not 0 < n <= len(tasks) or not 0 < m <= len(tasks[n - 1]["files"]):
+            raise ops.OpError(f"no attachment #{m} on task #{n}")
+        ops.open_file_entry(tasks[n - 1]["files"][m - 1])
+        return Response(status_code=204)
 
     @app.post("/p/{key}/tasks")
     def task_add(request: Request, key: str, text: str = Form(...)):

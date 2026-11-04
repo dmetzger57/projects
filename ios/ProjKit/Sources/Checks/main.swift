@@ -40,6 +40,13 @@ func tempWorkspace() throws -> Workspace {
 // MARK: - mutate mode (for the Python cross-check)
 
 let args = CommandLine.arguments
+if args.count == 3, args[1] == "--dump-tasks" {
+    let ws = Workspace(root: URL(fileURLWithPath: args[2]).deletingLastPathComponent(), receiptsRoot: nil)
+    let p = ws.load(URL(fileURLWithPath: args[2]))
+    for t in p.tasks { print(t.index, t.text, t.files.map(\.name)) }
+    exit(0)
+}
+
 if args.count == 4, args[1] == "--mutate" {
     let ws = Workspace(root: URL(fileURLWithPath: args[2]), receiptsRoot: URL(fileURLWithPath: args[3]))
     do {
@@ -59,6 +66,8 @@ if args.count == 4, args[1] == "--mutate" {
         try Ops.removeTask(ws, photo, index: 2)
         try Ops.addTask(ws, photo, "Move me to the top")
         try Ops.moveTask(ws, photo, from: 2, to: 0)
+        try Ops.addTaskFile(ws, photo, task: 1, target: "Documents/Quotes/Epson quote.pdf", name: nil)
+        try Ops.addTaskFile(ws, photo, task: 1, target: "https://epson.com/ff-680w", name: "Product page")
         try Ops.addFile(ws, photo, target: "Documents/Manuals/Epson FF-680W.pdf", name: "Scanner manual")
         try Ops.addFile(ws, photo, target: "https://docs.google.com/document/d/abc/edit?tab=t.0", name: nil)
         try Ops.editFile(ws, photo, index: 1, name: "Plan", target: nil)
@@ -219,6 +228,36 @@ test("tasks: identical output to projkit/ops.py (same literals as tests/test_tas
     do { _ = try ReadmeBody.removeTask(c, index: 5) } catch { threw += 1 }
     do { _ = try ReadmeBody.editTask(c, index: 0, text: "   ") } catch { threw += 1 }
     eq(threw, 2, "bad index / empty text rejected")
+}
+
+test("task attachments: identical output to projkit/ops.py (same literals as tests/test_tasks.py)") {
+    let att = "\n## Tasks\n- [ ] A\n  note\n- [x] B\n\n## Notes\n"
+    var b = try ReadmeBody.addTaskFile(att, task: 0, name: "Quote", target: "Documents/Q/x y.pdf")
+    b = try ReadmeBody.addTaskFile(b, task: 0, name: nil, target: "https://epson.com/ff")
+    eq(b, "\n## Tasks\n- [ ] A\n  note\n  - [Quote](<Documents/Q/x y.pdf>)\n  - [epson.com](https://epson.com/ff)\n- [x] B\n\n## Notes\n")
+    let t = ReadmeBody.tasks(b)
+    eq(t[0].files.map(\.name), ["Quote", "epson.com"])
+    eq(t[0].files.map(\.target), ["Documents/Q/x y.pdf", "https://epson.com/ff"])
+    eq(t[0].files.map(\.isURL), [false, true])
+    eq(t[1].files.count, 0)
+    b = try ReadmeBody.addTask(b, text: "C")
+    check(b.hasSuffix("- [x] B\n- [ ] C\n\n## Notes\n"), "task appended after last block")
+    b = try ReadmeBody.addTaskFile(b, task: 1, name: "Manual", target: "Documents/M.pdf")
+    check(b.contains("- [x] B\n  - [Manual](<Documents/M.pdf>)\n- [ ] C\n"), "attach to B")
+    b = try ReadmeBody.editTaskFile(b, task: 0, index: 1, name: "Epson [site]", target: nil)
+    check(b.contains("  - [Epson (site)](https://epson.com/ff)\n"), "edit name")
+    b = try ReadmeBody.removeTaskFile(b, task: 0, index: 0)
+    check(b.hasPrefix("\n## Tasks\n- [ ] A\n  note\n  - [Epson (site)](https://epson.com/ff)\n- [x] B\n"), "remove")
+    var threw = 0
+    do { _ = try ReadmeBody.addTaskFile(b, task: 9, name: nil, target: "https://x.org") } catch { threw += 1 }
+    do { _ = try ReadmeBody.removeTaskFile(b, task: 2, index: 0) } catch { threw += 1 }
+    do { _ = try ReadmeBody.addTaskFile(b, task: 0, name: nil, target: "Documents/../etc/passwd") } catch { threw += 1 }
+    eq(threw, 3)
+    eq(try ReadmeBody.addTask("\n## Tasks\n- [ ] A\n  - [x](https://x.org)\n\n## Notes\n", text: "B"),
+       "\n## Tasks\n- [ ] A\n  - [x](https://x.org)\n- [ ] B\n\n## Notes\n")
+    let mv = "\n## Tasks\n- [ ] A\n  - [a](https://a.org)\n- [ ] B\n  - [b](<Documents/b.pdf>)\n"
+    eq(try ReadmeBody.moveTask(mv, index: 1, to: 0), "\n## Tasks\n- [ ] B\n  - [b](<Documents/b.pdf>)\n- [ ] A\n  - [a](https://a.org)\n")
+    eq(try ReadmeBody.removeTask(mv, index: 0), "\n## Tasks\n- [ ] B\n  - [b](<Documents/b.pdf>)\n")
 }
 
 test("tasks: move and remove carry detail lines (same literals as tests/test_tasks.py)") {

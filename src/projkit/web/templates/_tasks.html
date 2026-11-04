@@ -22,11 +22,50 @@
               title="Drag to reorder (or focus and press ↑/↓)"
               aria-label="Reorder “{{ t.text }}”, position {{ loop.index }} of {{ tasks|length }}. Use up and down arrow keys.">⋮⋮</button>
       {% endif %}
-      <label>
-        <input type="checkbox" {{ 'checked' if t.done }} aria-label="Done"
-               hx-post="{{ url }}/tasks/{{ loop.index }}/toggle" hx-target="#tasks" hx-swap="outerHTML">
-        <span>{{ t.text }}</span>
-      </label>
+      {% set n = loop.index %}
+      <div class="task-main">
+        <label>
+          <input type="checkbox" {{ 'checked' if t.done }} aria-label="Done"
+                 hx-post="{{ url }}/tasks/{{ n }}/toggle" hx-target="#tasks" hx-swap="outerHTML">
+          <span>{{ t.text }}</span>
+        </label>
+        {% if task_files[n - 1] %}
+        <ul class="plain task-files">
+          {% for f in task_files[n - 1] %}
+          <li>
+            <span class="file-icon" aria-hidden="true">{{ '🔗' if f.kind == 'url' else ('📄' if f.exists else '⚠️') }}</span>
+            {% if f.kind == 'url' %}
+            <a href="{{ f.target|safe_url }}" target="_blank" rel="noopener noreferrer" title="{{ f.target }}">{{ f.name }}</a>
+            {% else %}
+            <button type="button" class="linklike" title="Open {{ f.full }}" {% if not f.exists %}disabled{% endif %}
+                    hx-post="{{ url }}/tasks/{{ n }}/files/{{ loop.index }}/open" hx-swap="none">{{ f.name }}</button>
+            {% if not f.exists %}<span class="muted small">— file not found</span>{% endif %}
+            {% endif %}
+            <button class="x" title="Remove attachment" aria-label="Remove attachment {{ f.name }}"
+                    hx-post="{{ url }}/tasks/{{ n }}/files/{{ loop.index }}/delete" hx-target="#tasks" hx-swap="outerHTML"
+                    hx-confirm="Remove attachment “{{ f.name }}”? The file itself is not deleted.">×</button>
+          </li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+        {% if task_attach == n %}
+        <form class="stack file-form task-attach" hx-post="{{ url }}/tasks/{{ n }}/files" hx-target="#tasks" hx-swap="outerHTML">
+          <div class="add-row">
+            <input name="target" required autofocus aria-label="File path or URL"
+                   placeholder="Documents/Folder/file.pdf  or  https://…">
+            <button type="button" class="btn small" data-browse>Browse…</button>
+          </div>
+          <div class="browser" hidden></div>
+          <input name="name" placeholder="Friendly name (default: file name or website)" aria-label="Friendly name">
+          <div class="row-end">
+            <button type="button" class="btn small" hx-get="{{ url }}/tasks" hx-target="#tasks" hx-swap="outerHTML">Cancel</button>
+            <button class="btn small primary">Attach</button>
+          </div>
+        </form>
+        {% endif %}
+      </div>
+      <button class="x edit" title="Attach a file or link" aria-label="Attach a file or link to “{{ t.text }}”"
+              hx-get="{{ url }}/tasks?attach={{ n }}" hx-target="#tasks" hx-swap="outerHTML">📎</button>
       <button class="x edit" title="Edit task" aria-label="Edit task"
               hx-get="{{ url }}/tasks?edit={{ loop.index }}" hx-target="#tasks" hx-swap="outerHTML">✎</button>
       <button class="x" title="Delete task" aria-label="Delete task"

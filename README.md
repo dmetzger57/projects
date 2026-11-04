@@ -26,6 +26,8 @@ proj task ls photo                      # Tasks checklist (## Tasks in README.md
 proj task add|done|undo|rm photo <task>
 proj task edit photo <task> "new text"
 proj task mv photo <task> 1             # reorder (1 = top); web: drag ⋮⋮ or ↑/↓; iPhone: drag or long-press
+proj task attach photo <task> ~/Documents/Quotes/epson.pdf   # or a URL; --name "Quote"; linked, never copied
+proj task detach|open photo <task> <attachment>              # web: 📎 on a task; iPhone: long-press › Attach
 proj link add web https://… -t "Docs"
 proj file add photo "Documents/Manuals/scanner.pdf" -n "Scanner manual"   # Project Files link
 proj file add photo https://docs.google.com/… -n "Plan"                    # …or a URL

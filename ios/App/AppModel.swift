@@ -37,6 +37,10 @@ final class AppModel {
         pickedReceiptsRoot = Self.restore(Self.receiptsKey)
         documentsRoot = Self.restore(Self.documentsKey)
         receiptsInside = UserDefaults.standard.bool(forKey: Self.receiptsInsideKey)
+        #if DEBUG
+        // Simulator testing: PROJ_DEBUG_ROOT=<projects folder> skips the folder picker.
+        if let r = ProcessInfo.processInfo.environment["PROJ_DEBUG_ROOT"] { projectsRoot = URL(fileURLWithPath: r) }
+        #endif
     }
 
     // MARK: folders

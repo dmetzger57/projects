@@ -12,7 +12,7 @@ from pathlib import Path
 from ruamel.yaml.comments import CommentedMap, CommentedSeq
 
 from .project import (FORMAT_VERSION, ProjectError, README, STATUSES, URL_SCHEME_RE, Project, file_line_indices,
-                      parse_file_line, section_bounds, task_line_indices)
+                      parse_file_line, section_bounds, task_blocks, task_file_indices, task_line_indices)
 from .workspace import BACKLOG_STEM, Workspace
 
 RECEIPT_TAG = "receipt"
@@ -290,9 +290,9 @@ def body_add_task(body: str, text: str) -> str:
             block.insert(0, "")
         lines[notes:notes] = block
     else:
-        idx = task_line_indices(lines)
-        if idx:
-            pos = idx[-1] + 1
+        blocks = task_blocks(lines)
+        if blocks:
+            pos = blocks[-1][1]          # after the last task's detail lines (attachments stay with it)
         else:
             pos = b[1]
             while pos > b[0] + 1 and not lines[pos - 1].strip():
@@ -302,15 +302,7 @@ def body_add_task(body: str, text: str) -> str:
 
 
 def _task_blocks(lines: list[str]) -> list[tuple[int, int]]:
-    """(start, end) line ranges of each task: the task line plus its indented detail lines."""
-    b = section_bounds(lines, "Tasks")
-    blocks = []
-    for i in task_line_indices(lines):
-        end = i + 1
-        while end < b[1] and lines[end][:1] in (" ", "\t") and lines[end].strip():
-            end += 1
-        blocks.append((i, end))
-    return blocks
+    return task_blocks(lines)
 
 
 def _task_line(body: str, index: int) -> tuple[list[str], int]:
@@ -557,6 +549,88 @@ def remove_file(p: Project, ref: str) -> dict:
     i = _file_index(p, ref)
     f = p.files[i]
     p.body = body_remove_file(p.body, i)
+    p.save()
+    return f
+
+
+# ---- task attachments (indented links under a task: files under ~/Documents or URLs) ----
+# body_*_task_file functions are byte-identical with ios/ProjKit ReadmeBody task file functions.
+TASK_FILE_INDENT = "  "
+
+
+def _task_file_line(body: str, task: int, index: int) -> tuple[list[str], int]:
+    lines = body.rstrip("\n").split("\n")
+    blocks = task_blocks(lines)
+    if not 0 <= task < len(blocks):
+        raise OpError(f"no task #{task + 1}")
+    idx = task_file_indices(lines, blocks[task])
+    if not 0 <= index < len(idx):
+        raise OpError(f"task #{task + 1} has no attachment #{index + 1}")
+    return lines, idx[index]
+
+
+def body_add_task_file(body: str, task: int, name: str | None, target: str) -> str:
+    """Adds an attachment after the task's last attachment (or at the end of its detail lines)."""
+    line = TASK_FILE_INDENT + format_file_line(name, target)
+    lines = body.rstrip("\n").split("\n")
+    blocks = task_blocks(lines)
+    if not 0 <= task < len(blocks):
+        raise OpError(f"no task #{task + 1}")
+    idx = task_file_indices(lines, blocks[task])
+    lines.insert(idx[-1] + 1 if idx else blocks[task][1], line)
+    return "\n".join(lines) + "\n"
+
+
+def body_edit_task_file(body: str, task: int, index: int, name: str | None, target: str | None) -> str:
+    lines, i = _task_file_line(body, task, index)
+    stripped = lines[i].lstrip(" \t")
+    cur = parse_file_line(stripped)
+    indent = lines[i][:len(lines[i]) - len(stripped)]
+    lines[i] = indent + format_file_line(cur["name"] if name is None else name,
+                                         cur["target"] if target is None else target)
+    return "\n".join(lines) + "\n"
+
+
+def body_remove_task_file(body: str, task: int, index: int) -> str:
+    lines, i = _task_file_line(body, task, index)
+    del lines[i]
+    return "\n".join(lines) + "\n"
+
+
+def _task_file_index(t: dict, ref: str) -> int:
+    files = t["files"]
+    if ref.isdigit():
+        i = int(ref) - 1
+        if 0 <= i < len(files):
+            return i
+        raise OpError(f"no attachment #{ref} (task has {len(files)})")
+    hits = [i for i, f in enumerate(files) if ref.lower() in f["name"].lower() or ref.lower() in f["target"].lower()]
+    if len(hits) != 1:
+        raise OpError(f"attachment reference '{ref}' matches {len(hits)} entries")
+    return hits[0]
+
+
+def add_task_file(p: Project, task: str, target: str, name: str | None = None) -> dict:
+    """Attach a file under ~/Documents or a URL to a task (by reference: nothing is copied)."""
+    i = _task_index(p, task)
+    p.body = body_add_task_file(p.body, i, name, normalize_file_path(target))
+    p.save()
+    return p.tasks[i]["files"][-1]       # always inserted after the task's last attachment
+
+
+def edit_task_file(p: Project, task: str, ref: str, name: str | None = None, target: str | None = None) -> dict:
+    i = _task_index(p, task)
+    j = _task_file_index(p.tasks[i], ref)
+    p.body = body_edit_task_file(p.body, i, j, name, normalize_file_path(target) if target else None)
+    p.save()
+    return p.tasks[i]["files"][j]
+
+
+def remove_task_file(p: Project, task: str, ref: str) -> dict:
+    i = _task_index(p, task)
+    j = _task_file_index(p.tasks[i], ref)
+    f = p.tasks[i]["files"][j]
+    p.body = body_remove_task_file(p.body, i, j)
     p.save()
     return f
 

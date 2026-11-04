@@ -56,6 +56,23 @@ def task_line_indices(lines: list[str]) -> list[int]:
     return [i for i in range(b[0] + 1, b[1]) if TASK_RE.match(lines[i])] if b else []
 
 
+def task_blocks(lines: list[str]) -> list[tuple[int, int]]:
+    """(start, end) line ranges of each task: the task line plus its indented detail lines."""
+    b = section_bounds(lines, "Tasks")
+    blocks = []
+    for i in task_line_indices(lines):
+        end = i + 1
+        while end < b[1] and lines[end][:1] in (" ", "\t") and lines[end].strip():
+            end += 1
+        blocks.append((i, end))
+    return blocks
+
+
+def task_file_indices(lines: list[str], block: tuple[int, int]) -> list[int]:
+    """Attachment lines of a task: indented Project-Files-style links among its detail lines."""
+    return [j for j in range(block[0] + 1, block[1]) if FILE_RE.match(lines[j].lstrip(" \t"))]
+
+
 def _yaml() -> YAML:
     y = YAML()  # round-trip mode: preserves key order and comments
     y.preserve_quotes = True
@@ -233,9 +250,10 @@ class Project:
         """`- [ ]` / `- [x]` items in the `## Tasks` section, in order."""
         lines = self.body.splitlines()
         out = []
-        for i in task_line_indices(lines):
-            m = TASK_RE.match(lines[i])
-            out.append({"text": m.group(2).strip(), "done": m.group(1) != " "})
+        for start, end in task_blocks(lines):
+            m = TASK_RE.match(lines[start])
+            files = [parse_file_line(lines[j].lstrip(" \t")) for j in task_file_indices(lines, (start, end))]
+            out.append({"text": m.group(2).strip(), "done": m.group(1) != " ", "files": files})
         return out
 
     @property

@@ -255,6 +255,20 @@ public enum Ops {
         try editBody(ws, p) { try ReadmeBody.removeFile($0, index: index) }
     }
 
+    // MARK: task attachments (linked by path or URL, never copied)
+
+    public static func addTaskFile(_ ws: Workspace, _ p: Project, task: Int, target: String, name: String?) throws {
+        try editBody(ws, p) { try ReadmeBody.addTaskFile($0, task: task, name: name, target: target) }
+    }
+
+    public static func editTaskFile(_ ws: Workspace, _ p: Project, task: Int, index: Int, name: String?, target: String?) throws {
+        try editBody(ws, p) { try ReadmeBody.editTaskFile($0, task: task, index: index, name: name, target: target) }
+    }
+
+    public static func removeTaskFile(_ ws: Workspace, _ p: Project, task: Int, index: Int) throws {
+        try editBody(ws, p) { try ReadmeBody.removeTaskFile($0, task: task, index: index) }
+    }
+
     /// Location of a "Documents/…" entry inside the user-picked Documents folder (nil for URLs
     /// or anything escaping it).
     public static func fileURL(_ f: ProjectFile, documentsRoot: URL?) -> URL? {

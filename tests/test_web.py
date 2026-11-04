@@ -146,12 +146,12 @@ def test_tasks_add_toggle_edit_delete(client, ws):
     assert r.status_code == 200 and "Buy shingles" in r.text and 'id="tasks"' in r.text
     client.post(f"{url}/tasks", data={"text": "Hire roofer"}, headers=HX)
     client.post(f"{url}/tasks/2/toggle", headers=HX)
-    assert proj(ws).tasks == [{"text": "Buy shingles", "done": False}, {"text": "Hire roofer", "done": True}]
+    assert proj(ws).tasks == [{"text": "Buy shingles", "done": False, "files": []}, {"text": "Hire roofer", "done": True, "files": []}]
     r = client.get(f"{url}/tasks?edit=1")
     assert 'value="Buy shingles"' in r.text and "/tasks/1/edit" in r.text
     client.post(f"{url}/tasks/1/edit", data={"text": "Buy cedar shingles"}, headers=HX)
     client.post(f"{url}/tasks/2/delete", headers=HX)
-    assert proj(ws).tasks == [{"text": "Buy cedar shingles", "done": False}]
+    assert proj(ws).tasks == [{"text": "Buy cedar shingles", "done": False, "files": []}]
     assert client.post(f"{url}/tasks/1/edit", data={"text": "  "}, headers=HX).status_code == 400
     page = client.get(url).text
     assert "Buy cedar shingles" in page and page.index('id="tasks"') < page.index("Project Files")
@@ -201,3 +201,20 @@ def test_project_files_panel(client, ws, tmp_path, monkeypatch):
     # raw text edit of the section still works and returns the panel
     r = client.post(f"{url}/section/Project%20Files", data={"text": "Notes about files\n\n- [X](https://x.example)"}, headers=HX)
     assert 'id="files"' in r.text and "Notes about files" in r.text and proj(ws).files[0]["name"] == "X"
+
+
+def test_task_attachments_web(client, ws, tmp_path, monkeypatch):
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    (tmp_path / "Documents").mkdir(exist_ok=True)
+    (tmp_path / "Documents" / "quote.pdf").write_bytes(b"%PDF")
+    client.post("/p/Roof%20Repair/tasks", data={"text": "Get quote"}, headers=HX)
+    assert 'placeholder="Documents/Folder/file.pdf' in client.get("/p/Roof%20Repair/tasks?attach=1").text
+    r = client.post("/p/Roof%20Repair/tasks/1/files", data={"target": "Documents/quote.pdf", "name": ""}, headers=HX)
+    assert r.status_code == 200 and "quote" in r.text
+    client.post("/p/Roof%20Repair/tasks/1/files", data={"target": "https://roofer.example", "name": "Roofer"}, headers=HX)
+    t = proj(ws).tasks[0]
+    assert [f["target"] for f in t["files"]] == ["Documents/quote.pdf", "https://roofer.example"]
+    assert "Roofer" in client.get("/p/Roof%20Repair").text
+    client.post("/p/Roof%20Repair/tasks/1/files/1/delete", headers=HX)
+    assert [f["name"] for f in proj(ws).tasks[0]["files"]] == ["Roofer"]
+    assert (tmp_path / "Documents" / "quote.pdf").exists()

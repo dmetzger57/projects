@@ -92,12 +92,13 @@ struct FileEntrySheet: View {
                     Section { Label(problem, systemImage: "exclamationmark.triangle").foregroundStyle(.orange) }
                 }
             }
-            .navigationTitle(isAdd ? (isLink ? "Add Link" : "Add File") : "Edit")
+            .navigationTitle(isAdd ? (sheet.task != nil ? (isLink ? "Attach Link" : "Attach File")
+                                                       : (isLink ? "Add Link" : "Add File")) : "Edit")
             .inlineTitle()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(isAdd ? "Add" : "Save") { submit() }
+                    Button(isAdd ? (sheet.task != nil ? "Attach" : "Add") : "Save") { submit() }
                         .disabled(saving || target.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
             }
