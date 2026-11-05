@@ -29,6 +29,17 @@ def split_task_text(text: str) -> tuple[str, str | None]:
     return (text[:m.start()].strip(), m.group(1)) if m else (text.strip(), None)
 
 
+# Where an archived task came from, before any link id:
+# "- [x] Order scanner <!-- archived:2026-11-05 from:Photo Archive --> <!-- task:k3x9q2ab -->"
+ARCHIVED_RE = re.compile(r"\s*<!--\s*archived:(\d{4}-\d{2}-\d{2})\s+from:(.*?)\s*-->\s*$")
+
+
+def split_archived(text: str) -> tuple[str, str | None, str | None]:
+    """(text, archive date, original project folder) of a task's visible text (link id already removed)."""
+    m = ARCHIVED_RE.search(text)
+    return (text[:m.start()].strip(), m.group(1), m.group(2).strip()) if m else (text.strip(), None, None)
+
+
 def section_bounds(lines: list[str], heading: str) -> tuple[int, int] | None:
     """(index of the `## heading` line, index of the next `## ` line or len(lines))."""
     for i, ln in enumerate(lines):
@@ -274,7 +285,9 @@ class Project:
             files = [parse_file_line(lines[j].lstrip(" \t")) for j in task_file_indices(lines, (start, end))]
             notes = [parse_task_note(lines[j]) for j in task_note_indices(lines, (start, end))]
             text, tid = split_task_text(m.group(2))
-            out.append({"text": text, "done": m.group(1) != " ", "files": files, "notes": notes, "id": tid})
+            text, archived, source = split_archived(text)
+            out.append({"text": text, "done": m.group(1) != " ", "files": files, "notes": notes, "id": tid,
+                        "archived": archived, "from": source})
         return out
 
     @property

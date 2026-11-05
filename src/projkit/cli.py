@@ -4,6 +4,7 @@ from __future__ import annotations
 import datetime as dt
 import logging
 import os
+import re
 import shlex
 import subprocess
 from pathlib import Path
@@ -122,6 +123,11 @@ def lint(fix: bool = typer.Option(False, "--fix", help="Apply safe automatic fix
 # ---------------------------------------------------------------------------
 # Phase 2: migration + mutating commands
 # ---------------------------------------------------------------------------
+def _fail(msg: str):
+    console.print(f"[red]{msg}[/]")
+    raise typer.Exit(1)
+
+
 def _run(fn, *a, **kw):
     try:
         return fn(*a, **kw)
@@ -281,21 +287,35 @@ task_app = typer.Typer(no_args_is_help=True, help="Manage the Tasks checklist (r
 app.add_typer(task_app, name="task")
 
 
+def _print_task_details(t: dict) -> None:
+    for j, n in enumerate(t["notes"], 1):
+        console.print(f"       {j}. [dim]—[/] {n}", highlight=False)
+    for j, f in enumerate(t["files"], 1):
+        icon = "🔗" if f["kind"] == "url" else "📄"
+        console.print(f"       {j}. {icon} {f['name']}  [dim]{f['target']}[/]", highlight=False)
+
+
 @task_app.command("ls")
-def task_ls(project: str, root: Optional[Path] = RootOpt, receipts: Optional[Path] = ReceiptsOpt):
+def task_ls(project: str,
+            archived: bool = typer.Option(False, "--archived", "-A", help="Also list this project's archived tasks"),
+            root: Optional[Path] = RootOpt, receipts: Optional[Path] = ReceiptsOpt):
     ws = _ws(root, receipts)
     p = _pick(ws, project)
     in_today = ops.today_ids(ws)
     for i, t in enumerate(p.tasks, 1):
         sun = "  [yellow]☀ in Today[/]" if t["id"] in in_today else ""
         console.print(f"{i:3}. {'[green]✔[/]' if t['done'] else '☐'} {t['text']}{sun}", highlight=False)
-        for j, n in enumerate(t["notes"], 1):
-            console.print(f"       {j}. [dim]—[/] {n}", highlight=False)
-        for j, f in enumerate(t["files"], 1):
-            icon = "🔗" if f["kind"] == "url" else "📄"
-            console.print(f"       {j}. {icon} {f['name']}  [dim]{f['target']}[/]", highlight=False)
+        _print_task_details(t)
     if not p.tasks:
         console.print("[dim]No tasks.[/]")
+    gone = ops.archived_tasks(ws, project=p.folder_name)
+    if archived and gone:
+        console.print("[bold]Archived[/] [dim](restore with `proj archive restore <number>`)[/]")
+        for i, t in gone:
+            console.print(f"  [dim]#{i + 1:<3}[/] {'[green]✔[/]' if t['done'] else '☐'} [dim]{t['text']}  · {t['archived']}[/]",
+                          highlight=False)
+    elif gone:
+        console.print(f"[dim]{len(gone)} archived task{'s' if len(gone) != 1 else ''} (show with --archived)[/]")
 
 
 @task_app.command("add")
@@ -370,6 +390,15 @@ def task_today(project: str, task: str, root: Optional[Path] = RootOpt, receipts
     console.print(f"[green]copied to Today:[/] {t['text']}" if added else f"already in Today: {t['text']}", highlight=False)
 
 
+@task_app.command("archive")
+def task_archive(project: str, task: str, root: Optional[Path] = RootOpt, receipts: Optional[Path] = ReceiptsOpt):
+    """Move a task (with its notes and attachments) to the Archive."""
+    ws = _ws(root, receipts)
+    p = _pick(ws, project)
+    t = _run(ops.archive_task, ws, p, task)
+    console.print(f"[green]archived[/] {t['text']}  [dim]from {t['from']}[/]", highlight=False)
+
+
 @task_app.command("attach")
 def task_attach(project: str, task: str, target: str,
                 name: Optional[str] = typer.Option(None, "--name", "-n", help="Friendly name (default: file name or website)"),
@@ -413,9 +442,9 @@ def today_ls(ctx: typer.Context, root: Optional[Path] = RootOpt, receipts: Optio
     ws = _ws(root, receipts)
     t = ws.today()
     tasks = t.tasks if t else []
-    src = ops.task_sources(ws)
+    src = ops.today_sources(ws)
     for i, x in enumerate(tasks, 1):
-        from_ = f"  [dim]· {src[x['id']].title}[/]" if x["id"] in src else ""
+        from_ = f"  [dim]· {src[x['id']][0]}[/]" if x["id"] in src else ""
         console.print(f"{i:3}. {'[green]✔[/]' if x['done'] else '☐'} {x['text']}{from_}", highlight=False)
     if not tasks:
         console.print("[dim]Nothing in Today yet. Add with `proj today add` or `proj task today <project> <task>`.[/]")
@@ -461,6 +490,67 @@ def today_clear(root: Optional[Path] = RootOpt, receipts: Optional[Path] = Recei
     """Remove ticked-off tasks from Today (start a fresh day)."""
     n = ops.clear_today_done(_ws(root, receipts))
     console.print(f"cleared {n} done task{'s' if n != 1 else ''} from Today")
+
+
+archive_app = typer.Typer(invoke_without_command=True,
+                          help="Archived tasks from all projects (refer to one by its #number or text).")
+app.add_typer(archive_app, name="archive")
+
+
+def _since(value: Optional[str]) -> Optional[dt.date]:
+    if not value:
+        return None
+    if re.fullmatch(r"\d+d", value):
+        return dt.date.today() - dt.timedelta(days=int(value[:-1]))
+    try:
+        return dt.date.fromisoformat(value)
+    except ValueError:
+        raise typer.BadParameter("use YYYY-MM-DD or a number of days like 30d") from None
+
+
+@archive_app.callback()
+def archive_ls(ctx: typer.Context,
+               project: Optional[str] = typer.Option(None, "--project", "-p", help="Only tasks from this project"),
+               since: Optional[str] = typer.Option(None, "--since", "-s", help="Archived on/after YYYY-MM-DD, or e.g. 30d"),
+               sort: str = typer.Option("newest", "--sort", help="newest | oldest | name | project"),
+               root: Optional[Path] = RootOpt, receipts: Optional[Path] = ReceiptsOpt):
+    """List archived tasks with their original project and archive date."""
+    if ctx.invoked_subcommand:
+        return
+    ws = _ws(root, receipts)
+    if project:
+        names = ops.archive_projects(ws)
+        hit = next((n for n in names if n.lower() == project.lower()), None)
+        if hit is None:
+            hits = [n for n in names if project.lower() in n.lower()]
+            if len(hits) != 1:
+                _fail(f"no archived tasks from '{project}'" if not hits else f"'{project}' matches {', '.join(hits)}")
+            hit = hits[0]
+        project = hit
+    items = _run(ops.archived_tasks, ws, project, _since(since), sort)
+    for i, t in items:
+        console.print(f"[dim]#{i + 1:<3}[/] {'[green]✔[/]' if t['done'] else '☐'} {t['text']}  "
+                      f"[cyan]{t['from'] or '?'}[/] [dim]· {t['archived'] or '?'}[/]", highlight=False)
+        _print_task_details(t)
+    if not items:
+        console.print("[dim]No archived tasks" + (" match." if project or since else ". Archive one with `proj task archive <project> <task>`.") + "[/]")
+
+
+@archive_app.command("restore")
+def archive_restore(task: str, root: Optional[Path] = RootOpt, receipts: Optional[Path] = ReceiptsOpt):
+    """Move an archived task back to its project."""
+    t, p = _run(ops.restore_task, _ws(root, receipts), task)
+    console.print(f"[green]restored to {p.title}:[/] {t['text']}", highlight=False)
+
+
+@archive_app.command("rm")
+def archive_rm(task: str, root: Optional[Path] = RootOpt, receipts: Optional[Path] = ReceiptsOpt):
+    """Delete an archived task for good."""
+    a = _ws(root, receipts).archive()
+    if a is None:
+        _fail("the Archive is empty")
+    t = _run(ops.remove_task, a, task)
+    console.print(f"deleted from the Archive: {t['text']}", highlight=False)
 
 
 file_app = typer.Typer(no_args_is_help=True,

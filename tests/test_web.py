@@ -153,12 +153,12 @@ def test_tasks_add_toggle_edit_delete(client, ws):
     assert r.status_code == 200 and "Buy shingles" in r.text and 'id="tasks"' in r.text
     client.post(f"{url}/tasks", data={"text": "Hire roofer"}, headers=HX)
     client.post(f"{url}/tasks/2/toggle", headers=HX)
-    assert proj(ws).tasks == [{"text": "Buy shingles", "done": False, "files": [], "notes": [], "id": None}, {"text": "Hire roofer", "done": True, "files": [], "notes": [], "id": None}]
+    assert proj(ws).tasks == [{"text": "Buy shingles", "done": False, "files": [], "notes": [], "id": None, "archived": None, "from": None}, {"text": "Hire roofer", "done": True, "files": [], "notes": [], "id": None, "archived": None, "from": None}]
     r = client.get(f"{url}/tasks?edit=1")
     assert 'value="Buy shingles"' in r.text and "/tasks/1/edit" in r.text
     client.post(f"{url}/tasks/1/edit", data={"text": "Buy cedar shingles"}, headers=HX)
     client.post(f"{url}/tasks/2/delete", headers=HX)
-    assert proj(ws).tasks == [{"text": "Buy cedar shingles", "done": False, "files": [], "notes": [], "id": None}]
+    assert proj(ws).tasks == [{"text": "Buy cedar shingles", "done": False, "files": [], "notes": [], "id": None, "archived": None, "from": None}]
     assert client.post(f"{url}/tasks/1/edit", data={"text": "  "}, headers=HX).status_code == 400
     page = client.get(url).text
     assert "Buy cedar shingles" in page and page.index('id="tasks"') < page.index("Project Files")

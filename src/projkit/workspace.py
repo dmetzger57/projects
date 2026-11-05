@@ -14,6 +14,7 @@ TEMPLATE_DIR = "1 - Template"
 CLOSED_DIR = "2 - Closed"
 BACKLOG_STEM = "0 - Idea Backlog"
 TODAY_DIR = "0 - Today"          # the Today list: a project outside the areas
+ARCHIVE_DIR = "0 - Archive"      # archived tasks from every project, also outside the areas
 
 
 def default_root() -> Path:
@@ -56,6 +57,16 @@ class Workspace:
 
     def is_today(self, p: Project) -> bool:
         return p.dir.resolve() == self.today_dir.resolve()
+
+    @property
+    def archive_dir(self) -> Path:
+        return self.root / ARCHIVE_DIR
+
+    def archive(self) -> Project | None:
+        return Project.load(self.archive_dir) if (self.archive_dir / "README.md").is_file() else None
+
+    def is_archive(self, p: Project) -> bool:
+        return p.dir.resolve() == self.archive_dir.resolve()
 
     def area_dirs(self) -> list[Path]:
         return [d for d in _visible_dirs(self.root) if not RESERVED_RE.match(d.name)]

@@ -7,6 +7,10 @@ without the Mac being on, and changes show up in `proj` on the Mac.
 **Setup:** an empty folder is set up for you (areas, template, Closed, backlog) · **New Area** ·
 **Today:** the day's task list: swipe right on any project's task (or long-press › Copy to Today) to
 add it; ticking it in either place ticks both; add tasks directly; Clear Done for a fresh day ·
+**Archive:** swipe left on a task (or long-press › Archive) to move it, with its notes and attachments,
+to the Archive tab, which shows each task's project and date and filters by project and date archived and
+sorts newest/oldest, A–Z or by project; a project's own archived tasks show under its Tasks (Show/Hide);
+swipe right to restore one ·
 **Projects:** projects by area, filters, search, goal progress and spending ·
 **Project:** status, goals (tap to tick off, swipe to delete), a **Tasks** checklist (tap the box
 to tick, tap the text to edit, swipe or long-press to edit, move or delete; drag to reorder; long-press ›

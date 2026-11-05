@@ -260,3 +260,19 @@ details summary { cursor: pointer; color: var(--accent); font-size: 14px; margin
 .browser { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; max-height: 260px; overflow: auto; background: var(--surface-2); }
 .browse-list li { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 3px 0; }
 .browse .crumbs { margin-bottom: 6px; }
+
+/* Archive */
+.archive-filters { display: flex; flex-wrap: wrap; gap: 14px; margin: 0 0 14px; max-width: 760px; }
+.archive-filters label { display: flex; flex-direction: column; gap: 3px; font-size: 12.5px; color: var(--muted); }
+.archive-filters select { min-width: 150px; }
+#archive { max-width: 760px; }
+.archive-list .task-from { margin-left: 0; }
+.archive-list li.archive-group { border: 0; padding: 10px 0 2px; }
+.archive-list li.archive-group h3 { margin: 0; font-size: 14px; }
+.archived-text { color: var(--fg); }
+li.done .archived-text { color: var(--muted); text-decoration: line-through; }
+.archived-tasks { margin: 10px 0 4px; }
+.archived-tasks summary { cursor: pointer; }
+.archived-tasks ul { margin: 6px 0; }
+.archived-tasks li { display: flex; align-items: center; gap: 8px; padding: 3px 0; }
+.archived-tasks li .archived-text { flex: 1; color: var(--muted); }

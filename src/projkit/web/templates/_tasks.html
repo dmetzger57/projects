@@ -109,6 +109,10 @@
       <button class="x edit" title="Copy to Today" aria-label="Copy “{{ t.text }}” to Today"
               hx-post="{{ url }}/tasks/{{ n }}/today" hx-target="#tasks" hx-swap="outerHTML">☀</button>
       {% endif %}
+      {% if not is_today %}
+      <button class="x edit" title="Archive task" aria-label="Archive “{{ t.text }}”"
+              hx-post="{{ url }}/tasks/{{ n }}/archive" hx-target="#tasks" hx-swap="outerHTML">🗄</button>
+      {% endif %}
       <button class="x edit" title="Add a note" aria-label="Add a note to “{{ t.text }}”"
               hx-get="{{ url }}/tasks?note={{ n }}" hx-target="#tasks" hx-swap="outerHTML">📝</button>
       <button class="x edit" title="Attach a file or link" aria-label="Attach a file or link to “{{ t.text }}”"
@@ -122,6 +126,22 @@
     </li>
     {% endfor %}
   </ul>
+  {% if archived %}
+  <details class="archived-tasks"{% if archived_open %} open{% endif %}>
+    <summary class="muted small">Archived ({{ archived|length }})</summary>
+    <ul class="plain">
+      {% for a in archived %}
+      <li class="{{ 'done' if a.t.done }}">
+        <span class="archived-text">{{ '✔' if a.t.done else '☐' }} {{ a.t.text }}</span>
+        <span class="muted small">archived {{ a.t.archived }}</span>
+        <button class="btn small" title="Move back into this project’s tasks"
+                hx-post="{{ url }}/archived/{{ a.n }}/restore" hx-target="#tasks" hx-swap="outerHTML">Restore</button>
+      </li>
+      {% endfor %}
+    </ul>
+    <a class="small" href="/archive?project={{ p.folder_name|q }}">Open in Archive →</a>
+  </details>
+  {% endif %}
   <form hx-post="{{ url }}/tasks" hx-target="#tasks" hx-swap="outerHTML" class="add-row">
     <input name="text" placeholder="Add a task" aria-label="New task" required>
     <button class="btn">Add</button>

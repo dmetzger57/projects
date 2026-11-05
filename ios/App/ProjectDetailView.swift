@@ -73,6 +73,11 @@ struct ProjectDetailView: View {
     @State private var renameText = ""
     @State private var confirmClose = false
     @State private var confirmClearDone = false
+    @AppStorage("showArchivedTasks") private var showArchived = false
+    @State private var archiveProject: String?            // Archive filters: nil = all projects
+    @State private var archiveSinceDays: Int?             // nil = any time
+    @State private var archiveSort: Ops.ArchiveSort = .newest
+    @State private var deletingArchived: ProjectTask?
     @FocusState private var goalFieldFocused: Bool
 
     var body: some View {
@@ -88,7 +93,7 @@ struct ProjectDetailView: View {
 
     @ViewBuilder
     private func content(_ p: Project) -> some View {
-        if model.isToday(p) { todayContent(p) } else { projectContent(p) }
+        if model.isToday(p) { todayContent(p) } else if model.isArchive(p) { archiveContent(p) } else { projectContent(p) }
     }
 
     /// Today: just its task list (copied tasks show where they came from).
@@ -162,6 +167,7 @@ struct ProjectDetailView: View {
                 textSection(p, "Description")
                 goals(p)
                 tasks(p)
+                archivedSection(p)
                 notes(p)
                 ForEach(ReadmeBody.editableSections.filter { $0 != "Description" }, id: \.self) { name in
                     if name == "Project Files" { projectFiles(p) } else { textSection(p, name) }
@@ -293,6 +299,240 @@ struct ProjectDetailView: View {
         }
     }
 
+    private func archive(_ p: Project, _ t: ProjectTask) {
+        Task { await model.perform { try Ops.archiveTask($0, p, index: t.index) } }
+    }
+
+    private func restore(_ t: ProjectTask) {
+        Task { await model.perform { try Ops.restoreTask($0, index: t.index) } }
+    }
+
+    // MARK: Archive
+
+    /// The project's archived tasks, shown on request below its task list.
+    @ViewBuilder
+    private func archivedSection(_ p: Project) -> some View {
+        let gone = model.archivedTasks(from: p.folderName)
+        if !gone.isEmpty {
+            Section {
+                if showArchived {
+                    ForEach(gone) { t in
+                        archivedRow(t, showProject: false)
+                            .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                                Button { restore(t) } label: { Label("Restore", systemImage: "arrow.uturn.backward") }
+                                    .tint(.green)
+                            }
+                            .contextMenu {
+                                Button { restore(t) } label: { Label("Restore to Tasks", systemImage: "arrow.uturn.backward") }
+                            }
+                    }
+                }
+            } header: {
+                HStack {
+                    Text("Archived Tasks")
+                    Spacer()
+                    Button(showArchived ? "Hide" : "Show \(gone.count)") {
+                        withAnimation { showArchived.toggle() }
+                    }
+                    .font(.caption.weight(.semibold))
+                    .textCase(nil)
+                    .accessibilityLabel(showArchived ? "Hide archived tasks" : "Show \(gone.count) archived tasks")
+                }
+            } footer: {
+                if showArchived { Text("Swipe right (or long-press) to move a task back to Tasks.") }
+            }
+        }
+    }
+
+    /// One archived task: done mark, text, where it came from and when, notes and attachments.
+    private func archivedRow(_ t: ProjectTask, showProject: Bool) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Image(systemName: t.done ? "checkmark.square.fill" : "square")
+                .foregroundStyle(.secondary)
+                .imageScale(.large)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(markdown(t.text))
+                    .strikethrough(t.done)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Text([showProject ? (t.archivedFrom ?? "Unknown project") : nil,
+                      showProject && t.archivedFrom != nil && model.archivedSource(t) == nil ? "no longer exists" : nil,
+                      t.archived.map { "archived " + shortDate($0) }]
+                    .compactMap { $0 }.joined(separator: " · "))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                ForEach(t.notes) { n in
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text("–").accessibilityHidden(true)
+                        Text(markdown(n.text)).frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .font(.callout).foregroundStyle(.secondary).padding(.leading, 8)
+                }
+                ForEach(t.files) { f in
+                    Button { open(f) } label: {
+                        Label(f.name, systemImage: f.isURL ? "link" : "paperclip")
+                            .font(.callout).foregroundStyle(Color.accentColor)
+                    }
+                    .buttonStyle(.borderless)
+                }
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("\(t.done ? "Done" : "Not done"): \(t.text)")
+    }
+
+    private var archiveSinceDate: String? {
+        archiveSinceDays.flatMap { Calendar.current.date(byAdding: .day, value: -$0, to: .now) }
+            .map { ISODate.string($0) }
+    }
+
+    private static let sinceOptions: [(Int?, String)] = [(nil, "Any Time"), (7, "Last 7 Days"), (30, "Last 30 Days"),
+                                                          (90, "Last 3 Months"), (365, "Last Year")]
+    private static func sortName(_ s: Ops.ArchiveSort) -> String {
+        switch s {
+        case .newest: "Newest"
+        case .oldest: "Oldest"
+        case .name: "A–Z"
+        case .project: "By Project"
+        }
+    }
+
+    /// The Archive: every archived task with its original project, filtered and sorted.
+    private func archiveContent(_ p: Project) -> some View {
+        let names = Ops.archiveProjects(p)
+        let shown = Ops.filterArchived(p.tasks, project: archiveProject, since: archiveSinceDate, sort: archiveSort)
+        let filtered = archiveProject != nil || archiveSinceDays != nil
+        let groups: [(String?, [ProjectTask])] = archiveSort == .project
+            ? Dictionary(grouping: shown) { $0.archivedFrom ?? "" }
+                .sorted { $0.key.lowercased() < $1.key.lowercased() }
+                .map { (Optional($0.key), $0.value) }         // grouping keeps each group in `shown` order
+            : [(nil, shown)]
+        return List {
+            Section {
+                filterBar(names: names)
+            }
+            if p.tasks.isEmpty {
+                Section {
+                    Label("Nothing archived yet. Swipe left on a task in any project (or long-press › Archive) to move it here.",
+                          systemImage: "archivebox")
+                        .font(.callout).foregroundStyle(.secondary)
+                }
+            } else if shown.isEmpty {
+                Section {
+                    Text("No archived tasks match these filters.").foregroundStyle(.secondary)
+                    Button("Clear Filters") { archiveProject = nil; archiveSinceDays = nil }
+                }
+            }
+            ForEach(groups, id: \.0) { name, tasks in
+                Section {
+                    ForEach(tasks) { t in
+                        let source = model.archivedSource(t)
+                        archivedRow(t, showProject: archiveSort != .project)
+                            .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                                if source != nil {
+                                    Button { restore(t) } label: { Label("Restore", systemImage: "arrow.uturn.backward") }
+                                        .tint(.green)
+                                }
+                            }
+                            .swipeActions(edge: .trailing) {
+                                Button(role: .destructive) { deletingArchived = t } label: { Label("Delete", systemImage: "trash") }
+                            }
+                            .contextMenu {
+                                if let source {
+                                    Button { restore(t) } label: {
+                                        Label("Restore to \(source.title)", systemImage: "arrow.uturn.backward")
+                                    }
+                                    NavigationLink(value: source.folderName) {
+                                        Label("Go to \(source.title)", systemImage: "folder")
+                                    }
+                                }
+                                if let from = t.archivedFrom, archiveProject == nil {
+                                    Button { archiveProject = from } label: {
+                                        Label("Only “\(from)”", systemImage: "line.3.horizontal.decrease.circle")
+                                    }
+                                }
+                                Button(role: .destructive) { deletingArchived = t } label: { Label("Delete", systemImage: "trash") }
+                            }
+                    }
+                } header: {
+                    if let name { Text(name.isEmpty ? "Unknown project" : name) }
+                    else if filtered || shown.count != p.tasks.count { Text("\(shown.count) of \(p.tasks.count)") }
+                    else { Text("\(shown.count) archived") }
+                }
+            }
+        }
+        .navigationTitle("Archive")
+        .refreshable { await model.reload() }
+        .confirmationDialog("Delete “\(deletingArchived?.text ?? "")” for good?",
+                            isPresented: Binding(get: { deletingArchived != nil }, set: { if !$0 { deletingArchived = nil } }),
+                            titleVisibility: .visible) {
+            Button("Delete", role: .destructive) {
+                guard let t = deletingArchived else { return }
+                Task { await model.perform { try Ops.removeTask($0, p, index: t.index) } }
+            }
+        }
+        .quickLookPreview($preview)
+        .fileImporter(isPresented: $importing, allowedContentTypes: [.folder]) { result in
+            guard case let .success(url) = result else { return }
+            Task {
+                let ok = await model.setDocumentsFolder(url)
+                if let f = pendingOpen { pendingOpen = nil; if ok { open(f) } }
+            }
+        }
+        .alert("Allow Access to Documents", isPresented: Binding(get: { pendingOpen != nil && !importing },
+                                                                set: { if !$0 && !importing { pendingOpen = nil } })) {
+            Button("Choose Documents Folder") { importing = true }
+            Button("Cancel", role: .cancel) { pendingOpen = nil }
+        } message: {
+            Text("To open “\(pendingOpen?.name ?? "this file")”, choose iCloud Drive › Documents.")
+        }
+    }
+
+    /// Project, date and sort pickers for the Archive.
+    private func filterBar(names: [String]) -> some View {
+        ScrollView(.horizontal, showsIndicators: false) { HStack(spacing: 8) {
+            Menu {
+                Picker("Project", selection: $archiveProject) {
+                    Text("All Projects").tag(String?.none)
+                    ForEach(names, id: \.self) { Text($0).tag(Optional($0)) }
+                }
+            } label: {
+                filterChip(archiveProject ?? "All Projects", "folder", on: archiveProject != nil)
+            }
+            .accessibilityLabel("Project: \(archiveProject ?? "All Projects")")
+            Menu {
+                Picker("Archived", selection: $archiveSinceDays) {
+                    ForEach(Self.sinceOptions, id: \.1) { Text($0.1).tag($0.0) }
+                }
+            } label: {
+                filterChip(Self.sinceOptions.first { $0.0 == archiveSinceDays }?.1 ?? "Any Time", "calendar",
+                           on: archiveSinceDays != nil)
+            }
+            .accessibilityLabel("Archived: \(Self.sinceOptions.first { $0.0 == archiveSinceDays }?.1 ?? "Any Time")")
+            Menu {
+                Picker("Sort", selection: $archiveSort) {
+                    ForEach(Ops.ArchiveSort.allCases, id: \.self) { Text(Self.sortName($0)).tag($0) }
+                }
+            } label: {
+                filterChip(Self.sortName(archiveSort), "arrow.up.arrow.down", on: false)
+            }
+            .accessibilityLabel("Sort: \(Self.sortName(archiveSort))")
+        } }
+        .listRowBackground(Color.clear)
+        .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
+    }
+
+    private func filterChip(_ title: String, _ icon: String, on: Bool) -> some View {
+        Label(title, systemImage: icon)
+            .labelStyle(ChipLabelStyle())
+            .font(.footnote.weight(.medium))
+            .lineLimit(1)
+            .padding(.horizontal, 10).padding(.vertical, 6)
+            .background(on ? Color.accentColor.opacity(0.18) : Color.secondary.opacity(0.12), in: Capsule())
+            .foregroundStyle(on ? Color.accentColor : .primary)
+    }
+
     private func copyToToday(_ p: Project, _ t: ProjectTask) {
         Task { await model.perform { try Ops.copyToToday($0, p, index: t.index) } }
     }
@@ -419,7 +659,7 @@ struct ProjectDetailView: View {
                             .onTapGesture { startEditing(t) }
                             .accessibilityHint("Double-tap to edit")
                         if isToday, let src = model.taskSource(t.linkID) {
-                            Text("from \(src.title)").font(.caption).foregroundStyle(.secondary)
+                            Text("from \(src)").font(.caption).foregroundStyle(.secondary)
                         } else if !isToday, let id = t.linkID, inToday.contains(id) {
                             Label("In Today", systemImage: "sun.max.fill")
                                 .font(.caption.weight(.semibold)).foregroundStyle(.orange)
@@ -469,6 +709,10 @@ struct ProjectDetailView: View {
                     Button(role: .destructive) {
                         Task { await model.perform { try Ops.removeTask($0, p, index: t.index) } }
                     } label: { Label(isToday ? "Remove" : "Delete", systemImage: "trash") }
+                    if !isToday {
+                        Button { archive(p, t) } label: { Label("Archive", systemImage: "archivebox") }
+                            .tint(.indigo)
+                    }
                     Button { startEditing(t) } label: { Label("Edit", systemImage: "pencil") }
                         .tint(.accentColor)
                 }
@@ -523,6 +767,9 @@ struct ProjectDetailView: View {
                             Button { move(p, t.index, to: total - 1) } label: { Label("Move to Bottom", systemImage: "arrow.down.to.line") }
                                 .disabled(t.index == total - 1)
                         }
+                    }
+                    if !isToday {
+                        Button { archive(p, t) } label: { Label("Archive", systemImage: "archivebox") }
                     }
                     Button(role: .destructive) {
                         Task { await model.perform { try Ops.removeTask($0, p, index: t.index) } }
@@ -754,6 +1001,16 @@ struct ProjectDetailView: View {
             }
         } footer: {
             if !p.receipts.isEmpty { Text("Swipe to detach. The files themselves are not touched.") }
+        }
+    }
+}
+
+/// Small icon + title, tighter than the default label spacing (Archive filter chips).
+struct ChipLabelStyle: LabelStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        HStack(spacing: 4) {
+            configuration.icon.imageScale(.small)
+            configuration.title
         }
     }
 }

@@ -163,6 +163,7 @@ public enum Ops {
         } else {
             try ws.fs.move(p.url, to: dst)
         }
+        try retargetArchived(ws, from: p.folderName, to: title)
         return ws.load(dst)
     }
 
@@ -252,9 +253,9 @@ public enum Ops {
         return ws.load(ws.todayDir)
     }
 
-    /// Everything a task link can point into: all projects (closed too) plus Today.
+    /// Everything a task link can point into: all projects (closed too) plus Today and the Archive.
     static func linkedProjects(_ ws: Workspace) -> [Project] {
-        ws.projects().filter { $0.document != nil } + (ws.today().map { [$0] } ?? [])
+        (ws.projects() + [ws.today(), ws.archive()].compactMap { $0 }).filter { $0.document != nil }
     }
 
     static func syncTaskDone(_ ws: Workspace, id: String, done: Bool, skip: URL?) throws {
@@ -295,6 +296,97 @@ public enum Ops {
         guard !done.isEmpty else { return 0 }
         try editBody(ws, today) { body in try done.reversed().reduce(body) { try ReadmeBody.removeTask($0, index: $1) } }
         return done.count
+    }
+
+    // MARK: Archive — mirrors projkit/ops.py (archive_task, restore_task, filter_archived, …)
+
+    static let archiveReadme = "---\nformat: 1\ntitle: Archive\narea: Archive\nstatus: active\n---\n\n## Tasks\n"
+
+    public enum ArchiveSort: String, CaseIterable, Sendable { case newest, oldest, name, project }
+
+    @discardableResult
+    public static func ensureArchive(_ ws: Workspace) throws -> Project {
+        if let a = ws.archive() { return a }
+        if !ws.fs.isDirectory(ws.archiveDir) { try ws.fs.createDirectory(ws.archiveDir) }
+        let readme = ws.archiveDir.appendingPathComponent(readmeName)
+        if !ws.fs.exists(readme) { try ws.fs.writeText(archiveReadme, to: readme) }
+        return ws.load(ws.archiveDir)
+    }
+
+    /// Moves a task (with its notes and attachments) from its project to the Archive, recording the
+    /// project and the date. Its Today link id is kept.
+    public static func archiveTask(_ ws: Workspace, _ p: Project, index: Int, date: String = ISODate.string()) throws {
+        guard !ws.isToday(p), !ws.isArchive(p) else { throw OpError("only tasks in a project can be archived") }
+        let q = try fresh(ws, p)
+        let block = try ReadmeBody.taskBlock(q.document!.body, index: index)
+        let a = try ensureArchive(ws)
+        try editBody(ws, a) { body in
+            let b = ReadmeBody.addTaskBlock(body, block)
+            return try ReadmeBody.setTaskArchived(b, index: ReadmeBody.tasks(b).count - 1, date: date, from: p.folderName)
+        }                                    // written before the original is removed: never lost
+        try editBody(ws, q) { try ReadmeBody.removeTask($0, index: index) }
+    }
+
+    /// Archived tasks, optionally only from `project` (folder name, case-insensitive) or archived on or
+    /// after `since` ("YYYY-MM-DD"), sorted newest first, oldest first, by name or by project.
+    public static func filterArchived(_ tasks: [ProjectTask], project: String? = nil, since: String? = nil,
+                                      sort: ArchiveSort = .newest) -> [ProjectTask] {
+        let out = tasks.filter { t in
+            (project == nil || (t.archivedFrom ?? "").lowercased() == project!.lowercased())
+                && (since == nil || (t.archived ?? "") >= since!)
+        }
+        func newer(_ a: ProjectTask, _ b: ProjectTask) -> Bool {
+            let (x, y) = (a.archived ?? "", b.archived ?? "")
+            return x != y ? x > y : a.index > b.index
+        }
+        switch sort {
+        case .newest: return out.sorted(by: newer)
+        case .oldest: return out.sorted { newer($1, $0) }
+        case .name:
+            return out.sorted {
+                let (x, y) = ($0.text.lowercased(), $1.text.lowercased())
+                return x != y ? x < y : $0.index < $1.index
+            }
+        case .project:
+            return out.sorted {
+                let (x, y) = (($0.archivedFrom ?? "").lowercased(), ($1.archivedFrom ?? "").lowercased())
+                return x != y ? x < y : newer($0, $1)
+            }
+        }
+    }
+
+    /// Original project names found in the Archive, A-Z.
+    public static func archiveProjects(_ archive: Project?) -> [String] {
+        Set(archive?.tasks.compactMap(\.archivedFrom) ?? []).sorted { $0.lowercased() < $1.lowercased() }
+    }
+
+    /// Moves an archived task back to the end of its project's task list. Returns that project.
+    @discardableResult
+    public static func restoreTask(_ ws: Workspace, index: Int) throws -> Project {
+        guard let a = ws.archive() else { throw OpError("the Archive is empty") }
+        let tasks = try fresh(ws, a).tasks
+        guard tasks.indices.contains(index) else { throw OpError("no task #\(index + 1)") }
+        let from = tasks[index].archivedFrom ?? ""
+        guard let p = ws.projects().first(where: { !from.isEmpty && $0.folderName.lowercased() == from.lowercased() }) else {
+            throw OpError("project '\(from)' no longer exists")
+        }
+        let block = try ReadmeBody.taskBlock(try fresh(ws, a).document!.body, index: index)
+        try editBody(ws, p) { body in
+            let b = ReadmeBody.addTaskBlock(body, block)
+            return try ReadmeBody.setTaskArchived(b, index: ReadmeBody.tasks(b).count - 1, date: nil, from: nil)
+        }
+        try editBody(ws, a) { try ReadmeBody.removeTask($0, index: index) }
+        return ws.load(p.url)
+    }
+
+    /// After a project rename, points its archived tasks at the new name.
+    static func retargetArchived(_ ws: Workspace, from old: String, to new: String) throws {
+        guard let a = ws.archive(), a.document != nil else { return }
+        let hits = a.tasks.filter { $0.archivedFrom?.lowercased() == old.lowercased() }
+        guard !hits.isEmpty else { return }
+        try editBody(ws, a) { body in
+            try hits.reduce(body) { try ReadmeBody.setTaskArchived($0, index: $1.index, date: $1.archived, from: new) }
+        }
     }
 
     public static func editTask(_ ws: Workspace, _ p: Project, index: Int, text: String) throws {

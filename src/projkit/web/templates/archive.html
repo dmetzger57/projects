@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}Archive · Projects{% endblock %}
+{% block body %}
+<div class="proj-head">
+  <div>
+    <h1>Archive</h1>
+    <div class="muted">{{ total }} archived task{{ 's' if total != 1 }} · Archive a task with 🗄 on any project's task list.</div>
+  </div>
+</div>
+<form class="archive-filters" method="get" action="/archive">
+  <label>Project
+    <select name="project" onchange="this.form.submit()">
+      <option value="">All projects</option>
+      {% for n in names %}<option value="{{ n }}" {{ 'selected' if n == project }}>{{ n }}</option>{% endfor %}
+    </select>
+  </label>
+  <label>Archived
+    <select name="since" onchange="this.form.submit()">
+      <option value="">Any time</option>
+      {% for k, v in since_opts.items() %}<option value="{{ k }}" {{ 'selected' if k == since }}>{{ v }}</option>{% endfor %}
+    </select>
+  </label>
+  <label>Sort
+    <select name="sort" onchange="this.form.submit()">
+      {% for k, v in sort_opts.items() %}<option value="{{ k }}" {{ 'selected' if k == sort }}>{{ v }}</option>{% endfor %}
+    </select>
+  </label>
+  <noscript><button class="btn small">Apply</button></noscript>
+</form>
+<section class="panel" id="archive">
+  {% if rows %}
+  <ul class="goals tasks archive-list">
+    {% for r in rows %}
+    {% set t = r.t %}
+    {% if sort == 'project' and (loop.first or rows[loop.index0 - 1].t['from'] != t['from']) %}
+    <li class="archive-group"><h3>{{ t['from'] or 'Unknown project' }}</h3></li>
+    {% endif %}
+    <li class="{{ 'done' if t.done }}">
+      <div class="task-main">
+        <span class="archived-text">{{ '✔' if t.done else '☐' }} {{ t.text }}</span>
+        <div class="task-from small">
+          {% if r.project_url %}<a href="{{ r.project_url }}">{{ t['from'] }}</a>{% if r.project_closed %} <span class="muted">(closed)</span>{% endif %}
+          {% else %}<span>{{ t['from'] or 'Unknown project' }}</span> <span class="muted">(no longer exists)</span>{% endif %}
+          <span class="muted">· archived {{ t.archived or '?' }}</span>
+        </div>
+        {% if t.notes %}
+        <ul class="plain task-notes">{% for note in t.notes %}<li><span class="note-text">{{ note }}</span></li>{% endfor %}</ul>
+        {% endif %}
+        {% if r.files %}
+        <ul class="plain task-files">
+          {% for f in r.files %}
+          <li>
+            <span class="file-icon" aria-hidden="true">{{ '🔗' if f.kind == 'url' else ('📄' if f.exists else '⚠️') }}</span>
+            {% if f.kind == 'url' %}
+            <a href="{{ f.target|safe_url }}" target="_blank" rel="noopener noreferrer" title="{{ f.target }}">{{ f.name }}</a>
+            {% else %}
+            <button type="button" class="linklike" title="Open {{ f.full }}" {% if not f.exists %}disabled{% endif %}
+                    hx-post="{{ aurl }}/tasks/{{ r.n }}/files/{{ loop.index }}/open" hx-swap="none">{{ f.name }}</button>
+            {% endif %}
+          </li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+      </div>
+      {% if r.project_url %}
+      <button class="btn small" title="Move it back into {{ t['from'] }}"
+              hx-post="/archive/{{ r.n }}/restore">Restore</button>
+      {% endif %}
+      <button class="x" title="Delete for good" aria-label="Delete “{{ t.text }}” from the Archive"
+              hx-post="/archive/{{ r.n }}/delete" hx-confirm="Delete “{{ t.text }}” from the Archive for good?">×</button>
+    </li>
+    {% endfor %}
+  </ul>
+  {% elif total %}
+  <p class="muted">No archived tasks match these filters.</p>
+  {% else %}
+  <p class="muted">Nothing archived yet. Use 🗄 next to a task in any project to move it here.</p>
+  {% endif %}
+</section>
+{% endblock %}

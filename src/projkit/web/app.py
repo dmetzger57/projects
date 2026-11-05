@@ -16,7 +16,7 @@ from markdown_it import MarkdownIt
 from .. import ops
 from ..lint import lint_workspace
 from ..project import STATUSES, Project, ProjectError
-from ..workspace import TODAY_DIR
+from ..workspace import ARCHIVE_DIR, TODAY_DIR
 from ..workspace import Workspace
 
 HERE = Path(__file__).parent
@@ -74,6 +74,8 @@ def create_app(ws: Workspace) -> FastAPI:
     def get_project(key: str) -> Project:
         if key == TODAY_DIR:
             return ops.ensure_today(ws)
+        if key == ARCHIVE_DIR:
+            return ops.ensure_archive(ws)
         for p in ws.projects():
             if p.folder_name == key:
                 return p
@@ -127,6 +129,8 @@ def create_app(ws: Workspace) -> FastAPI:
     @app.get("/p/{key}", response_class=HTMLResponse)
     def project_page(request: Request, key: str):
         p = get_project(key)
+        if ws.is_archive(p):
+            return archive_page(request)
         if ws.is_today(p):
             return page(request, "today.html", nav="today", today_date=dt.date.today().strftime("%A, %B %-d"),
                         **_project_ctx(p))
@@ -149,12 +153,59 @@ def create_app(ws: Workspace) -> FastAPI:
                     task_note_add=None, task_note_edit=None, **_today_ctx(p))
 
     def _today_ctx(p: Project) -> dict:
-        """Today links: on Today, each task's source project; elsewhere, which tasks are in Today."""
+        """Today links: on Today, each task's source project; elsewhere, which tasks are in Today,
+        plus the project's archived tasks."""
         if ws.is_today(p):
-            src = ops.task_sources(ws)
-            return dict(is_today=True, in_today=set(),
-                        task_source=[(lambda q: q and dict(title=q.title, url=purl(q)))(src.get(t["id"])) for t in p.tasks])
-        return dict(is_today=False, in_today=ops.today_ids(ws), task_source=[None] * len(p.tasks))
+            src = ops.today_sources(ws)
+
+            def label(tid):
+                if tid not in src:
+                    return None
+                title, q = src[tid]
+                return dict(title=title, url=purl(q) if q else "/archive")
+            return dict(is_today=True, in_today=set(), task_source=[label(t["id"]) for t in p.tasks], archived=[])
+        gone = [] if ws.is_archive(p) else ops.archived_tasks(ws, project=p.folder_name)
+        return dict(is_today=False, in_today=ops.today_ids(ws), task_source=[None] * len(p.tasks),
+                    archived=[dict(n=i + 1, t=t) for i, t in gone])
+
+    # ---- Archive -------------------------------------------------------------
+    ARCHIVE_SINCE = {"7": "Last 7 days", "30": "Last 30 days", "90": "Last 3 months", "365": "Last year"}
+    ARCHIVE_SORTS = {"newest": "Newest first", "oldest": "Oldest first", "name": "A–Z", "project": "By project"}
+
+    @app.get("/archive", response_class=HTMLResponse)
+    def archive_page(request: Request, project: str = "", since: str = "", sort: str = "newest"):
+        sort = sort if sort in ARCHIVE_SORTS else "newest"
+        since = since if since in ARCHIVE_SINCE else ""
+        cutoff = dt.date.today() - dt.timedelta(days=int(since)) if since else None
+        a = ws.archive()
+        names = ops.archive_projects(ws)
+        project = next((n for n in names if n.lower() == project.lower()), project)   # unknown: matches nothing
+        items = ops.archived_tasks(ws, project or None, cutoff, sort)
+        existing = {q.folder_name.lower(): q for q in ws.projects()}
+        rows = []
+        for i, t in items:
+            q = existing.get((t["from"] or "").lower())
+            rows.append(dict(n=i + 1, t=t, files=files_info(t["files"]),
+                             project_url=purl(q) if q else None, project_closed=bool(q and ws.is_in_closed(q))))
+        return page(request, "archive.html", nav="archive", rows=rows, names=names, project=project,
+                    since=since, sort=sort, since_opts=ARCHIVE_SINCE, sort_opts=ARCHIVE_SORTS,
+                    total=len(a.tasks) if a else 0, aurl=f"/p/{quote(ARCHIVE_DIR, safe='')}")
+
+    def _refresh() -> Response:
+        return Response(status_code=204, headers={"HX-Refresh": "true"})
+
+    @app.post("/archive/{n}/restore")
+    def archive_restore(n: int):
+        ops.restore_task(ws, str(n))
+        return _refresh()
+
+    @app.post("/archive/{n}/delete")
+    def archive_delete(n: int):
+        a = ws.archive()
+        if a is None:
+            raise ops.OpError("the Archive is empty")
+        ops.remove_task(a, str(n))
+        return _refresh()
 
     def files_info(entries: list[dict]) -> list[dict]:
         """Link entries plus whether the file exists and its full path (for display)."""
@@ -195,10 +246,12 @@ def create_app(ws: Workspace) -> FastAPI:
 
     # ---- tasks (## Tasks checklist in the README body) ---------------------
     def tasks_partial(request: Request, p: Project, editing: int | None = None, attach: int | None = None,
-                      note: int | None = None, note_edit: tuple[int, int] | None = None):
+                      note: int | None = None, note_edit: tuple[int, int] | None = None,
+                      archived_open: bool = False):
         return partial(request, "_tasks.html", **{**_project_ctx(Project.load(p.dir)),
                                                   "task_edit": editing, "task_attach": attach,
-                                                  "task_note_add": note, "task_note_edit": note_edit})
+                                                  "task_note_add": note, "task_note_edit": note_edit,
+                                                  "archived_open": archived_open})
 
     @app.get("/p/{key}/tasks", response_class=HTMLResponse)
     def tasks_view(request: Request, key: str, edit: int | None = None, attach: int | None = None,
@@ -271,6 +324,18 @@ def create_app(ws: Workspace) -> FastAPI:
         p = get_project(key)
         ops.copy_to_today(ws, p, str(n))
         return tasks_partial(request, p)
+
+    @app.post("/p/{key}/tasks/{n}/archive")
+    def task_archive(request: Request, key: str, n: int):
+        p = get_project(key)
+        ops.archive_task(ws, p, str(n))
+        return tasks_partial(request, p)
+
+    @app.post("/p/{key}/archived/{n}/restore")
+    def task_restore(request: Request, key: str, n: int):
+        p = get_project(key)
+        ops.restore_task(ws, str(n))
+        return tasks_partial(request, p, archived_open=True)
 
     @app.post("/p/{key}/tasks/{n}/edit")
     def task_edit(request: Request, key: str, n: int, text: str = Form(...)):

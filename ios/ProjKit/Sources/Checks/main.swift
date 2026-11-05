@@ -79,6 +79,10 @@ if args.count == 4, args[1] == "--mutate" {
         try Ops.setTask(ws, ws.today()!, index: 0, done: true)
         try Ops.setTask(ws, ws.load(photo.url), index: 0, done: false)
         try Ops.addTask(ws, ws.today()!, "Call the bank")
+        // Archive: a task with a note moves out (the rename below must follow it into the Archive)
+        try Ops.addTask(ws, photo, "Archive me")
+        try Ops.addTaskNote(ws, photo, task: 3, text: "kept with it")
+        try Ops.archiveTask(ws, ws.load(photo.url), index: 3, date: "2026-11-04")
         try Ops.addFile(ws, photo, target: "Documents/Manuals/Epson FF-680W.pdf", name: "Scanner manual")
         try Ops.addFile(ws, photo, target: "https://docs.google.com/document/d/abc/edit?tab=t.0", name: nil)
         try Ops.editFile(ws, photo, index: 1, name: "Plan", target: nil)
@@ -342,6 +346,79 @@ test("today: copy, two-way done sync, clear") {
     var threw = false
     do { try Ops.copyToToday(ws, ws.today()!, index: 0) } catch { threw = true }
     check(threw, "can't copy Today into Today")
+}
+
+test("archive marker: identical output to projkit (same literals as tests/test_archive.py)") {
+    let arch = "\n## Tasks\n- [x] Get quotes <!-- archived:2026-11-05 from:Roof Repair --> <!-- task:ab12cd34 -->\n"
+        + "  - Ask about warranty\n- [ ] Order boards <!-- archived:2026-10-01 from:Raised Beds -->\n"
+    let sa = ReadmeBody.splitArchived("Get quotes <!-- archived:2026-11-05 from:Roof Repair -->")
+    eq([sa.0, sa.1 ?? "", sa.2 ?? ""], ["Get quotes", "2026-11-05", "Roof Repair"])
+    eq(ReadmeBody.splitArchived("Plain").1, nil)
+    let t = ReadmeBody.tasks(arch)
+    eq(t.map(\.text), ["Get quotes", "Order boards"])
+    eq(t.map(\.archived), ["2026-11-05", "2026-10-01"])
+    eq(t.map(\.archivedFrom), ["Roof Repair", "Raised Beds"])
+    eq(t.map(\.linkID), ["ab12cd34", nil])
+    var b = try ReadmeBody.editTask(arch, index: 0, text: "Get 3 quotes")
+    check(b.hasPrefix("\n## Tasks\n- [x] Get 3 quotes <!-- archived:2026-11-05 from:Roof Repair --> <!-- task:ab12cd34 -->\n"), "edit keeps marker and id")
+    b = try ReadmeBody.setTaskArchived(b, index: 1, date: "2026-10-01", from: "Garden Beds")
+    check(b.contains("- [ ] Order boards <!-- archived:2026-10-01 from:Garden Beds -->\n"), "retarget")
+    b = try ReadmeBody.setTaskArchived(b, index: 0, date: nil, from: nil)
+    check(b.hasPrefix("\n## Tasks\n- [x] Get 3 quotes <!-- task:ab12cd34 -->\n  - Ask about warranty\n"), "clear keeps id")
+    eq(try ReadmeBody.taskBlock(arch, index: 0),
+       ["- [x] Get quotes <!-- archived:2026-11-05 from:Roof Repair --> <!-- task:ab12cd34 -->", "  - Ask about warranty"])
+    eq(ReadmeBody.addTaskBlock("\n## Tasks\n- [ ] A\n\n## Notes\n", ["- [ ] B", "  - note"]),
+       "\n## Tasks\n- [ ] A\n- [ ] B\n  - note\n\n## Notes\n")
+    eq(ReadmeBody.addTaskBlock("\n## Notes\n", ["- [ ] B", "  - n"]), "\n## Tasks\n- [ ] B\n  - n\n\n## Notes\n")
+    var threw = false
+    do { _ = try ReadmeBody.setTaskArchived(arch, index: 0, date: "2026-11-05", from: "Bad --> name") } catch { threw = true }
+    check(threw, "refuses a name that would end the comment")
+
+    let items = ReadmeBody.tasks(arch + "- [ ] Apples <!-- archived:2026-11-05 from:raised beds -->\n")
+    eq(Ops.filterArchived(items).map(\.text), ["Apples", "Get quotes", "Order boards"])
+    eq(Ops.filterArchived(items, sort: .oldest).map(\.text), ["Order boards", "Get quotes", "Apples"])
+    eq(Ops.filterArchived(items, sort: .name).map(\.text), ["Apples", "Get quotes", "Order boards"])
+    eq(Ops.filterArchived(items, sort: .project).map(\.text), ["Apples", "Order boards", "Get quotes"])
+    eq(Ops.filterArchived(items, project: "Raised Beds").map(\.text), ["Apples", "Order boards"])
+    eq(Ops.filterArchived(items, since: "2026-11-01").map(\.text), ["Apples", "Get quotes"])
+}
+
+test("archive: archive, Today sync, rename, restore") {
+    let ws = try tempWorkspace()
+    var p = try Ops.newProject(ws, title: "Roof", area: "House")
+    try Ops.addTask(ws, p, "Get quotes")
+    try Ops.addTask(ws, p, "Hire roofer")
+    try Ops.addTaskNote(ws, p, task: 0, text: "ask about warranty")
+    try Ops.copyToToday(ws, ws.load(p.url), index: 0)
+    let id = ws.load(p.url).tasks[0].linkID
+    eq(ws.archive() == nil, true)
+    try Ops.archiveTask(ws, ws.load(p.url), index: 0, date: "2026-11-05")
+    let a = ws.archive()!.tasks[0]
+    eq([a.text, a.archivedFrom ?? "", a.archived ?? ""], ["Get quotes", "Roof", "2026-11-05"])
+    eq(a.notes.map(\.text), ["ask about warranty"])
+    eq(a.linkID, id, "link id kept")
+    eq(ws.load(p.url).tasks.map(\.text), ["Hire roofer"])
+    eq(Ops.archiveProjects(ws.archive()), ["Roof"])
+    var threw = 0
+    do { try Ops.archiveTask(ws, ws.today()!, index: 0) } catch { threw += 1 }
+    do { try Ops.archiveTask(ws, ws.archive()!, index: 0) } catch { threw += 1 }
+    eq(threw, 2, "Today and Archive tasks can't be archived")
+    try Ops.setTask(ws, ws.today()!, index: 0, done: true)
+    eq(ws.archive()!.tasks[0].done, true, "Today copy still syncs")
+    p = try Ops.rename(ws, ws.load(p.url), to: "Roof Repair")
+    eq(ws.archive()!.tasks[0].archivedFrom, "Roof Repair", "rename follows")
+    let q = try Ops.restoreTask(ws, index: 0)
+    eq(q.folderName, "Roof Repair")
+    eq(ws.load(p.url).tasks.map(\.text), ["Hire roofer", "Get quotes"])
+    eq(ws.load(p.url).tasks[1].archived, nil)
+    eq(ws.load(p.url).tasks[1].notes.map(\.text), ["ask about warranty"])
+    eq(ws.archive()!.tasks.count, 0)
+    try Ops.archiveTask(ws, ws.load(p.url), index: 0)
+    try FileManager.default.removeItem(at: p.url)
+    var gone = false
+    do { try Ops.restoreTask(ws, index: 0) } catch { gone = true }
+    check(gone, "can't restore into a missing project")
+    check(!ws.areas().contains(archiveDirName) && !ws.projects().contains { ws.isArchive($0) }, "Archive is not an area project")
 }
 
 test("tasks: move and remove carry detail lines (same literals as tests/test_tasks.py)") {

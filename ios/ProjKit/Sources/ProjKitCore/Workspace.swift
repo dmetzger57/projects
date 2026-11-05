@@ -5,6 +5,8 @@ public let closedDirName = "2 - Closed"
 public let backlogFileName = "0 - Idea Backlog.md"
 /// The Today list: a project outside the areas (same folder name as projkit TODAY_DIR).
 public let todayDirName = "0 - Today"
+/// Archived tasks from every project (same folder name as projkit ARCHIVE_DIR).
+public let archiveDirName = "0 - Archive"
 /// Optional receipts folder inside the projects root (for people without ~/Documents/Receipts).
 public let internalReceiptsDirName = "3 - Receipts"
 
@@ -30,6 +32,14 @@ public struct Workspace: Sendable {
     }
 
     public func isToday(_ p: Project) -> Bool { p.url.standardizedFileURL == todayDir.standardizedFileURL }
+
+    public var archiveDir: URL { root.appendingPathComponent(archiveDirName) }
+
+    public func archive() -> Project? {
+        fs.exists(archiveDir.appendingPathComponent(readmeName)) ? load(archiveDir) : nil
+    }
+
+    public func isArchive(_ p: Project) -> Bool { p.url.standardizedFileURL == archiveDir.standardizedFileURL }
     public var internalReceiptsDir: URL { root.appendingPathComponent(internalReceiptsDirName) }
 
     /// True for a folder that has no template and no areas yet (e.g. a new family member's).

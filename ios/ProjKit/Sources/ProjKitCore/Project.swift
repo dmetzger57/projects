@@ -44,6 +44,9 @@ public struct ProjectTask: Identifiable, Hashable, Sendable {
     public var notes: [TaskNote] = []
     /// Hidden link shared with its copy in Today ("<!-- task:k3x9q2ab -->" at the end of the line).
     public var linkID: String? = nil
+    /// Set on tasks in the Archive: when it was archived ("YYYY-MM-DD") and the project folder it came from.
+    public var archived: String? = nil
+    public var archivedFrom: String? = nil
     public var id: Int { index }
 }
 
@@ -261,14 +264,16 @@ public enum ReadmeBody {
         let lines = body.components(separatedBy: "\n")
         return taskBlocks(lines).enumerated().map { n, b in
             let raw = parseTask(lines[b.start])!
-            let (text, linkID) = splitTaskText(raw.text)
+            let (visible, linkID) = splitTaskText(raw.text)
+            let (text, archived, from) = splitArchived(visible)
             let t = (done: raw.done, text: text)
             let files = taskFileIndices(lines, b).enumerated().map { k, j in
                 let f = parseFileLine(stripIndent(lines[j]))!
                 return ProjectFile(index: k, name: f.name, target: f.target)
             }
             let notes = taskNoteIndices(lines, b).enumerated().map { k, j in TaskNote(index: k, text: parseTaskNote(lines[j])) }
-            return ProjectTask(index: n, text: t.text, done: t.done, files: files, notes: notes, linkID: linkID)
+            return ProjectTask(index: n, text: t.text, done: t.done, files: files, notes: notes, linkID: linkID,
+                               archived: archived, archivedFrom: from)
         }
     }
 
@@ -306,8 +311,12 @@ public enum ReadmeBody {
     }
 
     public static func addTask(_ body: String, text: String, linkID: String? = nil) throws -> String {
+        addTaskBlock(body, ["- [ ] " + (try cleanTask(text)) + taskSuffix(linkID)])
+    }
+
+    /// Adds a task line (block[0]) with its detail lines after the last task.
+    public static func addTaskBlock(_ body: String, _ block: [String]) -> String {
         var lines = splitBody(body)
-        let bullet = "- [ ] " + (try cleanTask(text)) + taskSuffix(linkID)
         if let b = sectionBounds(lines, "Tasks") {
             var pos: Int
             if let last = taskBlocks(lines).last {
@@ -316,12 +325,12 @@ public enum ReadmeBody {
                 pos = b.end
                 while pos > b.start + 1, lines[pos - 1].trimmingCharacters(in: .whitespaces).isEmpty { pos -= 1 }
             }
-            lines.insert(bullet, at: pos)
+            lines.insert(contentsOf: block, at: pos)
         } else {
             let notes = lines.firstIndex { $0.trimmingCharacters(in: .whitespaces).lowercased() == "## notes" } ?? lines.count
-            var block = ["## Tasks", bullet] + (notes < lines.count ? [""] : [])
-            if notes > 0, !lines[notes - 1].trimmingCharacters(in: .whitespaces).isEmpty { block.insert("", at: 0) }
-            lines.insert(contentsOf: block, at: notes)
+            var new = ["## Tasks"] + block + (notes < lines.count ? [""] : [])
+            if notes > 0, !lines[notes - 1].trimmingCharacters(in: .whitespaces).isEmpty { new.insert("", at: 0) }
+            lines.insert(contentsOf: new, at: notes)
         }
         return lines.joined(separator: "\n") + "\n"
     }
@@ -341,8 +350,50 @@ public enum ReadmeBody {
 
     public static func editTask(_ body: String, index: Int, text: String) throws -> String {
         var (lines, i) = try taskLine(body, index)
-        lines[i] = String(lines[i].prefix(6)) + (try cleanTask(text)) + taskSuffix(splitTaskText(String(lines[i].dropFirst(6))).1)
+        let (visible, id) = splitTaskText(String(lines[i].dropFirst(6)))
+        let (_, date, from) = splitArchived(visible)
+        lines[i] = String(lines[i].prefix(6)) + (try cleanTask(text)) + archivedSuffix(date, from) + taskSuffix(id)
         return lines.joined(separator: "\n") + "\n"
+    }
+
+    // MARK: Archive marker — byte-identical with projkit (ARCHIVED_RE, split_archived, body_set_task_archived)
+
+    static let archivedRegex = try! NSRegularExpression(
+        pattern: #"\s*<!--\s*archived:(\d{4}-\d{2}-\d{2})\s+from:(.*?)\s*-->\s*$"#)
+
+    /// (text, archive date, original project folder) of a task's visible text (link id already removed).
+    public static func splitArchived(_ text: String) -> (String, String?, String?) {
+        let ns = text as NSString
+        guard let m = archivedRegex.firstMatch(in: text, range: NSRange(location: 0, length: ns.length)) else {
+            return (text.trimmingCharacters(in: .whitespaces), nil, nil)
+        }
+        return (ns.substring(to: m.range.location).trimmingCharacters(in: .whitespaces),
+                ns.substring(with: m.range(at: 1)), ns.substring(with: m.range(at: 2)).trimmingCharacters(in: .whitespaces))
+    }
+
+    static func archivedSuffix(_ date: String?, _ from: String?) -> String {
+        guard let date, let from else { return "" }
+        return " <!-- archived:\(date) from:\(from) -->"
+    }
+
+    /// Sets (or with date nil, clears) the archive marker of task `index`, keeping its link id.
+    public static func setTaskArchived(_ body: String, index: Int, date: String?, from: String?) throws -> String {
+        let src = from?.trimmingCharacters(in: .whitespaces)
+        if let f = from, f.contains("-->") || f.contains("\n") || src!.isEmpty {
+            throw OpError("can't record '\(f)' as a task's project")
+        }
+        var (lines, i) = try taskLine(body, index)
+        let (visible, id) = splitTaskText(String(lines[i].dropFirst(6)))
+        lines[i] = String(lines[i].prefix(6)) + splitArchived(visible).0 + archivedSuffix(date, src) + taskSuffix(id)
+        return lines.joined(separator: "\n") + "\n"
+    }
+
+    /// The task line and its indented detail lines.
+    public static func taskBlock(_ body: String, index: Int) throws -> [String] {
+        let lines = splitBody(body)
+        let blocks = taskBlocks(lines)
+        guard blocks.indices.contains(index) else { throw OpError("no task #\(index + 1)") }
+        return Array(lines[blocks[index].start..<blocks[index].end])
     }
 
     /// (start, end) line ranges of each task: the task line plus its indented detail lines.

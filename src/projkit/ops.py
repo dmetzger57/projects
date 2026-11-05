@@ -11,7 +11,7 @@ from pathlib import Path
 
 from ruamel.yaml.comments import CommentedMap, CommentedSeq
 
-from .project import (FILE_RE, split_task_text, FORMAT_VERSION, ProjectError, README, STATUSES, URL_SCHEME_RE, Project, file_line_indices,
+from .project import (FILE_RE, split_task_text, split_archived, FORMAT_VERSION, ProjectError, README, STATUSES, URL_SCHEME_RE, Project, file_line_indices,
                       parse_file_line, section_bounds, task_blocks, task_file_indices, task_line_indices,
                       task_note_indices)
 from .workspace import BACKLOG_STEM, Workspace
@@ -108,11 +108,13 @@ def rename(ws: Workspace, p: Project, new_title: str) -> Project:
     dst = p.dir.with_name(new_title)
     if dst.exists() and not dst.samefile(p.dir):
         raise OpError(f"'{dst}' already exists")
+    old = p.dir.name
     p.meta["title"] = new_title
     p.save()
     tmp = p.dir.with_name(f".{p.dir.name}.renaming")
     p.dir.rename(tmp)
     tmp.rename(dst)
+    retarget_archived(ws, old, new_title)
     return Project.load(dst)
 
 
@@ -285,15 +287,20 @@ def _task_suffix(task_id: str | None) -> str:
 
 
 def body_add_task(body: str, text: str, task_id: str | None = None) -> str:
+    return body_add_task_block(body, [f"- [ ] {_clean_task(text)}{_task_suffix(task_id)}"])
+
+
+def body_add_task_block(body: str, block: list[str]) -> str:
+    """Adds a task line (block[0]) with its detail lines after the last task."""
     lines = body.rstrip("\n").split("\n")
-    bullet = f"- [ ] {_clean_task(text)}{_task_suffix(task_id)}"
+    bullet = block[0]
     b = section_bounds(lines, "Tasks")
     if b is None:
         notes = next((i for i, l in enumerate(lines) if l.strip().lower() == "## notes"), len(lines))
-        block = ["## Tasks", bullet] + ([""] if notes < len(lines) else [])
+        new = ["## Tasks", *block] + ([""] if notes < len(lines) else [])
         if notes > 0 and lines[notes - 1].strip():
-            block.insert(0, "")
-        lines[notes:notes] = block
+            new.insert(0, "")
+        lines[notes:notes] = new
     else:
         blocks = task_blocks(lines)
         if blocks:
@@ -302,7 +309,7 @@ def body_add_task(body: str, text: str, task_id: str | None = None) -> str:
             pos = b[1]
             while pos > b[0] + 1 and not lines[pos - 1].strip():
                 pos -= 1
-        lines.insert(pos, bullet)
+        lines[pos:pos] = block
     return "\n".join(lines) + "\n"
 
 
@@ -325,9 +332,11 @@ def body_set_task(body: str, index: int, done: bool) -> str:
 
 
 def body_edit_task(body: str, index: int, text: str) -> str:
-    """Replaces the task's text, keeping its done mark and Today link id."""
+    """Replaces the task's text, keeping its done mark, archive marker and Today link id."""
     lines, i = _task_line(body, index)
-    lines[i] = lines[i][:6] + _clean_task(text) + _task_suffix(split_task_text(lines[i][6:])[1])
+    visible, tid = split_task_text(lines[i][6:])
+    _, date, source = split_archived(visible)
+    lines[i] = lines[i][:6] + _clean_task(text) + _archived_suffix(date, source) + _task_suffix(tid)
     return "\n".join(lines) + "\n"
 
 
@@ -339,6 +348,31 @@ def body_remove_task(body: str, index: int) -> str:
         raise OpError(f"no task #{index + 1}")
     start, end = blocks[index]
     del lines[start:end]
+    return "\n".join(lines) + "\n"
+
+
+def body_task_block(body: str, index: int) -> list[str]:
+    """The task line and its indented detail lines."""
+    lines = body.rstrip("\n").split("\n")
+    blocks = _task_blocks(lines)
+    if not 0 <= index < len(blocks):
+        raise OpError(f"no task #{index + 1}")
+    start, end = blocks[index]
+    return lines[start:end]
+
+
+def _archived_suffix(date: str | None, source: str | None) -> str:
+    return f" <!-- archived:{date} from:{source} -->" if date and source else ""
+
+
+def body_set_task_archived(body: str, index: int, date: str | None, source: str | None) -> str:
+    """Sets (or with date None, clears) the archive marker of task `index`, keeping its link id."""
+    if source is not None and ("-->" in source or "\n" in source or not source.strip()):
+        raise OpError(f"can't record '{source}' as a task's project")
+    lines, i = _task_line(body, index)
+    visible, tid = split_task_text(lines[i][6:])
+    text = split_archived(visible)[0]
+    lines[i] = lines[i][:6] + text + _archived_suffix(date, source and source.strip()) + _task_suffix(tid)
     return "\n".join(lines) + "\n"
 
 
@@ -911,9 +945,9 @@ def ensure_today(ws: Workspace) -> Project:
 
 
 def linked_projects(ws: Workspace) -> list[Project]:
-    """Everything a task link can point into: all projects (closed too) plus Today."""
-    t = ws.today()
-    return [p for p in ws.projects() if not p.legacy and p.parse_error is None] + ([t] if t else [])
+    """Everything a task link can point into: all projects (closed too) plus Today and the Archive."""
+    extra = [q for q in (ws.today(), ws.archive()) if q is not None and q.parse_error is None]
+    return [p for p in ws.projects() if not p.legacy and p.parse_error is None] + extra
 
 
 def sync_task_done(ws: Workspace, task_id: str, done: bool, skip: Path | None = None) -> int:
@@ -939,14 +973,28 @@ def today_ids(ws: Workspace) -> set[str]:
 
 
 def task_sources(ws: Workspace) -> dict[str, Project]:
-    """Link id -> the project (not Today) whose task carries it."""
+    """Link id -> the project (not Today) whose task carries it (the Archive for archived tasks)."""
     out = {}
-    for q in ws.projects():
+    archive = ws.archive()
+    for q in ws.projects() + ([archive] if archive else []):
         if q.legacy or q.parse_error:
             continue
         for t in q.tasks:
             if t["id"]:
                 out.setdefault(t["id"], q)
+    return out
+
+
+def today_sources(ws: Workspace) -> dict[str, tuple[str, Project | None]]:
+    """Link id -> (label, project) for Today's "from …" line; an archived original reads
+    "<project> (archived)" with no project."""
+    out: dict[str, tuple[str, Project | None]] = {}
+    for tid, q in task_sources(ws).items():
+        if ws.is_archive(q):
+            src = next((t["from"] for t in q.tasks if t["id"] == tid), None) or "Archive"
+            out[tid] = (f"{src} (archived)", None)
+        else:
+            out[tid] = (q.title, q)
     return out
 
 
@@ -986,3 +1034,118 @@ def clear_today_done(ws: Workspace) -> int:
         today.body = body
         today.save()
     return len(done)
+
+
+# ---- Archive (0 - Archive/README.md): tasks moved out of their projects ----------
+ARCHIVE_README = """---
+format: 1
+title: Archive
+area: Archive
+status: active
+---
+
+## Tasks
+"""
+
+ARCHIVE_SORTS = ("newest", "oldest", "name", "project")
+
+
+def ensure_archive(ws: Workspace) -> Project:
+    a = ws.archive()
+    if a is None:
+        ws.archive_dir.mkdir(parents=True, exist_ok=True)
+        readme = ws.archive_dir / README
+        if not readme.exists():
+            readme.write_text(ARCHIVE_README)
+        a = Project.load(ws.archive_dir)
+    return a
+
+
+def archive_task(ws: Workspace, p: Project, ref: str, date: dt.date | None = None) -> dict:
+    """Moves a task (with its notes and attachments) from its project to the Archive, recording
+    the project and today's date. Its Today link id is kept. Returns the archived task."""
+    if ws.is_today(p) or ws.is_archive(p):
+        raise OpError("only tasks in a project can be archived")
+    i = _task_index(p, ref)
+    a = ensure_archive(ws)
+    body = body_add_task_block(a.body, body_task_block(p.body, i))
+    a.body = body_set_task_archived(body, len(task_blocks(body.split("\n"))) - 1,
+                                    (date or _today()).isoformat(), p.folder_name)
+    a.save()                                 # written before the original is removed: never lost
+    p.body = body_remove_task(p.body, i)
+    p.save()
+    return a.tasks[-1]
+
+
+def archived_tasks(ws: Workspace, project: str | None = None, since: dt.date | None = None,
+                   sort: str = "newest") -> list[tuple[int, dict]]:
+    """(index in the Archive, task) pairs, optionally only those from `project` (folder name,
+    case-insensitive) or archived on or after `since`, sorted newest first, oldest first,
+    by name or by project."""
+    a = ws.archive()
+    if a is None:
+        return []
+    return filter_archived(list(enumerate(a.tasks)), project, since, sort)
+
+
+def filter_archived(items: list[tuple[int, dict]], project: str | None = None, since: dt.date | None = None,
+                    sort: str = "newest") -> list[tuple[int, dict]]:
+    if sort not in ARCHIVE_SORTS:
+        raise OpError(f"bad sort '{sort}' (use {', '.join(ARCHIVE_SORTS)})")
+    out = [(i, t) for i, t in items
+           if (project is None or (t["from"] or "").lower() == project.lower())
+           and (since is None or (t["archived"] or "") >= since.isoformat())]
+    newest = lambda x: (x[1]["archived"] or "", x[0])            # latest date, then latest archived
+    if sort == "newest":
+        out.sort(key=newest, reverse=True)
+    elif sort == "oldest":
+        out.sort(key=newest)
+    elif sort == "name":
+        out.sort(key=lambda x: (x[1]["text"].casefold(), x[0]))
+    else:
+        out.sort(key=lambda x: (x[1]["archived"] or "", x[0]), reverse=True)
+        out.sort(key=lambda x: (x[1]["from"] or "").casefold())
+    return out
+
+
+def archive_projects(ws: Workspace) -> list[str]:
+    """Original project names found in the Archive, A-Z."""
+    a = ws.archive()
+    names = {t["from"] for t in a.tasks if t["from"]} if a else set()
+    return sorted(names, key=str.casefold)
+
+
+def restore_task(ws: Workspace, ref: str) -> tuple[dict, Project]:
+    """Moves an archived task back to the end of its project's task list."""
+    a = ws.archive()
+    if a is None:
+        raise OpError("the Archive is empty")
+    i = _task_index(a, ref)
+    t = a.tasks[i]
+    p = next((q for q in ws.projects() if t["from"] and q.folder_name.lower() == t["from"].lower()), None)
+    if p is None:
+        raise OpError(f"project '{t['from']}' no longer exists")
+    if p.legacy or p.parse_error:
+        raise OpError(f"'{p.folder_name}' can't be edited right now")
+    body = body_add_task_block(p.body, body_task_block(a.body, i))
+    p.body = body_set_task_archived(body, len(task_blocks(body.split("\n"))) - 1, None, None)
+    p.save()
+    a.body = body_remove_task(a.body, i)
+    a.save()
+    return p.tasks[-1], p
+
+
+def retarget_archived(ws: Workspace, old: str, new: str) -> int:
+    """After a project rename, points its archived tasks at the new name. Returns how many."""
+    a = ws.archive()
+    if a is None or a.parse_error:
+        return 0
+    body, n = a.body, 0
+    for i, t in enumerate(a.tasks):
+        if t["from"] and t["from"].lower() == old.lower():
+            body = body_set_task_archived(body, i, t["archived"], new)
+            n += 1
+    if n:
+        a.body = body
+        a.save()
+    return n

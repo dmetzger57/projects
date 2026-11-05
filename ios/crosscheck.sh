@@ -36,14 +36,16 @@ assert [(f["name"], f["target"], f["kind"]) for f in p.tasks[1]["files"]] == [
     ("Product page", "https://epson.com/ff-680w", "url")], p.tasks[1]
 assert ops.add_task_file(p, "Order", "https://b-h.example/epson")["name"] == "b-h.example"
 assert p.tasks[1]["notes"] == ["Ask about the 3-year warranty", "Check B&H and Adorama prices"], p.tasks[1]
-today = ws.today()                                       # Today written by Swift
-assert [(t["text"], t["done"]) for t in today.tasks] == [("Move me to the top", False), ("Pick storage", True),
-                                                        ("Call the bank", False)], today.tasks
-assert today.tasks[0]["id"] == p.tasks[0]["id"] and today.tasks[1]["id"] == p.tasks[2]["id"] and today.tasks[2]["id"] is None
-ops.set_task(today, "1", True, ws)                       # Python ticks Swift's copy -> original ticks
+today = ws.today()                                       # Today written by Swift (after any real tasks)
+k = len(today.tasks) - 3
+mine = today.tasks[k:]
+assert [(t["text"], t["done"]) for t in mine] == [("Move me to the top", False), ("Pick storage", True),
+                                                 ("Call the bank", False)], today.tasks
+assert mine[0]["id"] == p.tasks[0]["id"] and mine[1]["id"] == p.tasks[2]["id"] and mine[2]["id"] is None
+ops.set_task(today, str(k + 1), True, ws)                # Python ticks Swift's copy -> original ticks
 assert Project.load(p.dir).tasks[0]["done"] is True
 ops.set_task(Project.load(p.dir), "1", False, ws)
-assert ws.today().tasks[0]["done"] is False
+assert ws.today().tasks[k]["done"] is False
 p = Project.load(p.dir)
 assert p.tasks[0]["notes"] == [], p.tasks[0]
 assert ops.edit_task_note(p, "Order", "warranty", "Ask about the warranty") == "Ask about the warranty"
@@ -57,6 +59,12 @@ ops.set_task(p, "Order", True)
 ops.move_task(p, "Pick", 1)
 assert [t["text"] for t in Project.load(p.dir).tasks] == ["Pick storage", "Move me to the top", "Order Epson FF-680W"]
 assert len(Project.load(p.dir).tasks[2]["files"]) == 3          # attachments moved with their task
+arch = [t for t in ws.archive().tasks if t["text"] == "Archive me"]   # Archive written by Swift
+assert [(t["from"], t["archived"], t["notes"]) for t in arch] == [("Photo Archive", "2026-11-04", ["kept with it"])], arch
+n = next(i for i, t in enumerate(ws.archive().tasks, 1) if t["text"] == "Archive me")
+r, back = ops.restore_task(ws, str(n))                   # Python restores what Swift archived
+assert back.dir == p.dir and Project.load(p.dir).tasks[-1]["text"] == "Archive me"
+assert Project.load(p.dir).tasks[-1]["notes"] == ["kept with it"]
 s = ws.find("Swift Made")[0]
 assert s.status == "closed" and s.area == "Digital Infrastructure" and s.goals[0]["text"] == "true"
 assert ops.ideas(ws)[-1] == "Idea from iPhone"

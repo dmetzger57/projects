@@ -35,6 +35,8 @@ struct RootView: View {
                         .tabItem { Label("Projects", systemImage: "folder") }
                     IdeasView()
                         .tabItem { Label("Ideas", systemImage: "lightbulb") }
+                    ArchiveView()
+                        .tabItem { Label("Archive", systemImage: "archivebox") }
                     SettingsView()
                         .tabItem { Label("Settings", systemImage: "gearshape") }
                 }

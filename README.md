@@ -35,6 +35,11 @@ proj today                              # Today's tasks, each with the project i
 proj today add "Call the bank"          # …or add one directly
 proj today done|undo|rm <task>          # ticking a copy ticks its original too (and vice versa)
 proj today clear                        # remove done tasks from Today; originals stay ticked
+proj task archive photo <task>          # move a task (notes, attachments) to the Archive (web: 🗄; iPhone: swipe left)
+proj task ls photo --archived           # …and list the project's archived tasks below its own
+proj archive                            # all archived tasks with their project and date (web/iPhone: Archive)
+proj archive -p photo --since 30d --sort name   # filter by project / date (YYYY-MM-DD or Nd); sort newest|oldest|name|project
+proj archive restore|rm <#n>            # move one back into its project, or delete it for good
 proj link add web https://… -t "Docs"
 proj file add photo "Documents/Manuals/scanner.pdf" -n "Scanner manual"   # Project Files link
 proj file add photo https://docs.google.com/… -n "Plan"                    # …or a URL

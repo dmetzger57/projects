@@ -8,6 +8,8 @@ The files are the source of truth; any index/database is a rebuildable cache.
 ```
 $PROJ_ROOT (default ~/Documents/Projects)
 ├── 0 - Idea Backlog.md          backlog (ideas.md format, see below)
+├── 0 - Today/README.md          the Today list (see Tasks below), created on first use
+├── 0 - Archive/README.md        archived tasks from all projects, created on first use
 ├── 1 - Template/                template copied by `proj new`
 ├── 2 - Closed/<Project>/        closed projects (flat; area kept in front matter)
 ├── 3 - Receipts/                optional receipts root inside the workspace (iPhone setup for
@@ -99,6 +101,15 @@ Rules:
   Ticking or unticking any task with an id sets every task with that id (in Today and all projects, closed
   ones included) the same way. A task is copied at most once; removing or clearing it from Today leaves the
   original alone. Tasks added directly to Today have no id.
+- **Archive:** `0 - Archive/README.md` at the projects root is a project outside the areas (front matter
+  `title: Archive`, `area: Archive`), created on first use. Archiving moves a project task with its detail
+  lines to the end of the Archive's `## Tasks` (written there before it is removed from the project) and
+  marks it `<!-- archived:YYYY-MM-DD from:<project folder> -->` after the text and before any link id:
+  `- [x] Order scanner <!-- archived:2026-11-05 from:Photo Archive --> <!-- task:k3x9q2ab -->`. The visible
+  text is the line without both comments; editing keeps them. Project names containing `-->` can't be
+  recorded. Renaming a project rewrites its archived tasks' `from:`. Restoring moves the task back to the
+  end of that project's tasks (closed projects included) without the marker; the link id stays, so a copy
+  still in Today keeps syncing either way. Today and Archive tasks can't be archived.
 - Unknown front-matter keys must be preserved (forward compatibility).
 
 - Project Files entries are Markdown links on their own line: `- [Friendly name](<target>)`. The target is
