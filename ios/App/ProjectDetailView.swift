@@ -96,10 +96,11 @@ struct ProjectDetailView: View {
                 }
             } else {
                 overview(p, closed: closed)
+                textSection(p, "Description")
                 goals(p)
                 tasks(p)
                 notes(p)
-                ForEach(ReadmeBody.editableSections, id: \.self) { name in
+                ForEach(ReadmeBody.editableSections.filter { $0 != "Description" }, id: \.self) { name in
                     if name == "Project Files" { projectFiles(p) } else { textSection(p, name) }
                 }
                 links(p)
