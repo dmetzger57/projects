@@ -13,6 +13,7 @@ struct ProjectsView: View {
     @State private var showNew = false
     @State private var showNewArea = false
     @State private var newAreaName = ""
+    @State private var showReorderAreas = false
     @State private var path: [String] = {
         #if DEBUG
         // Simulator testing: PROJ_DEBUG_OPEN=<project folder name> opens that project at launch.
@@ -38,15 +39,12 @@ struct ProjectsView: View {
     }
 
     private var grouped: [(area: String, items: [Project])] {
-        let order = ["active": 0, "blocked": 1, "on-hold": 2, "backlog": 3, "idea": 4, "closed": 5]
         var groups: [String: [Project]] = [:]
         for p in filtered { groups[model.displayArea(p), default: []].append(p) }
         let names = (filter == .open && search.isEmpty ? model.areas : []) + groups.keys.sorted()
         var seen = Set<String>()
-        return names.filter { seen.insert($0).inserted }.map { area in
-            (area, (groups[area] ?? []).sorted {
-                (order[$0.status] ?? 9, $0.title.lowercased()) < (order[$1.status] ?? 9, $1.title.lowercased())
-            })
+        return model.overview.sortedAreas(names.filter { seen.insert($0).inserted }).map { area in
+            (area, model.overview.sorted(groups[area] ?? [], area: area))   // manual order, else status then name
         }
     }
 
@@ -63,13 +61,24 @@ struct ProjectsView: View {
                     SummaryRow(projects: filtered)
                 }
                 ForEach(grouped, id: \.area) { group in
-                    Section(group.area) {
-                        if group.items.isEmpty {
-                            Text("No projects").foregroundStyle(.secondary).italic()
+                    Section {
+                        if !model.overview.isCollapsed(group.area) {
+                            if group.items.isEmpty {
+                                Text("No projects").foregroundStyle(.secondary).italic()
+                            }
+                            ForEach(group.items) { p in
+                                projectRow(p, in: group.items)
+                            }
+                            .onMove { source, destination in
+                                // SwiftUI gives the destination as an offset in the list *before* removal
+                                guard let from = source.first, from != destination, from + 1 != destination else { return }
+                                let items = group.items
+                                if destination < items.count { move(items[from], before: items[destination]) }
+                                else { move(items[from], after: items[items.count - 1]) }
+                            }
                         }
-                        ForEach(group.items) { p in
-                            NavigationLink(value: p.folderName) { ProjectRow(project: p) }
-                        }
+                    } header: {
+                        areaHeader(group.area, items: group.items, all: grouped.map(\.area))
                     }
                 }
             }
@@ -91,11 +100,20 @@ struct ProjectsView: View {
                         Button { showNew = true } label: { Label("New Project", systemImage: "doc.badge.plus") }
                             .disabled(model.areas.isEmpty)
                         Button { newAreaName = ""; showNewArea = true } label: { Label("New Area", systemImage: "folder.badge.plus") }
+                        Divider()
+                        Button { showReorderAreas = true } label: { Label("Reorder Areas", systemImage: "arrow.up.arrow.down") }
+                        Button { setCollapsed(model.workspace?.overviewAreas(overview: model.overview) ?? model.areas, true) } label: {
+                            Label("Collapse All Areas", systemImage: "rectangle.compress.vertical")
+                        }
+                        Button { setCollapsed(model.workspace?.overviewAreas(overview: model.overview) ?? model.areas, false) } label: {
+                            Label("Expand All Areas", systemImage: "rectangle.expand.vertical")
+                        }
                     } label: {
                         Label("Add", systemImage: "plus")
                     }
                 }
             }
+            .sheet(isPresented: $showReorderAreas) { ReorderAreasSheet() }
             .sheet(isPresented: $showNew) {
                 NewProjectSheet { folder in path.append(folder) }
             }
@@ -108,6 +126,126 @@ struct ProjectsView: View {
                 }
             } message: {
                 Text("Areas group related projects, e.g. Home or Garden.")
+            }
+        }
+    }
+
+    private func projectRow(_ p: Project, in items: [Project]) -> some View {
+        let i = items.firstIndex { $0.folderName == p.folderName } ?? 0
+        return NavigationLink(value: p.folderName) { ProjectRow(project: p) }
+            .contextMenu {
+                if items.count > 1 {
+                    Section("Move") {
+                        Button { move(p, before: items[0]) } label: { Label("Move to Top", systemImage: "arrow.up.to.line") }
+                            .disabled(i == 0)
+                        Button { move(p, before: items[max(i - 1, 0)]) } label: { Label("Move Up", systemImage: "arrow.up") }
+                            .disabled(i == 0)
+                        Button { move(p, after: items[min(i + 1, items.count - 1)]) } label: { Label("Move Down", systemImage: "arrow.down") }
+                            .disabled(i == items.count - 1)
+                        Button { move(p, after: items[items.count - 1]) } label: { Label("Move to Bottom", systemImage: "arrow.down.to.line") }
+                            .disabled(i == items.count - 1)
+                    }
+                }
+            }
+    }
+
+    private func areaHeader(_ area: String, items: [Project], all: [String]) -> some View {
+        let collapsed = model.overview.isCollapsed(area)
+        let manual = model.overview.hasOrder(area)
+        let i = all.firstIndex(of: area) ?? 0
+        return HStack {
+            Button { setCollapsed([area], !collapsed) } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.bold))
+                        .rotationEffect(.degrees(collapsed ? 0 : 90))
+                    Text(area)
+                    if collapsed { Text("\(items.count)").foregroundStyle(.tertiary) }
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(collapsed ? "Expand \(area)" : "Collapse \(area)")
+            Spacer()
+            Menu {
+                Button { setCollapsed([area], !collapsed) } label: {
+                    Label(collapsed ? "Expand" : "Collapse to Name",
+                          systemImage: collapsed ? "rectangle.expand.vertical" : "rectangle.compress.vertical")
+                }
+                if all.count > 1 {
+                    Section("Move Area") {
+                        Button { moveArea(area, before: all[max(i - 1, 0)]) } label: { Label("Move Up", systemImage: "arrow.up") }
+                            .disabled(i == 0)
+                        Button { moveArea(area, after: all[min(i + 1, all.count - 1)]) } label: { Label("Move Down", systemImage: "arrow.down") }
+                            .disabled(i == all.count - 1)
+                        Button { showReorderAreas = true } label: { Label("Reorder Areas…", systemImage: "arrow.up.arrow.down") }
+                    }
+                }
+                if manual {
+                    Button { Task { await model.perform { try Ops.resetOrder($0, area: area) } } } label: {
+                        Label("Sort Projects by Status", systemImage: "arrow.up.arrow.down")
+                    }
+                }
+            } label: {
+                Image(systemName: "ellipsis.circle")
+                    .accessibilityLabel("\(area) options")
+            }
+        }
+        .textCase(nil)
+    }
+
+    private func setCollapsed(_ areas: [String], _ on: Bool) {
+        Task { await model.perform { try Ops.setCollapsed($0, areas: areas, on) } }
+    }
+
+    private func moveArea(_ area: String, before other: String) {
+        guard other != area else { return }
+        Task { await model.perform { try Ops.moveArea($0, area, before: other) } }
+    }
+
+    private func moveArea(_ area: String, after other: String) {
+        guard other != area else { return }
+        Task { await model.perform { try Ops.moveArea($0, area, after: other) } }
+    }
+
+    private func move(_ p: Project, before other: Project) {
+        guard other.folderName != p.folderName else { return }
+        Task { await model.perform { try Ops.moveProject($0, p, before: other.folderName) } }
+    }
+
+    private func move(_ p: Project, after other: Project) {
+        guard other.folderName != p.folderName else { return }
+        Task { await model.perform { try Ops.moveProject($0, p, after: other.folderName) } }
+    }
+}
+
+/// Drag areas into order (the same order as the web overview).
+struct ReorderAreasSheet: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        let areas = model.workspace?.overviewAreas(overview: model.overview) ?? model.areas
+        NavigationStack {
+            List {
+                ForEach(areas, id: \.self) { Text($0) }
+                    .onMove { source, destination in
+                        guard let from = source.first, from != destination, from + 1 != destination else { return }
+                        let area = areas[from]
+                        let to = destination > from ? destination - 1 : destination
+                        Task { await model.perform { try Ops.moveArea($0, area, to: to) } }
+                    }
+            }
+            .environment(\.editMode, .constant(.active))
+            .navigationTitle("Reorder Areas")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    if !model.overview.areas.isEmpty {
+                        Button("A–Z") { Task { await model.perform { try Ops.resetAreaOrder($0) } } }
+                    }
+                }
+                ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
             }
         }
     }

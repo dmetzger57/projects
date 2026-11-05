@@ -1,0 +1,25 @@
+{# One project tile on the overview. #}
+<div class="card" data-tile="{{ c.p.folder_name }}">
+  <div class="card-top">
+    <button type="button" class="handle tile-handle" draggable="true" data-tile-handle
+            title="Drag to reorder (or focus and use the arrow keys)"
+            aria-label="Reorder “{{ c.p.title }}”. Use the arrow keys to move it earlier or later.">⋮⋮</button>
+    <a class="card-title" href="{{ c.url }}">{{ c.p.title }}</a>
+    <span class="pill s-{{ c.status }}">{{ c.status }}</span>
+  </div>
+  {% if c.total %}
+  <div class="progress-row"><span>Goals</span>
+    <div class="bar" role="img" aria-label="{{ c.done }} of {{ c.total }} goals done"><i style="width: {{ c.pct }}%"></i></div>
+    <span>{{ c.done }}/{{ c.total }}</span></div>
+  {% endif %}
+  {% if c.ttotal %}
+  <div class="progress-row"><span>Tasks</span>
+    <div class="bar tasks-bar" role="img" aria-label="{{ c.tdone }} of {{ c.ttotal }} tasks done"><i style="width: {{ c.tpct }}%"></i></div>
+    <span>{{ c.tdone }}/{{ c.ttotal }}</span></div>
+  {% endif %}
+  <div class="card-meta">
+    {% if not c.total and not c.ttotal %}<span>No goals or tasks</span>{% endif %}
+    {% if c.p.receipts %}<span>{{ c.p.total_cost|money }}</span>{% endif %}
+    {% if c.last_note %}<span>{{ c.last_note.strftime('%b %-d') }}</span>{% endif %}
+  </div>
+</div>

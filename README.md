@@ -46,6 +46,12 @@ proj file add photo https://docs.google.com/… -n "Plan"                    # �
 proj file ls|edit|rm|open photo <entry>   # ls --paths shows targets
 proj receipt add roof ~/Documents/Receipts/2026/inv.pdf -$ 412.50 -v Lowes   # records the path; no copy
 proj status photo blocked                # idea | backlog | active | blocked | on-hold
+proj order                               # areas in order, each with its projects (1 = top)
+proj order area House 1                  # move an area (web: drag the area's ⋮⋮ or ↑/↓; iPhone: area ⋯ › Move / Reorder Areas)
+proj order mv photo 1                    # move a project within its area (web: drag the tile's ⋮⋮; iPhone: drag or long-press)
+proj order reset [AREA] [--areas]        # projects back to status, then name; --areas: areas A–Z
+proj collapse House [Garden …] | --all   # area shows just its name (web: click the area name; iPhone: tap it)
+proj expand House | --all
 proj rename web "Web-Check Service"
 proj close roof            # → 2 - Closed, area kept
 proj reopen roof [-a AREA]
@@ -59,7 +65,8 @@ proj serve [-p 8765] [--no-open]   # web UI
 
 ## Web UI
 
-`proj serve` opens http://127.0.0.1:8765/ — overview by area (filters, search, goal progress, spend),
+`proj serve` opens http://127.0.0.1:8765/ — overview by area (filters, search, goal progress, spend; click an
+area's name to collapse it to just the name, drag ⋮⋮ to reorder areas or the projects in an area),
 project pages (edit Description/Project Files, goals, notes, links, receipts by path, status/close/rename,
 reveal in Finder), idea backlog with "Make project", and a Health page with one-click lint fixes.
 

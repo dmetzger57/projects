@@ -87,6 +87,9 @@ if args.count == 4, args[1] == "--mutate" {
         try Ops.addFile(ws, photo, target: "https://docs.google.com/document/d/abc/edit?tab=t.0", name: nil)
         try Ops.editFile(ws, photo, index: 1, name: "Plan", target: nil)
         try Ops.setStatus(ws, photo, "blocked")
+        try Ops.moveProject(ws, photo, to: 0)                 // overview: top of its area, area collapsed and first
+        try Ops.setCollapsed(ws, areas: [ws.displayArea(photo)], true)
+        try Ops.moveArea(ws, ws.displayArea(photo), to: 0)
         photo = try Ops.rename(ws, photo, to: "Photo Archive")
         let p = try Ops.newProject(ws, title: "Swift Made", area: "Digital Infrastructure")
         try Ops.addGoal(ws, p, "true")      // must stay a string, not a bool
@@ -612,6 +615,53 @@ test("iCloud placeholder names map to real names") {
     let names = try ws.fs.children(of: dir).map(\.lastPathComponent)
     eq(names, ["README.md"])
     check(ws.fs.exists(dir.appendingPathComponent("README.md")), "exists via placeholder")
+}
+
+test("overview: project order, area order, collapsed areas, format") {
+    let ws = try tempWorkspace()
+    for t in ["Roof", "Fence", "Attic"] { _ = try Ops.newProject(ws, title: t, area: "House") }
+    _ = try Ops.newProject(ws, title: "Taxes", area: "Personal")
+    func names() -> [String] { ws.areaProjects("House").map(\.folderName) }
+    func p(_ n: String) -> Project { ws.project(named: n)! }
+    try Ops.setStatus(ws, p("Attic"), "on-hold")
+    eq(names(), ["Fence", "Roof", "Attic"], "status, then name")
+    check(!ws.fs.exists(ws.overviewURL), "no file until something is changed")
+    try Ops.moveProject(ws, p("Roof"), to: 0)
+    eq(names(), ["Roof", "Fence", "Attic"])
+    try Ops.moveProject(ws, p("Attic"), before: "Fence")
+    eq(names(), ["Roof", "Attic", "Fence"])
+    try Ops.moveProject(ws, p("Roof"), after: "Fence")
+    eq(names(), ["Attic", "Fence", "Roof"])
+    try Ops.setStatus(ws, p("Attic"), "active")
+    _ = try Ops.newProject(ws, title: "Barn", area: "House")
+    eq(names(), ["Attic", "Fence", "Roof", "Barn"], "manual order kept; new projects last")
+    var threw = 0
+    do { try Ops.moveProject(ws, p("Roof"), to: 9) } catch { threw += 1 }
+    do { try Ops.moveProject(ws, p("Roof"), before: "Taxes") } catch { threw += 1 }
+    eq(threw, 2, "bad moves rejected")
+    _ = try Ops.rename(ws, p("Fence"), to: "Fence Repair")
+    eq(names(), ["Attic", "Fence Repair", "Roof", "Barn"], "rename keeps place")
+    eq(ws.overviewAreas(), ["House", "Personal"])
+    try Ops.moveArea(ws, "Personal", to: 0)
+    eq(ws.overviewAreas(), ["Personal", "House"])
+    try Ops.moveArea(ws, "Personal", after: "House")
+    eq(ws.overviewAreas(), ["House", "Personal"])
+    try FileManager.default.createDirectory(at: ws.root.appendingPathComponent("Cars"), withIntermediateDirectories: true)
+    eq(ws.overviewAreas(), ["House", "Personal", "Cars"], "new areas follow ordered ones")
+    try Ops.setCollapsed(ws, areas: ["House", "Cars"], true)
+    try Ops.setCollapsed(ws, areas: ["Cars"], false)
+    eq(ws.overview().collapsed, ["House"])
+    do { try Ops.setCollapsed(ws, areas: ["Nope"], true); check(false, "unknown area") } catch {}
+    try FileManager.default.removeItem(at: ws.root.appendingPathComponent("Cars"))
+    try Ops.moveArea(ws, "Personal", to: 0)
+    let text = try ws.fs.readText(ws.overviewURL)
+    eq(text, "# Overview\n\nLayout of the Projects overview: area order, collapsed areas, and project order within areas. Written by proj; safe to edit."
+        + "\n\n## Areas\n\n- Personal\n- House\n\n## Collapsed\n\n- House\n\n## Order\n\n### House\n- Attic\n- Fence Repair\n- Roof\n")
+    eq(Overview.parse(text + "\n## Mine\nkept\n").serialize(), text + "\n## Mine\nkept\n", "round trip")
+    try Ops.resetAreaOrder(ws)
+    eq(ws.overviewAreas(), ["House", "Personal"])
+    try Ops.resetOrder(ws, area: "House")
+    eq(names(), ["Attic", "Barn", "Fence Repair", "Roof"])
 }
 
 print("\n\(passed) checks passed, \(failures) failed")

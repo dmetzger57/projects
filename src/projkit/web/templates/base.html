@@ -90,6 +90,109 @@
       document.querySelector(`[data-task-handle="${focusAfter}"]`)?.focus();
       focusAfter = null;
     });
+    // ---- overview tiles: drag ⋮⋮ onto another tile of the same area, or focus it and use the arrow keys ----
+    let tileFrom = null;
+    function moveTile(name, other, after) {
+      try { sessionStorage.setItem("focusTile", name); } catch {}
+      htmx.ajax("POST", `/p/${encodeURIComponent(name)}/order`,
+                {values: after ? {after: other} : {before: other}, swap: "none"});
+    }
+    document.addEventListener("dragstart", e => {
+      const h = e.target.closest?.("[data-tile-handle]");
+      if (!h) return;
+      const card = h.closest(".card");
+      tileFrom = card;
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/plain", card.dataset.tile);
+      e.dataTransfer.setDragImage(card, 12, 12);
+      card.classList.add("dragging");
+    });
+    document.addEventListener("dragover", e => {
+      const card = e.target.closest?.(".card[data-tile]");
+      if (!tileFrom || !card || card === tileFrom || card.parentElement !== tileFrom.parentElement) return;
+      e.preventDefault();
+      document.querySelectorAll(".card.drop-before, .card.drop-after")
+        .forEach(x => x.classList.remove("drop-before", "drop-after"));
+      const r = card.getBoundingClientRect();
+      card.classList.add(e.clientX < r.left + r.width / 2 ? "drop-before" : "drop-after");
+    });
+    document.addEventListener("drop", e => {
+      const card = e.target.closest?.(".card[data-tile]");
+      if (!tileFrom || !card || card === tileFrom || card.parentElement !== tileFrom.parentElement) return;
+      e.preventDefault();
+      moveTile(tileFrom.dataset.tile, card.dataset.tile, card.classList.contains("drop-after"));
+    });
+    document.addEventListener("dragend", () => {
+      tileFrom = null;
+      document.querySelectorAll(".card").forEach(x => x.classList.remove("dragging", "drop-before", "drop-after"));
+    });
+    document.addEventListener("keydown", e => {
+      const h = e.target.closest?.("[data-tile-handle]");
+      if (!h || !["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key)) return;
+      e.preventDefault();
+      const card = h.closest(".card"), earlier = e.key === "ArrowUp" || e.key === "ArrowLeft";
+      const other = earlier ? card.previousElementSibling : card.nextElementSibling;
+      if (other?.dataset.tile) moveTile(card.dataset.tile, other.dataset.tile, !earlier);
+    });
+    // ---- overview areas: drag an area's ⋮⋮ above/below another area, or focus it and use ↑/↓ ----
+    let areaFrom = null;
+    function moveArea(name, other, after) {
+      try { sessionStorage.setItem("focusArea", name); } catch {}
+      htmx.ajax("POST", "/area/move", {values: after ? {area: name, after: other} : {area: name, before: other}, swap: "none"});
+    }
+    document.addEventListener("dragstart", e => {
+      const h = e.target.closest?.("[data-area-handle]");
+      if (!h) return;
+      areaFrom = h.closest("section.area");
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/plain", areaFrom.dataset.area);
+      e.dataTransfer.setDragImage(areaFrom.querySelector(".area-head"), 12, 12);
+      areaFrom.classList.add("dragging");
+    });
+    document.addEventListener("dragover", e => {
+      const sec = e.target.closest?.("section.area[data-area]");
+      if (!areaFrom || !sec || sec === areaFrom) return;
+      e.preventDefault();
+      document.querySelectorAll("section.area.drop-above, section.area.drop-below")
+        .forEach(x => x.classList.remove("drop-above", "drop-below"));
+      const r = sec.getBoundingClientRect();
+      sec.classList.add(e.clientY < r.top + r.height / 2 ? "drop-above" : "drop-below");
+    });
+    document.addEventListener("drop", e => {
+      const sec = e.target.closest?.("section.area[data-area]");
+      if (!areaFrom || !sec || sec === areaFrom) return;
+      e.preventDefault();
+      moveArea(areaFrom.dataset.area, sec.dataset.area, sec.classList.contains("drop-below"));
+    });
+    document.addEventListener("dragend", () => {
+      areaFrom = null;
+      document.querySelectorAll("section.area").forEach(x => x.classList.remove("dragging", "drop-above", "drop-below"));
+    });
+    document.addEventListener("keydown", e => {
+      const h = e.target.closest?.("[data-area-handle]");
+      if (!h || !["ArrowUp", "ArrowDown"].includes(e.key)) return;
+      e.preventDefault();
+      const sec = h.closest("section.area"), up = e.key === "ArrowUp";
+      let other = up ? sec.previousElementSibling : sec.nextElementSibling;
+      while (other && !other.matches("section.area")) other = up ? other.previousElementSibling : other.nextElementSibling;
+      if (other) moveArea(sec.dataset.area, other.dataset.area, !up);
+    });
+    try {
+      const a = sessionStorage.getItem("focusArea");
+      if (a) {
+        sessionStorage.removeItem("focusArea");
+        [...document.querySelectorAll("section.area[data-area]")].find(s => s.dataset.area === a)
+          ?.querySelector("[data-area-handle]")?.focus();
+      }
+    } catch {}
+    try {
+      const name = sessionStorage.getItem("focusTile");
+      if (name) {
+        sessionStorage.removeItem("focusTile");
+        [...document.querySelectorAll(".card[data-tile]")].find(c => c.dataset.tile === name)
+          ?.querySelector("[data-tile-handle]")?.focus();
+      }
+    } catch {}
     // ---- Project Files: browse ~/Documents, pick a path, show/hide actual paths ----
     function loadBrowser(box, path) {
       htmx.ajax("GET", "/browse?path=" + encodeURIComponent(path), {target: box, swap: "innerHTML"});

@@ -8,6 +8,7 @@ The files are the source of truth; any index/database is a rebuildable cache.
 ```
 $PROJ_ROOT (default ~/Documents/Projects)
 ├── 0 - Idea Backlog.md          backlog (ideas.md format, see below)
+├── 0 - Overview.md              optional: area order, collapsed areas, project order (see below)
 ├── 0 - Today/README.md          the Today list (see Tasks below), created on first use
 ├── 0 - Archive/README.md        archived tasks from all projects, created on first use
 ├── 1 - Template/                template copied by `proj new`
@@ -133,6 +134,43 @@ A heading/intro followed by one `- ` bullet per idea. Writers preserve everythin
 
 - Backyard Sequoia tree
 ```
+
+## Overview layout (`0 - Overview.md`)
+
+Optional; written on the first reorder or collapse. Areas are named by folder name; projects by folder
+name, matched case-insensitively.
+
+```markdown
+# Overview
+
+Layout of the Projects overview: area order, collapsed areas, and project order within areas. Written by proj; safe to edit.
+
+## Areas
+
+- House
+- Digital Infrastructure
+
+## Collapsed
+
+- Digital Infrastructure
+
+## Order
+
+### House
+- Roof Repair
+- Garden
+```
+
+- `## Areas`: the area order, top first. Listed areas come first, then unlisted ones (e.g. new areas) A–Z.
+  Moving an area writes the complete list; resetting removes it.
+- `## Collapsed`: areas shown as just their name (their projects hidden). Writers drop areas that no longer exist.
+- `## Order`: one `### <Area>` per area whose projects were reordered, top first. Listed projects come first,
+  then unlisted ones (e.g. new projects) by status (active, blocked, on-hold, backlog, idea, closed), then
+  title. Closed projects are listed under the area in their front matter, since the Closed filter shows
+  them there. Reordering writes the area's complete list, so after that, status changes no longer move
+  projects in that area. Resetting an area removes its list. Names that match no project are ignored.
+- Renaming a project rewrites its name under `## Order`. Writers keep the text before the first `## `
+  heading and any other `## ` sections.
 
 ## Receipts
 

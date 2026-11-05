@@ -13,6 +13,7 @@ RESERVED_RE = re.compile(r"^\d+ - ")
 TEMPLATE_DIR = "1 - Template"
 CLOSED_DIR = "2 - Closed"
 BACKLOG_STEM = "0 - Idea Backlog"
+OVERVIEW_STEM = "0 - Overview"    # manual order and collapsed tiles of the Projects overview
 TODAY_DIR = "0 - Today"          # the Today list: a project outside the areas
 ARCHIVE_DIR = "0 - Archive"      # archived tasks from every project, also outside the areas
 

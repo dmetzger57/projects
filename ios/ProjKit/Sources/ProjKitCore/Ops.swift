@@ -164,6 +164,7 @@ public enum Ops {
             try ws.fs.move(p.url, to: dst)
         }
         try retargetArchived(ws, from: p.folderName, to: title)
+        try retargetOverview(ws, from: p.folderName, to: title)
         return ws.load(dst)
     }
 

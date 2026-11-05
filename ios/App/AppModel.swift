@@ -17,6 +17,8 @@ final class AppModel {
     private(set) var today: Project?
     private(set) var archive: Project?
     private(set) var ideas: [String] = []
+    /// Manual project order per area and collapsed rows (`0 - Overview.md`).
+    private(set) var overview = Overview()
     private(set) var areas: [String] = []
     private(set) var isLoading = false
     private(set) var lastLoaded: Date?
@@ -182,10 +184,10 @@ final class AppModel {
         guard let ws = workspace else { return }
         isLoading = true
         defer { isLoading = false }
-        let result = await Task.detached(priority: .userInitiated) { () -> ([Project], [String], [String], Bool, Project?, Project?) in
-            (ws.projects(), Ops.ideas(ws), ws.areas(), ws.needsSetup, ws.today(), ws.archive())
+        let result = await Task.detached(priority: .userInitiated) { () -> ([Project], [String], [String], Bool, Project?, Project?, Overview) in
+            (ws.projects(), Ops.ideas(ws), ws.areas(), ws.needsSetup, ws.today(), ws.archive(), ws.overview())
         }.value
-        (projects, ideas, areas, needsSetup, today, archive) = result
+        (projects, ideas, areas, needsSetup, today, archive, overview) = result
         lastLoaded = Date()
     }
 

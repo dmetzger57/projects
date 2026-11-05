@@ -23,7 +23,6 @@ HERE = Path(__file__).parent
 # macOS document packages: folders on disk, but files to the user
 PACKAGE_SUFFIXES = {".pages", ".numbers", ".key", ".app", ".bundle", ".photoslibrary", ".rtfd", ".band",
                     ".logicx", ".fcpbundle", ".imovielibrary", ".playground", ".xcodeproj"}
-STATUS_ORDER = {"active": 0, "blocked": 1, "on-hold": 2, "backlog": 3, "idea": 4, "closed": 5}
 _md = MarkdownIt("commonmark", {"html": False, "linkify": False}).enable(["strikethrough", "table"])
 
 
@@ -91,7 +90,7 @@ def create_app(ws: Workspace) -> FastAPI:
         notes = p.notes
         done, total = p.goal_progress
         tdone, ttotal = p.task_progress
-        return dict(p=p, url=purl(p), area=p.area or ws.location_area(p) or "—",
+        return dict(p=p, url=purl(p), area=ops.project_area(ws, p),
                     status="legacy" if p.legacy else p.status, done=done, total=total,
                     pct=int(100 * done / total) if total else 0,
                     tdone=tdone, ttotal=ttotal, tpct=int(100 * tdone / ttotal) if ttotal else 0,
@@ -113,18 +112,52 @@ def create_app(ws: Workspace) -> FastAPI:
             projects = [p for p in projects if p.status == status]
         if q:
             projects = [p for p in projects if matches(p, q)]
-        cards = sorted((card(p) for p in projects),
-                       key=lambda c: (STATUS_ORDER.get(c["status"], 9), c["p"].title.lower()))
-        areas = {a: [] for a in ws.areas()}
-        for c in cards:
-            areas.setdefault(c["area"], []).append(c)
+        ov = ops.overview(ws)
+        by_area: dict[str, list[Project]] = {a: [] for a in ws.areas()}
+        for p in projects:
+            by_area.setdefault(ops.project_area(ws, p), []).append(p)
+        areas = {a: [card(p) for p in ops.sort_projects(ov, a, by_area[a])]
+                 for a in ops.sort_areas(ov, list(by_area))}
+        cards = [c for cs in areas.values() for c in cs]
         recent = sorted(((n, p) for p in ws.projects(include_closed=False) for n in p.notes if n.text),
                         key=lambda t: t[0].date, reverse=True)[:6]
         totals = dict(projects=len(cards), goals_open=sum(c["total"] - c["done"] for c in cards),
                       tasks_open=sum(c["ttotal"] - c["tdone"] for c in cards),
                       cost=sum(c["p"].total_cost for c in cards))
         return page(request, "dashboard.html", nav="projects", areas=areas, status=status, q=q,
+                    manual={a for a in areas if ov.has_order(a)}, collapsed={a for a in areas if ov.is_collapsed(a)},
+                    areas_manual=bool(ov.areas),
                     recent=[(n, p, purl(p)) for n, p in recent], ideas=ops.ideas(ws), totals=totals)
+
+    # ---- overview layout: collapsed tiles, manual order ----------------------
+    @app.post("/area/collapse")
+    def area_collapse(area: str = Form(""), collapsed: int = Form(...), all: int = Form(0)):
+        ops.set_collapsed(ws, ops.overview_areas(ws) if all else [area], bool(collapsed))
+        return _refresh()
+
+    @app.post("/area/move")
+    def area_move(area: str = Form(...), before: str = Form(""), after: str = Form("")):
+        if not (before or after):
+            raise HTTPException(400, "before or after is required")
+        ops.move_area(ws, area, before=before or None, after=after or None)
+        return _refresh()
+
+    @app.post("/areas/order/reset")
+    def areas_order_reset():
+        ops.reset_area_order(ws)
+        return _refresh()
+
+    @app.post("/p/{key}/order")
+    def project_order(key: str, before: str = Form(""), after: str = Form("")):
+        if not (before or after):
+            raise HTTPException(400, "before or after is required")
+        ops.move_project(ws, get_project(key), before=before or None, after=after or None)
+        return _refresh()
+
+    @app.post("/area/order/reset")
+    def area_order_reset(area: str = Form(...)):
+        ops.reset_order(ws, area)
+        return _refresh()
 
     @app.get("/p/{key}", response_class=HTMLResponse)
     def project_page(request: Request, key: str):

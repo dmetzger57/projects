@@ -46,7 +46,7 @@ def test_pages_render(client):
 
 
 def test_search_and_filters(client):
-    card = 'class="card" href="/p/Roof%20Repair"'
+    card = 'data-tile="Roof Repair"'
     assert card in client.get("/?q=quotes").text
     assert card not in client.get("/?q=zzz").text
     assert card not in client.get("/?status=closed").text
@@ -265,3 +265,49 @@ def test_today_web(client, ws):
     client.post("/p/0%20-%20Today/tasks/2/toggle", headers=HX)
     r = client.post("/today/clear", headers=HX)
     assert r.status_code == 200 and "Call bank" not in r.text and "Buy shingles" in r.text
+
+
+def tiles(html: str) -> list[str]:
+    import re
+    return re.findall(r'data-tile="([^"]+)"', html)
+
+
+def areas_on(html: str) -> list[str]:
+    import re
+    return re.findall(r'<section class="area[^"]*" data-area="([^"]+)"', html)
+
+
+def test_area_collapse_and_expand(client, ws):
+    assert client.post("/area/collapse", data={"area": "House", "collapsed": "1"}, headers=HX).headers["HX-Refresh"]
+    page = client.get("/").text
+    assert 'class="area collapsed" data-area="House"' in page and 'data-tile="Roof Repair"' not in page
+    assert ops.overview(ws).is_collapsed("House")
+    client.post("/area/collapse", data={"area": "House", "collapsed": "0"}, headers=HX)
+    assert 'data-tile="Roof Repair"' in client.get("/").text
+    client.post("/area/collapse", data={"collapsed": "1", "all": "1"}, headers=HX)
+    assert ops.overview(ws).collapsed == ["House", "Personal"]
+    assert client.post("/area/collapse", data={"area": "Nope", "collapsed": "1"}, headers=HX).status_code == 400
+
+
+def test_area_manual_order(client, ws):
+    assert areas_on(client.get("/").text) == ["House", "Personal"]
+    client.post("/area/move", data={"area": "Personal", "before": "House"}, headers=HX)
+    page = client.get("/").text
+    assert areas_on(page) == ["Personal", "House"] and "Sort areas A–Z" in page
+    client.post("/areas/order/reset", headers=HX)
+    assert areas_on(client.get("/").text) == ["House", "Personal"]
+
+
+def test_tile_manual_order(client, ws):
+    ops.new_project(ws, "Fence", "House")
+    ops.set_status(ops.new_project(ws, "Attic", "House"), "on-hold")
+    assert tiles(client.get("/").text) == ["Fence", "Roof Repair", "Attic"]      # status, then name
+    assert client.post("/p/Attic/order", data={"before": "Fence"}, headers=HX).headers["HX-Refresh"] == "true"
+    page = client.get("/").text
+    assert tiles(page) == ["Attic", "Fence", "Roof Repair"] and "Reset order" in page
+    client.post("/p/Attic/order", data={"after": "Roof Repair"}, headers=HX)
+    assert tiles(client.get("/").text) == ["Fence", "Roof Repair", "Attic"]
+    assert client.post("/p/Attic/order", data={"before": "Nope"}, headers=HX).status_code == 400
+    client.post("/area/order/reset", data={"area": "House"}, headers=HX)
+    page = client.get("/").text
+    assert "Reset order" not in page

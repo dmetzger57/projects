@@ -11,7 +11,9 @@ add it; ticking it in either place ticks both; add tasks directly; Clear Done fo
 to the Archive tab, which shows each task's project and date and filters by project and date archived and
 sorts newest/oldest, A–Z or by project; a project's own archived tasks show under its Tasks (Show/Hide);
 swipe right to restore one ·
-**Projects:** projects by area, filters, search, goal progress and spending ·
+**Projects:** projects by area, filters, search, goal progress and spending; tap an area's name to collapse it
+to just the name; reorder areas from the area's ⋯ menu or + › Reorder Areas, and projects within an area by
+dragging or long-press › Move (the same layout as the web overview) ·
 **Project:** status, goals (tap to tick off, swipe to delete), a **Tasks** checklist (tap the box
 to tick, tap the text to edit, swipe or long-press to edit, move or delete; drag to reorder; long-press ›
 Attach File/Link to add files from iCloud Drive › Documents or URLs, tap one to open it; long-press › Add Note

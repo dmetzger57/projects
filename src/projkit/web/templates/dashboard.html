@@ -21,41 +21,47 @@
 
 <div class="layout">
   <div class="col-main">
+    <div class="areas-bar">
+      <button type="button" class="link-quiet" hx-post="/area/collapse" hx-vals='{"collapsed": 1, "all": 1}'>Collapse all</button>
+      <button type="button" class="link-quiet" hx-post="/area/collapse" hx-vals='{"collapsed": 0, "all": 1}'>Expand all</button>
+      {% if areas_manual %}
+      <button type="button" class="link-quiet" hx-post="/areas/order/reset"
+              hx-confirm="Sort the areas alphabetically again?">Sort areas A–Z</button>
+      {% endif %}
+    </div>
     {% for area, cards in areas.items() %}
       {% if cards or (status == 'open' and not q) %}
-      <section class="area">
+      {% set is_collapsed = area in collapsed %}
+      <section class="area{{ ' collapsed' if is_collapsed }}" data-area="{{ area }}">
         <div class="area-head">
-          <h2>{{ area }} <span class="muted">{{ cards|length }}</span></h2>
-          {% if area != '—' %}<a class="link-quiet" href="/new?area={{ area|q }}">+ Add</a>{% endif %}
+          <button type="button" class="handle area-handle" draggable="true" data-area-handle
+                  title="Drag to reorder areas (or focus and use the arrow keys)"
+                  aria-label="Reorder area “{{ area }}”. Use the up and down arrow keys.">⋮⋮</button>
+          <button type="button" class="area-toggle" aria-expanded="{{ 'false' if is_collapsed else 'true' }}"
+                  title="{{ 'Show projects' if is_collapsed else 'Collapse to name' }}"
+                  hx-post="/area/collapse" hx-vals='{{ {"area": area, "collapsed": 0 if is_collapsed else 1}|tojson }}'>
+            <span class="chev" aria-hidden="true">{{ '▸' if is_collapsed else '▾' }}</span>
+            <h2>{{ area }} <span class="muted">{{ cards|length }}</span></h2>
+          </button>
+          <div class="area-actions">
+            {% if area in manual and not is_collapsed %}
+              <button type="button" class="link-quiet" hx-post="/area/order/reset" hx-vals='{{ {"area": area}|tojson }}'
+                      title="Sort this area's projects by status, then name"
+                      hx-confirm="Sort the projects in {{ area }} by status, then name again?">Reset order</button>
+            {% endif %}
+            {% if area != '—' %}<a class="link-quiet" href="/new?area={{ area|q }}">+ Add</a>{% endif %}
+          </div>
         </div>
+        {% if not is_collapsed %}
         {% if cards %}
-        <div class="grid">
+        <div class="grid" data-area="{{ area }}">
           {% for c in cards %}
-          <a class="card" href="{{ c.url }}">
-            <div class="card-top">
-              <span class="card-title">{{ c.p.title }}</span>
-              <span class="pill s-{{ c.status }}">{{ c.status }}</span>
-            </div>
-            {% if c.total %}
-            <div class="progress-row"><span>Goals</span>
-              <div class="bar" role="img" aria-label="{{ c.done }} of {{ c.total }} goals done"><i style="width: {{ c.pct }}%"></i></div>
-              <span>{{ c.done }}/{{ c.total }}</span></div>
-            {% endif %}
-            {% if c.ttotal %}
-            <div class="progress-row"><span>Tasks</span>
-              <div class="bar tasks-bar" role="img" aria-label="{{ c.tdone }} of {{ c.ttotal }} tasks done"><i style="width: {{ c.tpct }}%"></i></div>
-              <span>{{ c.tdone }}/{{ c.ttotal }}</span></div>
-            {% endif %}
-            <div class="card-meta">
-              {% if not c.total and not c.ttotal %}<span>No goals or tasks</span>{% endif %}
-              {% if c.p.receipts %}<span>{{ c.p.total_cost|money }}</span>{% endif %}
-              {% if c.last_note %}<span>{{ c.last_note.strftime('%b %-d') }}</span>{% endif %}
-            </div>
-          </a>
+          {% include "_card.html" %}
           {% endfor %}
         </div>
         {% else %}
         <p class="empty">No projects yet.</p>
+        {% endif %}
         {% endif %}
       </section>
       {% endif %}

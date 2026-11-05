@@ -130,9 +130,33 @@ form.inline { display: inline-flex; gap: 6px; align-items: center; }
   display: grid; gap: 10px; padding: 14px; background: var(--surface); border: 1px solid var(--border);
   border-radius: var(--radius); color: var(--text); box-shadow: var(--shadow); transition: border-color .12s;
 }
-.card:hover { text-decoration: none; border-color: var(--accent); }
-.card-top { display: flex; justify-content: space-between; gap: 8px; align-items: start; }
-.card-title { font-weight: 600; line-height: 1.3; }
+.card { position: relative; }
+.card:hover, .card:focus-within { border-color: var(--accent); }
+.card-top { display: flex; gap: 6px; align-items: start; }
+.card-title { font-weight: 600; line-height: 1.3; color: var(--text); flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.card-title:hover { text-decoration: none; }
+.card-title::after { content: ""; position: absolute; inset: 0; border-radius: inherit; }   /* whole tile opens it */
+.tile-handle { position: relative; z-index: 1; }
+.tile-handle { margin-left: -6px; }
+.card.dragging { opacity: .4; }
+.card.drop-before { box-shadow: inset 3px 0 0 var(--accent); }
+.card.drop-after { box-shadow: inset -3px 0 0 var(--accent); }
+.area-actions { display: flex; gap: 14px; align-items: baseline; margin-left: auto; }
+.area-head { justify-content: flex-start; gap: 4px; align-items: center; }
+.area-handle { margin-left: -8px; }
+.area-toggle {
+  display: inline-flex; align-items: baseline; gap: 6px; border: 0; background: none; color: var(--text);
+  font: inherit; padding: 2px 6px; margin-left: -4px; border-radius: 8px; cursor: pointer; text-align: left;
+}
+.area-toggle:hover, .area-toggle:focus-visible { background: var(--surface-2); }
+.area-toggle .chev { color: var(--muted); font-size: 13px; width: 1em; }
+.area.collapsed .area-head { margin-bottom: 0; }
+.area.dragging { opacity: .4; }
+.area.drop-above { box-shadow: 0 -3px 0 var(--accent); }
+.area.drop-below { box-shadow: 0 3px 0 var(--accent); }
+.areas-bar { display: flex; gap: 16px; justify-content: flex-end; margin-bottom: -10px; }
+button.link-quiet { border: 0; background: none; padding: 0; cursor: pointer; font: inherit; font-size: 13px; }
+button.link-quiet:hover { color: var(--text); }
 .card-meta { display: flex; gap: 12px; color: var(--muted); font-size: 12.5px; font-variant-numeric: tabular-nums; }
 
 .pill { flex: none; font-size: 11.5px; padding: 1px 8px; border-radius: 999px; font-weight: 600; background: var(--surface-2); color: var(--muted); white-space: nowrap; }

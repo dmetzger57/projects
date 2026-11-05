@@ -7,6 +7,7 @@ import plistlib
 import re
 import shutil
 import subprocess
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from ruamel.yaml.comments import CommentedMap, CommentedSeq
@@ -14,7 +15,7 @@ from ruamel.yaml.comments import CommentedMap, CommentedSeq
 from .project import (FILE_RE, split_task_text, split_archived, FORMAT_VERSION, ProjectError, README, STATUSES, URL_SCHEME_RE, Project, file_line_indices,
                       parse_file_line, section_bounds, task_blocks, task_file_indices, task_line_indices,
                       task_note_indices)
-from .workspace import BACKLOG_STEM, Workspace
+from .workspace import BACKLOG_STEM, OVERVIEW_STEM, Workspace
 
 RECEIPT_TAG = "receipt"
 _BAD_NAME = re.compile(r'[/:\x00]')
@@ -115,6 +116,7 @@ def rename(ws: Workspace, p: Project, new_title: str) -> Project:
     p.dir.rename(tmp)
     tmp.rename(dst)
     retarget_archived(ws, old, new_title)
+    retarget_overview(ws, old, new_title)
     return Project.load(dst)
 
 
@@ -904,6 +906,224 @@ def promote_idea(ws: Workspace, ref: str, area: str, title: str | None = None) -
     add_note(p, f"Promoted from idea backlog: {idea}")
     remove_idea(ws, ref)
     return p
+
+
+# ---- Overview layout (0 - Overview.md: area order, collapsed areas, project order per area) ----
+# Mirrors ios/ProjKit Overview.swift. Areas by folder name; projects by folder name, case-insensitive.
+STATUS_ORDER = {"active": 0, "blocked": 1, "on-hold": 2, "backlog": 3, "idea": 4, "closed": 5}
+OVERVIEW_HEAD = ("# Overview\n\nLayout of the Projects overview: area order, collapsed areas, and project order "
+                 "within areas. Written by proj; safe to edit.")
+_OV_SECTIONS = ("areas", "collapsed", "order")
+
+
+@dataclass
+class Overview:
+    areas: list[str] = field(default_factory=list)              # area order, top first
+    collapsed: list[str] = field(default_factory=list)          # areas shown as just their heading
+    order: dict[str, list[str]] = field(default_factory=dict)   # area -> project folder names, top first
+    head: str = OVERVIEW_HEAD
+    extra: str = ""                                              # other `## ` sections, kept as is
+
+    def is_collapsed(self, area: str) -> bool:
+        return area.lower() in {a.lower() for a in self.collapsed}
+
+    def has_order(self, area: str) -> bool:
+        return bool(self.order.get(area))
+
+
+def overview_path(ws: Workspace) -> Path:
+    return ws.root / f"{OVERVIEW_STEM}.md"
+
+
+def parse_overview(text: str) -> Overview:
+    ov, head, extra = Overview(), [], []
+    section, area = None, None
+
+    def bullet(ln: str) -> str | None:
+        return ln[2:].strip() or None if ln.startswith(("- ", "* ")) else None
+
+    for ln in text.splitlines():
+        if ln.startswith("## "):
+            section, area = ln[3:].strip().lower(), None
+            if section not in _OV_SECTIONS:
+                extra.append(ln)
+            continue
+        if section is None:
+            head.append(ln)
+        elif section == "areas":
+            if n := bullet(ln):
+                ov.areas.append(n)
+        elif section == "collapsed":
+            if n := bullet(ln):
+                ov.collapsed.append(n)
+        elif section == "order":
+            if ln.startswith("### "):
+                area = ln[4:].strip()
+                ov.order.setdefault(area, [])
+            elif area is not None and (n := bullet(ln)):
+                ov.order[area].append(n)
+        else:
+            extra.append(ln)
+    ov.head = "\n".join(head).strip() or OVERVIEW_HEAD
+    ov.extra = "\n".join(extra).strip()
+    return ov
+
+
+def format_overview(ov: Overview) -> str:
+    out = [ov.head]
+    for heading, items in (("Areas", ov.areas), ("Collapsed", ov.collapsed)):
+        out += ["", f"## {heading}"] + (["", *(f"- {a}" for a in items)] if items else [])
+    out += ["", "## Order"]
+    for area, names in ov.order.items():
+        if names:
+            out += ["", f"### {area}", *(f"- {n}" for n in names)]
+    if ov.extra:
+        out += ["", ov.extra]
+    return "\n".join(out).rstrip() + "\n"
+
+
+def overview(ws: Workspace) -> Overview:
+    f = overview_path(ws)
+    return parse_overview(f.read_text(encoding="utf-8")) if f.exists() else Overview()
+
+
+def _write_overview(ws: Workspace, ov: Overview) -> None:
+    f = overview_path(ws)
+    tmp = f.with_name(f".{f.name}.tmp")
+    tmp.write_text(format_overview(ov), encoding="utf-8")
+    tmp.replace(f)
+
+
+def project_area(ws: Workspace, p: Project) -> str:
+    """The area a project is shown under on the overview (closed projects keep theirs)."""
+    return p.area or ws.location_area(p) or "—"
+
+
+# -- areas --
+def sort_areas(ov: Overview, areas: list[str]) -> list[str]:
+    """Manually ordered areas first (in their order), then the rest by name."""
+    rank: dict[str, int] = {}
+    for i, a in enumerate(ov.areas):
+        rank.setdefault(a.lower(), i)
+    return sorted(areas, key=lambda a: (0, rank[a.lower()], "") if a.lower() in rank else (1, 0, a.lower()))
+
+
+def overview_areas(ws: Workspace, ov: Overview | None = None) -> list[str]:
+    """Every area on the overview (folders, plus areas only closed projects still name), in order."""
+    names = list(ws.areas())
+    for p in ws.projects():
+        a = project_area(ws, p)
+        if a not in names:
+            names.append(a)
+    return sort_areas(ov or overview(ws), names)
+
+
+def move_area(ws: Workspace, area: str, to: int | None = None, before: str | None = None,
+              after: str | None = None) -> list[str]:
+    """Reorder an area: to a 1-based position, or just before/after another area.
+    Writes the whole area order."""
+    ov = overview(ws)
+    all_areas = overview_areas(ws, ov)
+    if area not in all_areas:
+        raise OpError(f"no area '{area}'")
+    rest = [a for a in all_areas if a != area]
+    if to is not None:
+        if not 1 <= to <= len(rest) + 1:
+            raise OpError(f"position must be 1–{len(rest) + 1}")
+        i = to - 1
+    else:
+        ref = before or after or ""
+        if ref not in rest:
+            raise OpError(f"no area '{ref}'")
+        i = rest.index(ref) + (1 if after else 0)
+    rest.insert(i, area)
+    ov.areas = rest
+    _write_overview(ws, ov)
+    return rest
+
+
+def reset_area_order(ws: Workspace) -> None:
+    """Areas back to alphabetical."""
+    ov = overview(ws)
+    ov.areas = []
+    _write_overview(ws, ov)
+
+
+def set_collapsed(ws: Workspace, areas: list[str], collapsed: bool) -> None:
+    """Collapse areas on the overview to just their heading (or expand them again)."""
+    ov = overview(ws)
+    existing = overview_areas(ws, ov)
+    unknown = [a for a in areas if a not in existing]
+    if unknown:
+        raise OpError(f"no area '{unknown[0]}'")
+    names = {a.lower() for a in areas}
+    keep = [a for a in ov.collapsed if a.lower() not in names]
+    if collapsed:
+        keep += areas
+    have = {a.lower() for a in existing}
+    ov.collapsed = [a for a in keep if a.lower() in have]           # forget deleted areas
+    _write_overview(ws, ov)
+
+
+# -- projects within an area --
+def default_sort_key(p: Project) -> tuple:
+    return STATUS_ORDER.get("legacy" if p.legacy else p.status, 9), p.title.lower()
+
+
+def sort_projects(ov: Overview, area: str, projects: list[Project]) -> list[Project]:
+    """Manually ordered projects first (in their order), then the rest by status and title."""
+    rank: dict[str, int] = {}
+    for i, n in enumerate(ov.order.get(area, [])):
+        rank.setdefault(n.lower(), i)
+    return sorted(projects, key=lambda p: (0, rank[p.folder_name.lower()], ()) if p.folder_name.lower() in rank
+                  else (1, 0, default_sort_key(p)))
+
+
+def area_projects(ws: Workspace, area: str, ov: Overview | None = None) -> list[Project]:
+    """Every project of an area (closed ones included), in overview order."""
+    ov = ov or overview(ws)
+    return sort_projects(ov, area, [p for p in ws.projects() if project_area(ws, p) == area])
+
+
+def move_project(ws: Workspace, p: Project, to: int | None = None, before: str | None = None,
+                 after: str | None = None) -> list[Project]:
+    """Reorder a project within its area: to a 1-based position, or just before/after another project
+    (by folder name). Writes the area's whole order, so later status changes no longer reorder it."""
+    area, ov = project_area(ws, p), overview(ws)
+    rest = [q for q in area_projects(ws, area, ov) if q.folder_name.lower() != p.folder_name.lower()]
+    if to is not None:
+        if not 1 <= to <= len(rest) + 1:
+            raise OpError(f"position must be 1–{len(rest) + 1}")
+        i = to - 1
+    else:
+        ref = (before or after or "").lower()
+        hits = [k for k, q in enumerate(rest) if q.folder_name.lower() == ref]
+        if not hits:
+            raise OpError(f"no project '{before or after}' in area '{area}'")
+        i = hits[0] + (1 if after else 0)
+    rest.insert(i, p)
+    ov.order[area] = [q.folder_name for q in rest]
+    _write_overview(ws, ov)
+    return rest
+
+
+def reset_order(ws: Workspace, area: str | None = None) -> None:
+    """Projects back to the default order (status, then name) in one area, or in all."""
+    ov = overview(ws)
+    if area is None:
+        ov.order = {}
+    else:
+        ov.order.pop(area, None)
+    _write_overview(ws, ov)
+
+
+def retarget_overview(ws: Workspace, old: str, new: str) -> None:
+    """After a project rename, keep its place."""
+    if not overview_path(ws).exists():
+        return
+    ov = overview(ws)
+    ov.order = {a: [new if n.lower() == old.lower() else n for n in names] for a, names in ov.order.items()}
+    _write_overview(ws, ov)
 
 
 # ---- Today list (0 - Today/README.md: tasks to do today, many copied from projects) ----

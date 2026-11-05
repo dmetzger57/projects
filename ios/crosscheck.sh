@@ -23,6 +23,9 @@ from projkit.workspace import Workspace
 T = Path(sys.argv[1]); ws = Workspace(T / "Projects", T / "Receipts")
 p = ws.find("Photo Archive")[0]
 assert p.title == "Photo Archive" and p.status == "blocked"
+ov = ops.overview(ws)                                    # overview written by Swift, renamed with the project
+assert ops.area_projects(ws, ops.project_area(ws, p), ov)[0].folder_name == "Photo Archive", ov
+assert ov.is_collapsed(ops.project_area(ws, p)) and ops.overview_areas(ws, ov)[0] == ops.project_area(ws, p), ov
 assert p.goals[0]["done"] is True and str(p.goals[0]["done_on"]) == datetime.date.today().isoformat()
 assert p.goals[-1]["text"] == "Buy a scanner: Epson FF-680W"
 assert p.links[-1] == {"title": 'Example: "quoted"', "url": "https://example.com/a?b=c#d"}

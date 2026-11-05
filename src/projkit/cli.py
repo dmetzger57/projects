@@ -60,17 +60,22 @@ def ls(area: Optional[str] = typer.Option(None, "--area", "-a"),
     t = Table(box=None, header_style="bold")
     for col in ("Area", "Project", "Status", "Goals", "Tasks", "Cost"):
         t.add_column(col, justify="right" if col in ("Goals", "Tasks", "Cost") else "left")
-    for p in ws.projects(include_closed=closed or status == "closed"):
-        a = p.area or ws.location_area(p) or "—"
-        if area and area.lower() not in a.lower():
-            continue
-        st = "legacy" if p.legacy else p.status
-        if status and st != status:
-            continue
-        done, total = p.goal_progress
-        tdone, ttotal = p.task_progress
-        t.add_row(a, p.title, st, f"{done}/{total}" if total else "", f"{tdone}/{ttotal}" if ttotal else "",
-                  f"${p.total_cost:,.2f}" if p.receipts else "")
+    ov = ops.overview(ws)
+    projs = ws.projects(include_closed=closed or status == "closed")
+    groups: dict[str, list[Project]] = {a: [] for a in ws.areas()}
+    for p in projs:
+        groups.setdefault(ops.project_area(ws, p), []).append(p)
+    for a in ops.sort_areas(ov, list(groups)):
+        for p in ops.sort_projects(ov, a, groups[a]):
+            if area and area.lower() not in a.lower():
+                continue
+            st = "legacy" if p.legacy else p.status
+            if status and st != status:
+                continue
+            done, total = p.goal_progress
+            tdone, ttotal = p.task_progress
+            t.add_row(a, p.title, st, f"{done}/{total}" if total else "", f"{tdone}/{ttotal}" if ttotal else "",
+                      f"${p.total_cost:,.2f}" if p.receipts else "")
     console.print(t)
 
 
@@ -490,6 +495,104 @@ def today_clear(root: Optional[Path] = RootOpt, receipts: Optional[Path] = Recei
     """Remove ticked-off tasks from Today (start a fresh day)."""
     n = ops.clear_today_done(_ws(root, receipts))
     console.print(f"cleared {n} done task{'s' if n != 1 else ''} from Today")
+
+
+order_app = typer.Typer(invoke_without_command=True,
+                        help="Order of areas, and of projects within each area, on the overview (1 = top).")
+app.add_typer(order_app, name="order")
+
+
+def _area(ws: Workspace, area: str) -> str:
+    names = ops.overview_areas(ws)
+    hits = [a for a in names if a.lower() == area.lower()] or [a for a in names if area.lower() in a.lower()]
+    if len(hits) != 1:
+        console.print(f"[red]{'No' if not hits else 'More than one'} area matches '{area}'[/] "
+                      f"(areas: {', '.join(names)})", highlight=False)
+        raise typer.Exit(1)
+    return hits[0]
+
+
+def _print_order(ws: Workspace, areas: list[str] | None = None) -> None:
+    ov = ops.overview(ws)
+    all_areas = ops.overview_areas(ws, ov)
+    for n, a in enumerate(all_areas, 1):
+        if areas is not None and a not in areas:
+            continue
+        ps = ops.area_projects(ws, a, ov)
+        how = "manual order" if ov.has_order(a) else "status, then name"
+        flag = "  [dim]▸ collapsed[/]" if ov.is_collapsed(a) else ""
+        console.print(f"[bold]{n}. {a}[/] [dim]({how})[/]{flag}", highlight=False)
+        for i, p in enumerate(ps, 1):
+            closed = " [dim]closed[/]" if p.status == "closed" else ""
+            console.print(f"   {i:3}. {p.title}{closed}", highlight=False)
+        if not ps:
+            console.print("[dim]        no projects[/]")
+
+
+@order_app.callback()
+def order_ls(ctx: typer.Context, root: Optional[Path] = RootOpt, receipts: Optional[Path] = ReceiptsOpt):
+    """Show the areas in order, each with its projects (closed ones too; the Closed filter shows them)."""
+    if ctx.invoked_subcommand:
+        return
+    _print_order(_ws(root, receipts))
+
+
+@order_app.command("area")
+def order_area(area: str, position: int, root: Optional[Path] = RootOpt, receipts: Optional[Path] = ReceiptsOpt):
+    """Move an area to a position on the overview (1 = top)."""
+    ws = _ws(root, receipts)
+    _run(ops.move_area, ws, _area(ws, area), position)
+    for i, a in enumerate(ops.overview_areas(ws), 1):
+        console.print(f"{i:3}. {a}", highlight=False)
+
+
+@order_app.command("mv")
+def order_mv(project: str, position: int, root: Optional[Path] = RootOpt, receipts: Optional[Path] = ReceiptsOpt):
+    """Move a project to a position within its area (1 = top). The area then keeps this order."""
+    ws = _ws(root, receipts)
+    p = _pick(ws, project)
+    _run(ops.move_project, ws, p, position)
+    _print_order(ws, [ops.project_area(ws, p)])
+
+
+@order_app.command("reset")
+def order_reset(area: Optional[str] = typer.Argument(None, help="Area whose projects to re-sort (default: all)"),
+                areas: bool = typer.Option(False, "--areas", help="Sort the areas themselves A–Z again"),
+                root: Optional[Path] = RootOpt, receipts: Optional[Path] = ReceiptsOpt):
+    """Go back to the default order: projects by status, then name; with --areas, areas A–Z."""
+    ws = _ws(root, receipts)
+    if areas:
+        ops.reset_area_order(ws)
+        console.print("areas: sorted A–Z")
+        if not area:
+            return
+    a = _area(ws, area) if area else None
+    ops.reset_order(ws, a)
+    console.print(f"{a or 'all areas'}: projects sorted by status, then name", highlight=False)
+
+
+def _collapse(areas: list[str], all_: bool, on: bool, root, receipts) -> None:
+    ws = _ws(root, receipts)
+    if not areas and not all_:
+        console.print("[red]Name an area or use --all.[/]")
+        raise typer.Exit(1)
+    names = ops.overview_areas(ws) if all_ else [_area(ws, a) for a in areas]
+    _run(ops.set_collapsed, ws, names, on)
+    console.print(f"{'collapsed' if on else 'expanded'}: {', '.join(names)}", highlight=False)
+
+
+@app.command()
+def collapse(areas: list[str] = typer.Argument(None), all_: bool = typer.Option(False, "--all"),
+             root: Optional[Path] = RootOpt, receipts: Optional[Path] = ReceiptsOpt):
+    """Collapse areas on the overview to just their name (web and iPhone)."""
+    _collapse(areas or [], all_, True, root, receipts)
+
+
+@app.command()
+def expand(areas: list[str] = typer.Argument(None), all_: bool = typer.Option(False, "--all"),
+           root: Optional[Path] = RootOpt, receipts: Optional[Path] = ReceiptsOpt):
+    """Expand collapsed areas again."""
+    _collapse(areas or [], all_, False, root, receipts)
 
 
 archive_app = typer.Typer(invoke_without_command=True,
