@@ -146,12 +146,12 @@ def test_tasks_add_toggle_edit_delete(client, ws):
     assert r.status_code == 200 and "Buy shingles" in r.text and 'id="tasks"' in r.text
     client.post(f"{url}/tasks", data={"text": "Hire roofer"}, headers=HX)
     client.post(f"{url}/tasks/2/toggle", headers=HX)
-    assert proj(ws).tasks == [{"text": "Buy shingles", "done": False, "files": []}, {"text": "Hire roofer", "done": True, "files": []}]
+    assert proj(ws).tasks == [{"text": "Buy shingles", "done": False, "files": [], "notes": []}, {"text": "Hire roofer", "done": True, "files": [], "notes": []}]
     r = client.get(f"{url}/tasks?edit=1")
     assert 'value="Buy shingles"' in r.text and "/tasks/1/edit" in r.text
     client.post(f"{url}/tasks/1/edit", data={"text": "Buy cedar shingles"}, headers=HX)
     client.post(f"{url}/tasks/2/delete", headers=HX)
-    assert proj(ws).tasks == [{"text": "Buy cedar shingles", "done": False, "files": []}]
+    assert proj(ws).tasks == [{"text": "Buy cedar shingles", "done": False, "files": [], "notes": []}]
     assert client.post(f"{url}/tasks/1/edit", data={"text": "  "}, headers=HX).status_code == 400
     page = client.get(url).text
     assert "Buy cedar shingles" in page and page.index('id="tasks"') < page.index("Project Files")
@@ -218,3 +218,22 @@ def test_task_attachments_web(client, ws, tmp_path, monkeypatch):
     client.post("/p/Roof%20Repair/tasks/1/files/1/delete", headers=HX)
     assert [f["name"] for f in proj(ws).tasks[0]["files"]] == ["Roofer"]
     assert (tmp_path / "Documents" / "quote.pdf").exists()
+
+
+def test_task_notes_web(client, ws):
+    url = "/p/Roof%20Repair"
+    client.post(f"{url}/tasks", data={"text": "Get quote"}, headers=HX)
+    assert 'placeholder="Add a note"' in client.get(f"{url}/tasks?note=1").text
+    r = client.post(f"{url}/tasks/1/notes", data={"text": "Ask about <gutters>"}, headers=HX)
+    assert r.status_code == 200 and "Ask about &lt;gutters&gt;" in r.text and 'class="plain task-notes"' in r.text
+    client.post(f"{url}/tasks/1/notes", data={"text": "Two quotes minimum"}, headers=HX)
+    assert proj(ws).tasks[0]["notes"] == ["Ask about <gutters>", "Two quotes minimum"]
+    r = client.get(f"{url}/tasks?note_edit=1.2")
+    assert 'value="Two quotes minimum"' in r.text and "/tasks/1/notes/2/edit" in r.text
+    assert client.get(f"{url}/tasks?note_edit=x").status_code == 400
+    client.post(f"{url}/tasks/1/notes/2/edit", data={"text": "Three quotes"}, headers=HX)
+    client.post(f"{url}/tasks/1/notes/1/delete", headers=HX)
+    assert proj(ws).tasks[0]["notes"] == ["Three quotes"]
+    assert client.post(f"{url}/tasks/1/notes/1/edit", data={"text": " "}, headers=HX).status_code == 400
+    assert client.post(f"{url}/tasks/1/notes/5/delete", headers=HX).status_code == 400
+    assert "Three quotes" in client.get(url).text

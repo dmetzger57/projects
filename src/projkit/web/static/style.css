@@ -216,6 +216,13 @@ details summary { cursor: pointer; color: var(--accent); font-size: 14px; margin
 .task-files li { display: flex; gap: 6px; align-items: baseline; padding: 2px 0; border: 0; }
 .task-files .x { margin-left: auto; }
 .task-attach { margin: 8px 0 2px 28px; }
+.task-notes { margin: 4px 0 0 28px; padding: 0; list-style: none; font-size: 13.5px; color: var(--muted); }
+.task-notes li { display: flex; gap: 6px; align-items: baseline; padding: 2px 0; border: 0; }
+.task-notes li::before { content: "–"; }
+.task-notes li:has(form)::before { content: none; }
+.task-notes .note-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+.task-notes .x:first-of-type { margin-left: auto; }
+.task-note-add { margin: 6px 0 2px 28px; }
 .x.edit { font-size: 15px; }
 .x.edit:hover { background: var(--accent-soft); color: var(--accent); }
 .handle {

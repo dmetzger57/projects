@@ -11,8 +11,9 @@ from pathlib import Path
 
 from ruamel.yaml.comments import CommentedMap, CommentedSeq
 
-from .project import (FORMAT_VERSION, ProjectError, README, STATUSES, URL_SCHEME_RE, Project, file_line_indices,
-                      parse_file_line, section_bounds, task_blocks, task_file_indices, task_line_indices)
+from .project import (FILE_RE, FORMAT_VERSION, ProjectError, README, STATUSES, URL_SCHEME_RE, Project, file_line_indices,
+                      parse_file_line, section_bounds, task_blocks, task_file_indices, task_line_indices,
+                      task_note_indices)
 from .workspace import BACKLOG_STEM, Workspace
 
 RECEIPT_TAG = "receipt"
@@ -633,6 +634,90 @@ def remove_task_file(p: Project, task: str, ref: str) -> dict:
     p.body = body_remove_task_file(p.body, i, j)
     p.save()
     return f
+
+
+# ---- task notes (indented "  - text" lines under a task, shown below it) ----
+# body_*_task_note functions are byte-identical with ios/ProjKit ReadmeBody task note functions.
+def _clean_task_note(text: str) -> str:
+    t = " ".join(text.replace("\r", "\n").split("\n")).strip()
+    if not t:
+        raise OpError("note text is empty")
+    if FILE_RE.match("- " + t):
+        raise OpError("a note can't be just a link; attach it to the task instead")
+    return t
+
+
+def _task_note_line(body: str, task: int, index: int) -> tuple[list[str], int]:
+    lines = body.rstrip("\n").split("\n")
+    blocks = task_blocks(lines)
+    if not 0 <= task < len(blocks):
+        raise OpError(f"no task #{task + 1}")
+    idx = task_note_indices(lines, blocks[task])
+    if not 0 <= index < len(idx):
+        raise OpError(f"task #{task + 1} has no note #{index + 1}")
+    return lines, idx[index]
+
+
+def body_add_task_note(body: str, task: int, text: str) -> str:
+    """Adds a note after the task's last note (or directly under the task line)."""
+    line = TASK_FILE_INDENT + "- " + _clean_task_note(text)
+    lines = body.rstrip("\n").split("\n")
+    blocks = task_blocks(lines)
+    if not 0 <= task < len(blocks):
+        raise OpError(f"no task #{task + 1}")
+    idx = task_note_indices(lines, blocks[task])
+    lines.insert(idx[-1] + 1 if idx else blocks[task][0] + 1, line)
+    return "\n".join(lines) + "\n"
+
+
+def body_edit_task_note(body: str, task: int, index: int, text: str) -> str:
+    lines, i = _task_note_line(body, task, index)
+    stripped = lines[i].lstrip(" \t")
+    lines[i] = lines[i][:len(lines[i]) - len(stripped)] + "- " + _clean_task_note(text)
+    return "\n".join(lines) + "\n"
+
+
+def body_remove_task_note(body: str, task: int, index: int) -> str:
+    lines, i = _task_note_line(body, task, index)
+    del lines[i]
+    return "\n".join(lines) + "\n"
+
+
+def _task_note_index(t: dict, ref: str) -> int:
+    notes = t["notes"]
+    if ref.isdigit():
+        i = int(ref) - 1
+        if 0 <= i < len(notes):
+            return i
+        raise OpError(f"no note #{ref} (task has {len(notes)})")
+    hits = [i for i, n in enumerate(notes) if ref.lower() in n.lower()]
+    if len(hits) != 1:
+        raise OpError(f"note reference '{ref}' matches {len(hits)} notes")
+    return hits[0]
+
+
+def add_task_note(p: Project, task: str, text: str) -> str:
+    i = _task_index(p, task)
+    p.body = body_add_task_note(p.body, i, text)
+    p.save()
+    return p.tasks[i]["notes"][-1]       # always inserted after the task's last note
+
+
+def edit_task_note(p: Project, task: str, ref: str, text: str) -> str:
+    i = _task_index(p, task)
+    j = _task_note_index(p.tasks[i], ref)
+    p.body = body_edit_task_note(p.body, i, j, text)
+    p.save()
+    return p.tasks[i]["notes"][j]
+
+
+def remove_task_note(p: Project, task: str, ref: str) -> str:
+    i = _task_index(p, task)
+    j = _task_note_index(p.tasks[i], ref)
+    n = p.tasks[i]["notes"][j]
+    p.body = body_remove_task_note(p.body, i, j)
+    p.save()
+    return n
 
 
 def open_file_entry(entry: dict) -> None:

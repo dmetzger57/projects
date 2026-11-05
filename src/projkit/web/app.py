@@ -130,7 +130,8 @@ def create_app(ws: Workspace) -> FastAPI:
         return dict(p=p, url=purl(p), card=card(p), areas=ws.areas(), closed=ws.is_in_closed(p),
                     notes=list(reversed(p.notes)), today=dt.date.today().isoformat(),
                     files=files_info(p.files), file_edit=None,
-                    task_files=[files_info(t["files"]) for t in p.tasks], task_attach=None)
+                    task_files=[files_info(t["files"]) for t in p.tasks], task_attach=None,
+                    task_note_add=None, task_note_edit=None)
 
     def files_info(entries: list[dict]) -> list[dict]:
         """Link entries plus whether the file exists and its full path (for display)."""
@@ -170,13 +171,41 @@ def create_app(ws: Workspace) -> FastAPI:
         return goals_partial(request, p)
 
     # ---- tasks (## Tasks checklist in the README body) ---------------------
-    def tasks_partial(request: Request, p: Project, editing: int | None = None, attach: int | None = None):
+    def tasks_partial(request: Request, p: Project, editing: int | None = None, attach: int | None = None,
+                      note: int | None = None, note_edit: tuple[int, int] | None = None):
         return partial(request, "_tasks.html", **{**_project_ctx(Project.load(p.dir)),
-                                                  "task_edit": editing, "task_attach": attach})
+                                                  "task_edit": editing, "task_attach": attach,
+                                                  "task_note_add": note, "task_note_edit": note_edit})
 
     @app.get("/p/{key}/tasks", response_class=HTMLResponse)
-    def tasks_view(request: Request, key: str, edit: int | None = None, attach: int | None = None):
-        return tasks_partial(request, get_project(key), edit, attach)
+    def tasks_view(request: Request, key: str, edit: int | None = None, attach: int | None = None,
+                   note: int | None = None, note_edit: str | None = None):
+        ne = None
+        if note_edit:                      # "task.note", both 1-based
+            try:
+                ne = tuple(int(x) for x in note_edit.split(".", 1))
+            except ValueError:
+                raise HTTPException(400, "note_edit must look like 2.1")
+        return tasks_partial(request, get_project(key), edit, attach, note, ne)
+
+    # task notes: indented "  - text" lines under a task
+    @app.post("/p/{key}/tasks/{n}/notes")
+    def task_note_add(request: Request, key: str, n: int, text: str = Form(...)):
+        p = get_project(key)
+        ops.add_task_note(p, str(n), text)
+        return tasks_partial(request, p)
+
+    @app.post("/p/{key}/tasks/{n}/notes/{m}/edit")
+    def task_note_edit(request: Request, key: str, n: int, m: int, text: str = Form(...)):
+        p = get_project(key)
+        ops.edit_task_note(p, str(n), str(m), text)
+        return tasks_partial(request, p)
+
+    @app.post("/p/{key}/tasks/{n}/notes/{m}/delete")
+    def task_note_delete(request: Request, key: str, n: int, m: int):
+        p = get_project(key)
+        ops.remove_task_note(p, str(n), str(m))
+        return tasks_partial(request, p)
 
     # task attachments: links to files under ~/Documents or URLs (referenced, never copied)
     @app.post("/p/{key}/tasks/{n}/files")

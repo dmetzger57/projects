@@ -4,19 +4,28 @@ import UniformTypeIdentifiers
 import ProjKitCore
 
 struct TextEdit: Identifiable {
-    enum Kind { case section(String), note }
+    enum Kind { case section(String), note, taskNote(task: Int, index: Int?) }   // index nil = new task note
     let kind: Kind
     let initial: String
     var id: String {
         switch kind {
         case let .section(s): "section-\(s)"
         case .note: "note"
+        case let .taskNote(t, i): "task-\(t)-note-\(i.map(String.init) ?? "new")"
         }
     }
     var title: String {
         switch kind {
         case let .section(s): s
         case .note: "New Note"
+        case let .taskNote(_, i): i == nil ? "Add Task Note" : "Edit Task Note"
+        }
+    }
+    var hint: String {
+        switch kind {
+        case let .taskNote(_, i): "One line, shown under the task. Markdown: **bold**, *italic*."
+                                  + (i == nil ? "" : " Clear it to delete the note.")
+        default: "Markdown: **bold**, *italic*, `- item` for lists."
         }
     }
 }
@@ -104,10 +113,17 @@ struct ProjectDetailView: View {
             ToolbarItem(placement: .primaryAction) { actionsMenu(p, closed: closed) }
         }
         .sheet(item: $edit) { e in
-            TextEditSheet(title: e.title, initial: e.initial) { text in
+            TextEditSheet(title: e.title, initial: e.initial, hint: e.hint) { text in
                 switch e.kind {
                 case let .section(name): await model.perform { try Ops.setSection($0, p, name, text) }
                 case .note: await model.perform { try Ops.addNote($0, p, text) }
+                case let .taskNote(task, nil): await model.perform { try Ops.addTaskNote($0, p, task: task, text: text) }
+                case let .taskNote(task, index?):
+                    if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {   // emptied = delete
+                        await model.perform { try Ops.removeTaskNote($0, p, task: task, index: index) }
+                    } else {
+                        await model.perform { try Ops.editTaskNote($0, p, task: task, index: index, text: text) }
+                    }
                 }
             }
         }
@@ -321,6 +337,29 @@ struct ProjectDetailView: View {
                             .contentShape(Rectangle())
                             .onTapGesture { startEditing(t) }
                             .accessibilityHint("Double-tap to edit")
+                        ForEach(t.notes) { n in
+                            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                                Text("–").accessibilityHidden(true)
+                                Text(markdown(n.text))
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                            .padding(.leading, 8)
+                            .contentShape(Rectangle())
+                            .onTapGesture { edit = TextEdit(kind: .taskNote(task: t.index, index: n.index), initial: n.text) }
+                            .contextMenu {
+                                Button { edit = TextEdit(kind: .taskNote(task: t.index, index: n.index), initial: n.text) } label: {
+                                    Label("Edit Note", systemImage: "pencil")
+                                }
+                                Button(role: .destructive) {
+                                    Task { await model.perform { try Ops.removeTaskNote($0, p, task: t.index, index: n.index) } }
+                                } label: { Label("Delete Note", systemImage: "trash") }
+                            }
+                            .accessibilityElement(children: .combine)
+                            .accessibilityLabel("Note: \(n.text)")
+                            .accessibilityHint("Double-tap to edit")
+                        }
                         ForEach(t.files) { f in
                             Button { open(f) } label: {
                                 Label(f.name, systemImage: f.isURL ? "link" : "paperclip")
@@ -341,6 +380,20 @@ struct ProjectDetailView: View {
                 }
                 .contextMenu {
                     Button { startEditing(t) } label: { Label("Edit", systemImage: "pencil") }
+                    Section("Notes") {
+                        Button { edit = TextEdit(kind: .taskNote(task: t.index, index: nil), initial: "") } label: {
+                            Label("Add Note…", systemImage: "note.text.badge.plus")
+                        }
+                        if !t.notes.isEmpty {
+                            Menu {
+                                ForEach(t.notes) { n in
+                                    Button(role: .destructive) {
+                                        Task { await model.perform { try Ops.removeTaskNote($0, p, task: t.index, index: n.index) } }
+                                    } label: { Text(n.text) }
+                                }
+                            } label: { Label("Delete Note", systemImage: "minus.circle") }
+                        }
+                    }
                     Section("Attachments") {
                         Button { fileSheet = FileSheet(mode: .add, isLink: false, task: t.index) } label: {
                             Label("Attach File…", systemImage: "paperclip")

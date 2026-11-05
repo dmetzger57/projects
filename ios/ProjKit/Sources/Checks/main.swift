@@ -68,6 +68,11 @@ if args.count == 4, args[1] == "--mutate" {
         try Ops.moveTask(ws, photo, from: 2, to: 0)
         try Ops.addTaskFile(ws, photo, task: 1, target: "Documents/Quotes/Epson quote.pdf", name: nil)
         try Ops.addTaskFile(ws, photo, task: 1, target: "https://epson.com/ff-680w", name: "Product page")
+        try Ops.addTaskNote(ws, photo, task: 1, text: "Ask about the 3-year warranty")
+        try Ops.addTaskNote(ws, photo, task: 1, text: "Check B&H price")
+        try Ops.editTaskNote(ws, photo, task: 1, index: 1, text: "Check B&H and Adorama prices")
+        try Ops.addTaskNote(ws, photo, task: 0, text: "Delete me")
+        try Ops.removeTaskNote(ws, photo, task: 0, index: 0)
         try Ops.addFile(ws, photo, target: "Documents/Manuals/Epson FF-680W.pdf", name: "Scanner manual")
         try Ops.addFile(ws, photo, target: "https://docs.google.com/document/d/abc/edit?tab=t.0", name: nil)
         try Ops.editFile(ws, photo, index: 1, name: "Plan", target: nil)
@@ -258,6 +263,33 @@ test("task attachments: identical output to projkit/ops.py (same literals as tes
     let mv = "\n## Tasks\n- [ ] A\n  - [a](https://a.org)\n- [ ] B\n  - [b](<Documents/b.pdf>)\n"
     eq(try ReadmeBody.moveTask(mv, index: 1, to: 0), "\n## Tasks\n- [ ] B\n  - [b](<Documents/b.pdf>)\n- [ ] A\n  - [a](https://a.org)\n")
     eq(try ReadmeBody.removeTask(mv, index: 0), "\n## Tasks\n- [ ] B\n  - [b](<Documents/b.pdf>)\n")
+}
+
+test("task notes: identical output to projkit/ops.py (same literals as tests/test_tasks.py)") {
+    let note = "\n## Tasks\n- [ ] A\n  - [Q](<Documents/q.pdf>)\n- [x] B\n  hand-written\n\n## Notes\n"
+    var b = try ReadmeBody.addTaskNote(note, task: 0, text: "Call\nfirst")
+    b = try ReadmeBody.addTaskNote(b, task: 0, text: "  Then email  ")
+    eq(b, "\n## Tasks\n- [ ] A\n  - Call first\n  - Then email\n  - [Q](<Documents/q.pdf>)\n- [x] B\n  hand-written\n\n## Notes\n")
+    let t = ReadmeBody.tasks(b)
+    eq(t[0].notes.map(\.text), ["Call first", "Then email"])
+    eq(t[0].files.map(\.name), ["Q"])
+    eq(t[1].notes.map(\.text), ["hand-written"])
+    b = try ReadmeBody.addTaskNote(b, task: 1, text: "Second")
+    check(b.contains("- [x] B\n  hand-written\n  - Second\n\n## Notes\n"), "note after hand-written note")
+    b = try ReadmeBody.editTaskNote(b, task: 1, index: 0, text: "Edited *note*")
+    check(b.contains("- [x] B\n  - Edited *note*\n  - Second\n"), "edit note")
+    b = try ReadmeBody.removeTaskNote(b, task: 0, index: 0)
+    check(b.hasPrefix("\n## Tasks\n- [ ] A\n  - Then email\n  - [Q](<Documents/q.pdf>)\n- [x] B\n"), "remove note")
+    let moved = try ReadmeBody.moveTask(b, index: 1, to: 0)
+    check(moved.hasPrefix("\n## Tasks\n- [x] B\n  - Edited *note*\n  - Second\n- [ ] A\n"), "move carries notes")
+    eq(try ReadmeBody.removeTask(b, index: 1), "\n## Tasks\n- [ ] A\n  - Then email\n  - [Q](<Documents/q.pdf>)\n\n## Notes\n")
+    var threw = 0
+    do { _ = try ReadmeBody.addTaskNote(b, task: 9, text: "x") } catch { threw += 1 }
+    do { _ = try ReadmeBody.addTaskNote(b, task: 0, text: " \n ") } catch { threw += 1 }
+    do { _ = try ReadmeBody.editTaskNote(b, task: 0, index: 5, text: "x") } catch { threw += 1 }
+    do { _ = try ReadmeBody.removeTaskNote(b, task: 1, index: 2) } catch { threw += 1 }
+    do { _ = try ReadmeBody.addTaskNote(b, task: 0, text: "[link](https://x.org)") } catch { threw += 1 }
+    eq(threw, 5, "bad task / note / empty / bare link rejected")
 }
 
 test("tasks: move and remove carry detail lines (same literals as tests/test_tasks.py)") {

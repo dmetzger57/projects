@@ -40,6 +40,14 @@ public struct ProjectTask: Identifiable, Hashable, Sendable {
     public let done: Bool
     /// Attachments: indented links under the task (files under Documents/ or URLs); index is per task.
     public var files: [ProjectFile] = []
+    /// Notes: the task's other indented detail lines ("  - text"); index is per task.
+    public var notes: [TaskNote] = []
+    public var id: Int { index }
+}
+
+public struct TaskNote: Identifiable, Hashable, Sendable {
+    public let index: Int          // 0-based position among the task's notes
+    public let text: String
     public var id: Int { index }
 }
 
@@ -255,7 +263,8 @@ public enum ReadmeBody {
                 let f = parseFileLine(stripIndent(lines[j]))!
                 return ProjectFile(index: k, name: f.name, target: f.target)
             }
-            return ProjectTask(index: n, text: t.text, done: t.done, files: files)
+            let notes = taskNoteIndices(lines, b).enumerated().map { k, j in TaskNote(index: k, text: parseTaskNote(lines[j])) }
+            return ProjectTask(index: n, text: t.text, done: t.done, files: files, notes: notes)
         }
     }
 
@@ -388,6 +397,61 @@ public enum ReadmeBody {
 
     public static func removeTaskFile(_ body: String, task: Int, index: Int) throws -> String {
         var (lines, i) = try taskFileLine(body, task: task, index: index)
+        lines.remove(at: i)
+        return lines.joined(separator: "\n") + "\n"
+    }
+
+    // MARK: task notes — byte-identical with projkit/ops.py body_*_task_note
+
+    /// Note lines of a task: every detail line that isn't an attachment.
+    static func taskNoteIndices(_ lines: [String], _ b: (start: Int, end: Int)) -> [Int] {
+        (b.start + 1..<b.end).filter { parseFileLine(stripIndent(lines[$0])) == nil }
+    }
+
+    /// Text of a note line ("  - text"; a hand-written line without the bullet also counts).
+    static func parseTaskNote(_ line: String) -> String {
+        let t = stripIndent(line)
+        let body = t.hasPrefix("- ") || t.hasPrefix("* ") ? String(t.dropFirst(2)) : t
+        return body.trimmingCharacters(in: .whitespaces)
+    }
+
+    static func cleanTaskNote(_ text: String) throws -> String {
+        let t = text.replacingOccurrences(of: "\r", with: "\n").components(separatedBy: "\n")
+            .joined(separator: " ").trimmingCharacters(in: .whitespaces)
+        guard !t.isEmpty else { throw OpError("note text is empty") }
+        guard parseFileLine("- " + t) == nil else { throw OpError("a note can't be just a link; attach it to the task instead") }
+        return t
+    }
+
+    static func taskNoteLine(_ body: String, task: Int, index: Int) throws -> ([String], Int) {
+        let lines = splitBody(body)
+        let blocks = taskBlocks(lines)
+        guard blocks.indices.contains(task) else { throw OpError("no task #\(task + 1)") }
+        let idx = taskNoteIndices(lines, blocks[task])
+        guard idx.indices.contains(index) else { throw OpError("task #\(task + 1) has no note #\(index + 1)") }
+        return (lines, idx[index])
+    }
+
+    /// Adds a note after the task's last note (or directly under the task line).
+    public static func addTaskNote(_ body: String, task: Int, text: String) throws -> String {
+        let line = taskFileIndent + "- " + (try cleanTaskNote(text))
+        var lines = splitBody(body)
+        let blocks = taskBlocks(lines)
+        guard blocks.indices.contains(task) else { throw OpError("no task #\(task + 1)") }
+        let idx = taskNoteIndices(lines, blocks[task])
+        lines.insert(line, at: idx.last.map { $0 + 1 } ?? blocks[task].start + 1)
+        return lines.joined(separator: "\n") + "\n"
+    }
+
+    public static func editTaskNote(_ body: String, task: Int, index: Int, text: String) throws -> String {
+        var (lines, i) = try taskNoteLine(body, task: task, index: index)
+        let stripped = stripIndent(lines[i])
+        lines[i] = String(lines[i].prefix(lines[i].count - stripped.count)) + "- " + (try cleanTaskNote(text))
+        return lines.joined(separator: "\n") + "\n"
+    }
+
+    public static func removeTaskNote(_ body: String, task: Int, index: Int) throws -> String {
+        var (lines, i) = try taskNoteLine(body, task: task, index: index)
         lines.remove(at: i)
         return lines.joined(separator: "\n") + "\n"
     }

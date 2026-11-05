@@ -56,6 +56,7 @@ Free text.
 
 ## Tasks
 - [ ] Order scanner
+  - Ask about the 3-year warranty
   - [Quote](<Documents/Quotes/Epson FF-680W.pdf>)
   - [Product page](https://epson.com/ff-680w)
 - [x] Pick storage location
@@ -86,7 +87,10 @@ Rules:
   (`  - [Friendly name](<Documents/…>)` or `  - [Name](https://…)`, same target rules as Project Files below);
   writers indent them two spaces and add new ones after the task's last attachment (else at the end of its
   detail lines), and a new task goes after the last task's detail lines. Files are referenced by path, never
-  copied; `proj lint` reports attachments pointing at missing files as L014. Goals (front matter) are longer-term outcomes;
+  copied; `proj lint` reports attachments pointing at missing files as L014. Every other detail line is a
+  task note, shown indented below the task: its text is the line without indentation and without a leading
+  `- ` or `* `. Writers store a note as one line `  - text` (newlines folded to spaces), add new ones after
+  the task's last note (else directly under the task line), and refuse a note that would read as an attachment. Goals (front matter) are longer-term outcomes;
   tasks are the to-do checklist.
 - Unknown front-matter keys must be preserved (forward compatibility).
 

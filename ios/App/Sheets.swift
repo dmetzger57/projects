@@ -4,6 +4,7 @@ import ProjKitCore
 struct TextEditSheet: View {
     let title: String
     let initial: String
+    var hint = "Markdown: **bold**, *italic*, `- item` for lists."
     let save: (String) async -> Void
     @State private var text = ""
     @State private var saving = false
@@ -28,7 +29,7 @@ struct TextEditSheet: View {
                     }
                 }
                 .safeAreaInset(edge: .bottom) {
-                    Text("Markdown: **bold**, *italic*, `- item` for lists.")
+                    Text(hint)
                         .font(.caption).foregroundStyle(.secondary).padding(8)
                 }
         }

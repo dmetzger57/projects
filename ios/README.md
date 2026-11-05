@@ -8,7 +8,8 @@ without the Mac being on, and changes show up in `proj` on the Mac.
 **Projects:** projects by area, filters, search, goal progress and spending ·
 **Project:** status, goals (tap to tick off, swipe to delete), a **Tasks** checklist (tap the box
 to tick, tap the text to edit, swipe or long-press to edit, move or delete; drag to reorder; long-press ›
-Attach File/Link to add files from iCloud Drive › Documents or URLs, tap one to open it), notes, editing
+Attach File/Link to add files from iCloud Drive › Documents or URLs, tap one to open it; long-press › Add Note
+for notes shown under the task, tap a note to edit it, long-press it to delete), notes, editing
 Description, **Project Files** links to files in iCloud Drive › Documents or to URLs (browse or
 type a path, friendly names, Show Paths, tap to open), links, and receipts (scan with the camera or pick a file,
 preview, detach), rename, close and reopen · **Ideas:** add, delete, make into a project ·

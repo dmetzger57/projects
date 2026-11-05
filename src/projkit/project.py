@@ -73,6 +73,17 @@ def task_file_indices(lines: list[str], block: tuple[int, int]) -> list[int]:
     return [j for j in range(block[0] + 1, block[1]) if FILE_RE.match(lines[j].lstrip(" \t"))]
 
 
+def task_note_indices(lines: list[str], block: tuple[int, int]) -> list[int]:
+    """Note lines of a task: every detail line that isn't an attachment."""
+    return [j for j in range(block[0] + 1, block[1]) if not FILE_RE.match(lines[j].lstrip(" \t"))]
+
+
+def parse_task_note(line: str) -> str:
+    """Text of a task note line ("  - text"; a hand-written line without the bullet also counts)."""
+    t = line.lstrip(" \t")
+    return t[2:].strip() if t[:2] in ("- ", "* ") else t.strip()
+
+
 def _yaml() -> YAML:
     y = YAML()  # round-trip mode: preserves key order and comments
     y.preserve_quotes = True
@@ -253,7 +264,8 @@ class Project:
         for start, end in task_blocks(lines):
             m = TASK_RE.match(lines[start])
             files = [parse_file_line(lines[j].lstrip(" \t")) for j in task_file_indices(lines, (start, end))]
-            out.append({"text": m.group(2).strip(), "done": m.group(1) != " ", "files": files})
+            notes = [parse_task_note(lines[j]) for j in task_note_indices(lines, (start, end))]
+            out.append({"text": m.group(2).strip(), "done": m.group(1) != " ", "files": files, "notes": notes})
         return out
 
     @property

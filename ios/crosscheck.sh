@@ -35,6 +35,10 @@ assert [(f["name"], f["target"], f["kind"]) for f in p.tasks[1]["files"]] == [
     ("Epson quote", "Documents/Quotes/Epson quote.pdf", "file"),
     ("Product page", "https://epson.com/ff-680w", "url")], p.tasks[1]
 assert ops.add_task_file(p, "Order", "https://b-h.example/epson")["name"] == "b-h.example"
+assert p.tasks[1]["notes"] == ["Ask about the 3-year warranty", "Check B&H and Adorama prices"], p.tasks[1]
+assert p.tasks[0]["notes"] == [], p.tasks[0]
+assert ops.edit_task_note(p, "Order", "warranty", "Ask about the warranty") == "Ask about the warranty"
+assert Project.load(p.dir).tasks[1]["notes"][0] == "Ask about the warranty"
 assert [(f["name"], f["target"], f["kind"]) for f in p.files] == [
     ("Scanner manual", "Documents/Manuals/Epson FF-680W.pdf", "file"),
     ("Plan", "https://docs.google.com/document/d/abc/edit?tab=t.0", "url")], p.files

@@ -286,6 +286,8 @@ def task_ls(project: str, root: Optional[Path] = RootOpt, receipts: Optional[Pat
     p = _pick(_ws(root, receipts), project)
     for i, t in enumerate(p.tasks, 1):
         console.print(f"{i:3}. {'[green]✔[/]' if t['done'] else '☐'} {t['text']}", highlight=False)
+        for j, n in enumerate(t["notes"], 1):
+            console.print(f"       {j}. [dim]—[/] {n}", highlight=False)
         for j, f in enumerate(t["files"], 1):
             icon = "🔗" if f["kind"] == "url" else "📄"
             console.print(f"       {j}. {icon} {f['name']}  [dim]{f['target']}[/]", highlight=False)
@@ -331,6 +333,28 @@ def task_mv(project: str, task: str, position: int,
 def task_rm(project: str, task: str, root: Optional[Path] = RootOpt, receipts: Optional[Path] = ReceiptsOpt):
     t = _run(ops.remove_task, _pick(_ws(root, receipts), project), task)
     console.print(f"removed: {t['text']}", highlight=False)
+
+
+@task_app.command("note")
+def task_note(project: str, task: str, text: str, root: Optional[Path] = RootOpt, receipts: Optional[Path] = ReceiptsOpt):
+    """Add a note to a task (shown indented below it)."""
+    n = _run(ops.add_task_note, _pick(_ws(root, receipts), project), task, text)
+    console.print(f"[green]noted[/] {n}", highlight=False)
+
+
+@task_app.command("note-edit")
+def task_note_edit(project: str, task: str, note: str, text: str,
+                   root: Optional[Path] = RootOpt, receipts: Optional[Path] = ReceiptsOpt):
+    """Replace a task's note (by number or text)."""
+    n = _run(ops.edit_task_note, _pick(_ws(root, receipts), project), task, note, text)
+    console.print(f"edited: {n}", highlight=False)
+
+
+@task_app.command("note-rm")
+def task_note_rm(project: str, task: str, note: str, root: Optional[Path] = RootOpt, receipts: Optional[Path] = ReceiptsOpt):
+    """Delete a task's note (by number or text)."""
+    n = _run(ops.remove_task_note, _pick(_ws(root, receipts), project), task, note)
+    console.print(f"deleted note: {n}", highlight=False)
 
 
 @task_app.command("attach")

@@ -28,6 +28,8 @@ proj task edit photo <task> "new text"
 proj task mv photo <task> 1             # reorder (1 = top); web: drag ⋮⋮ or ↑/↓; iPhone: drag or long-press
 proj task attach photo <task> ~/Documents/Quotes/epson.pdf   # or a URL; --name "Quote"; linked, never copied
 proj task detach|open photo <task> <attachment>              # web: 📎 on a task; iPhone: long-press › Attach
+proj task note photo <task> "Ask about the warranty"         # notes shown indented under the task
+proj task note-edit|note-rm photo <task> <note> ["new text"] # web: 📝, ✎, ×; iPhone: long-press › Add Note, tap a note to edit
 proj link add web https://… -t "Docs"
 proj file add photo "Documents/Manuals/scanner.pdf" -n "Scanner manual"   # Project Files link
 proj file add photo https://docs.google.com/… -n "Plan"                    # …or a URL

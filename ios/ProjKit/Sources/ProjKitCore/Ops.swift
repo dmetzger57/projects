@@ -269,6 +269,20 @@ public enum Ops {
         try editBody(ws, p) { try ReadmeBody.removeTaskFile($0, task: task, index: index) }
     }
 
+    // MARK: task notes
+
+    public static func addTaskNote(_ ws: Workspace, _ p: Project, task: Int, text: String) throws {
+        try editBody(ws, p) { try ReadmeBody.addTaskNote($0, task: task, text: text) }
+    }
+
+    public static func editTaskNote(_ ws: Workspace, _ p: Project, task: Int, index: Int, text: String) throws {
+        try editBody(ws, p) { try ReadmeBody.editTaskNote($0, task: task, index: index, text: text) }
+    }
+
+    public static func removeTaskNote(_ ws: Workspace, _ p: Project, task: Int, index: Int) throws {
+        try editBody(ws, p) { try ReadmeBody.removeTaskNote($0, task: task, index: index) }
+    }
+
     /// Location of a "Documents/…" entry inside the user-picked Documents folder (nil for URLs
     /// or anything escaping it).
     public static func fileURL(_ f: ProjectFile, documentsRoot: URL?) -> URL? {

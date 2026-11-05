@@ -24,7 +24,7 @@ def test_add_without_notes_and_into_section_with_intro_text():
 def test_toggle_edit_remove_keep_other_lines():
     b = "\n## Tasks\n- [ ] one\n  indented detail\n- [X] two\n* [ ] not a task\n\n## Notes\n"
     p = Project(dir=None, body=b)
-    assert p.tasks == [{"text": "one", "done": False, "files": []}, {"text": "two", "done": True, "files": []}]
+    assert p.tasks == [{"text": "one", "done": False, "files": [], "notes": ["indented detail"]}, {"text": "two", "done": True, "files": [], "notes": []}]
     b = ops.body_set_task(b, 0, True)
     b = ops.body_set_task(b, 1, False)
     assert b == "\n## Tasks\n- [x] one\n  indented detail\n- [ ] two\n* [ ] not a task\n\n## Notes\n"
@@ -46,13 +46,13 @@ def test_project_level_ops(tmp_path):
     p.save()
     ops.add_task(p, "Buy shingles")
     ops.add_task(p, "Hire roofer")
-    assert ops.set_task(p, "roofer", True) == {"text": "Hire roofer", "done": True, "files": []}
+    assert ops.set_task(p, "roofer", True) == {"text": "Hire roofer", "done": True, "files": [], "notes": []}
     ops.edit_task(p, "1", "Buy cedar shingles")
     q = Project.load(d)
-    assert q.tasks == [{"text": "Buy cedar shingles", "done": False, "files": []}, {"text": "Hire roofer", "done": True, "files": []}]
+    assert q.tasks == [{"text": "Buy cedar shingles", "done": False, "files": [], "notes": []}, {"text": "Hire roofer", "done": True, "files": [], "notes": []}]
     assert q.task_progress == (1, 2)
     ops.remove_task(q, "cedar")
-    assert Project.load(d).tasks == [{"text": "Hire roofer", "done": True, "files": []}]
+    assert Project.load(d).tasks == [{"text": "Hire roofer", "done": True, "files": [], "notes": []}]
     assert Project.load(d).notes[0].text == "- n"          # notes untouched
 
 
@@ -142,3 +142,45 @@ def test_task_file_project_ops(tmp_path, monkeypatch):
     assert ops.remove_task_file(p, "1", "1")["name"] == "Epson"
     assert Project.load(d).tasks[0]["files"] == [{"name": "Epson site", "target": "https://epson.com", "kind": "url"}]
     assert Project.load(d).tasks[1]["files"] == []
+
+
+# ---- task notes (indented "  - text" lines under a task) ---------------------
+NOTE = "\n## Tasks\n- [ ] A\n  - [Q](<Documents/q.pdf>)\n- [x] B\n  hand-written\n\n## Notes\n"
+
+
+def test_notes_add_edit_remove_byte_exact():
+    b = ops.body_add_task_note(NOTE, 0, "Call\nfirst")             # no notes yet: right under the task
+    b = ops.body_add_task_note(b, 0, "  Then email  ")              # after the last note
+    assert b == ("\n## Tasks\n- [ ] A\n  - Call first\n  - Then email\n  - [Q](<Documents/q.pdf>)\n"
+                 "- [x] B\n  hand-written\n\n## Notes\n")
+    t = Project(dir=None, body=b).tasks
+    assert t[0]["notes"] == ["Call first", "Then email"] and [f["name"] for f in t[0]["files"]] == ["Q"]
+    assert t[1]["notes"] == ["hand-written"]
+    b = ops.body_add_task_note(b, 1, "Second")
+    assert "- [x] B\n  hand-written\n  - Second\n\n## Notes\n" in b
+    b = ops.body_edit_task_note(b, 1, 0, "Edited *note*")
+    assert "- [x] B\n  - Edited *note*\n  - Second\n" in b
+    b = ops.body_remove_task_note(b, 0, 0)
+    assert b.startswith("\n## Tasks\n- [ ] A\n  - Then email\n  - [Q](<Documents/q.pdf>)\n- [x] B\n")
+    assert ops.body_move_task(b, 1, 0).startswith("\n## Tasks\n- [x] B\n  - Edited *note*\n  - Second\n- [ ] A\n")
+    assert ops.body_remove_task(b, 1) == "\n## Tasks\n- [ ] A\n  - Then email\n  - [Q](<Documents/q.pdf>)\n\n## Notes\n"
+    for bad in [lambda: ops.body_add_task_note(b, 9, "x"), lambda: ops.body_add_task_note(b, 0, " \n "),
+                lambda: ops.body_edit_task_note(b, 0, 5, "x"), lambda: ops.body_remove_task_note(b, 1, 2),
+                lambda: ops.body_add_task_note(b, 0, "[link](https://x.org)")]:
+        with pytest.raises(ops.OpError):
+            bad()
+
+
+def test_task_note_project_ops(tmp_path):
+    d = tmp_path / "P"
+    d.mkdir()
+    (d / "README.md").write_text("---\ntitle: P\nstatus: active\n---\n\n## Tasks\n- [ ] Order scanner\n- [ ] Other\n")
+    p = Project.load(d)
+    assert ops.add_task_note(p, "scanner", "Ask about the warranty") == "Ask about the warranty"
+    ops.add_task_note(p, "1", "Compare prices")
+    assert ops.edit_task_note(p, "1", "prices", "Compare prices at B&H") == "Compare prices at B&H"
+    assert ops.remove_task_note(p, "1", "1") == "Ask about the warranty"
+    assert Project.load(d).tasks[0]["notes"] == ["Compare prices at B&H"]
+    assert Project.load(d).tasks[1]["notes"] == []
+    with pytest.raises(ops.OpError):
+        ops.edit_task_note(p, "2", "1", "x")
