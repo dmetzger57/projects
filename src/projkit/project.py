@@ -13,7 +13,7 @@ from ruamel.yaml import YAML
 from ruamel.yaml.comments import CommentedMap
 
 README = "README.md"
-STATUSES = ("idea", "active", "on-hold", "closed")
+STATUSES = ("idea", "backlog", "active", "blocked", "on-hold", "closed")
 FORMAT_VERSION = 1
 
 _FM_RE = re.compile(r"\A---[ \t]*\n(.*?\n)---[ \t]*\n?", re.S)

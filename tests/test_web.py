@@ -106,6 +106,13 @@ def test_receipt_reference_serve_detach(client, ws):
 def test_status_close_reopen_rename(client, ws):
     client.post("/p/Roof%20Repair/status", data={"status": "on-hold"}, headers=HX)
     assert proj(ws).status == "on-hold"
+    for st in ("blocked", "backlog"):
+        client.post("/p/Roof%20Repair/status", data={"status": st}, headers=HX)
+        assert proj(ws).status == st
+        home = client.get(f"/?status={st}").text
+        assert "Roof Repair" in home and f'pill s-{st}' in home
+    assert "pill s-backlog" not in client.get("/?status=blocked").text      # filtered out
+    assert '<option value="blocked"' in client.get("/p/Roof%20Repair").text
     r = client.post("/p/Roof%20Repair/close", headers=HX)
     assert r.headers["HX-Redirect"] == "/p/Roof%20Repair"
     assert ws.is_in_closed(proj(ws))

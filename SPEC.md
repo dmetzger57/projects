@@ -31,7 +31,7 @@ YAML front matter, then a Markdown body.
 format: 1
 title: Digital Photo Archive        # display name; should equal the folder name
 area: Digital Infrastructure        # must equal parent folder unless closed
-status: active                      # idea | active | on-hold | closed
+status: active                      # idea | backlog | active | blocked | on-hold | closed
 created: 2026-11-02
 closed: null                        # date when status = closed
 tags: [photos]

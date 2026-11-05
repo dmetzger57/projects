@@ -38,7 +38,7 @@ struct ProjectsView: View {
     }
 
     private var grouped: [(area: String, items: [Project])] {
-        let order = ["active": 0, "on-hold": 1, "idea": 2, "closed": 3]
+        let order = ["active": 0, "blocked": 1, "on-hold": 2, "backlog": 3, "idea": 4, "closed": 5]
         var groups: [String: [Project]] = [:]
         for p in filtered { groups[model.displayArea(p), default: []].append(p) }
         let names = (filter == .open && search.isEmpty ? model.areas : []) + groups.keys.sorted()
@@ -184,7 +184,9 @@ struct StatusBadge: View {
     var color: Color {
         switch status {
         case "active": .green
+        case "blocked": .red
         case "on-hold": .purple
+        case "backlog": .gray
         case "idea": .blue
         case "legacy": .orange
         default: .gray

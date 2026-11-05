@@ -22,7 +22,7 @@ HERE = Path(__file__).parent
 # macOS document packages: folders on disk, but files to the user
 PACKAGE_SUFFIXES = {".pages", ".numbers", ".key", ".app", ".bundle", ".photoslibrary", ".rtfd", ".band",
                     ".logicx", ".fcpbundle", ".imovielibrary", ".playground", ".xcodeproj"}
-STATUS_ORDER = {"active": 0, "on-hold": 1, "idea": 2, "closed": 3}
+STATUS_ORDER = {"active": 0, "blocked": 1, "on-hold": 2, "backlog": 3, "idea": 4, "closed": 5}
 _md = MarkdownIt("commonmark", {"html": False, "linkify": False}).enable(["strikethrough", "table"])
 
 

@@ -76,7 +76,7 @@ if args.count == 4, args[1] == "--mutate" {
         try Ops.addFile(ws, photo, target: "Documents/Manuals/Epson FF-680W.pdf", name: "Scanner manual")
         try Ops.addFile(ws, photo, target: "https://docs.google.com/document/d/abc/edit?tab=t.0", name: nil)
         try Ops.editFile(ws, photo, index: 1, name: "Plan", target: nil)
-        try Ops.setStatus(ws, photo, "on-hold")
+        try Ops.setStatus(ws, photo, "blocked")
         photo = try Ops.rename(ws, photo, to: "Photo Archive")
         let p = try Ops.newProject(ws, title: "Swift Made", area: "Digital Infrastructure")
         try Ops.addGoal(ws, p, "true")      // must stay a string, not a bool
@@ -351,6 +351,19 @@ test("project files: identical output to projkit/ops.py (same literals as tests/
     let root = URL(fileURLWithPath: "/x/Docs")
     eq(Ops.fileURL(ProjectFile(index: 0, name: "", target: "Documents/a/b.pdf"), documentsRoot: root)?.path, "/x/Docs/a/b.pdf")
     eq(Ops.fileURL(ProjectFile(index: 0, name: "", target: gdoc), documentsRoot: root), nil)
+}
+
+test("statuses: backlog and blocked (same list as projkit/project.py STATUSES)") {
+    eq(projectStatuses, ["idea", "backlog", "active", "blocked", "on-hold", "closed"])
+    let ws = try tempWorkspace()
+    let p = try Ops.newProject(ws, title: "Roof Repair", area: "House", status: "backlog")
+    eq(ws.load(p.url).status, "backlog")
+    try Ops.setStatus(ws, p, "blocked")
+    eq(ws.load(p.url).status, "blocked")
+    var threw = 0
+    do { try Ops.setStatus(ws, p, "stuck") } catch { threw += 1 }
+    do { try Ops.setStatus(ws, p, "closed") } catch { threw += 1 }
+    eq(threw, 2, "unknown status and closed rejected")
 }
 
 test("ops: new project, goals, close/reopen, rename, uniqueness") {

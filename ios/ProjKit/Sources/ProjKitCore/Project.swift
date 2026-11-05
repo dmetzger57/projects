@@ -2,7 +2,7 @@ import Foundation
 
 public let readmeName = "README.md"
 public let formatVersion = 1
-public let projectStatuses = ["idea", "active", "on-hold", "closed"]
+public let projectStatuses = ["idea", "backlog", "active", "blocked", "on-hold", "closed"]
 
 public struct Goal: Identifiable, Hashable, Sendable {
     public let index: Int          // 0-based position in front matter

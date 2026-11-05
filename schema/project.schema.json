@@ -8,7 +8,7 @@
     "format": {"const": 1},
     "title": {"type": "string", "minLength": 1},
     "area": {"type": "string", "minLength": 1},
-    "status": {"enum": ["idea", "active", "on-hold", "closed"]},
+    "status": {"enum": ["idea", "backlog", "active", "blocked", "on-hold", "closed"]},
     "created": {"type": ["string", "null"], "format": "date"},
     "closed": {"type": ["string", "null"], "format": "date"},
     "tags": {"type": "array", "items": {"type": "string"}},

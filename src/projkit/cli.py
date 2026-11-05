@@ -217,7 +217,7 @@ def note(project: str, text: str, root: Optional[Path] = RootOpt, receipts: Opti
 
 @app.command()
 def status(project: str, value: str, root: Optional[Path] = RootOpt, receipts: Optional[Path] = ReceiptsOpt):
-    """Set status: idea | active | on-hold (use close/reopen for closed)."""
+    """Set status: idea | backlog | active | blocked | on-hold (use close/reopen for closed)."""
     p = _pick(_ws(root, receipts), project)
     _run(ops.set_status, p, value)
     console.print(f"{p.title}: {value}")

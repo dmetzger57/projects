@@ -168,3 +168,13 @@ def test_migrate_title_mismatch_and_pdf_link_recovery():
     assert res.meta["links"][0]["title"].startswith("Web-Check puts")
     assert any("Web-Check Service" in r for r in res.report)
     assert res.body.startswith("\n## Description\nImplement a Web-Check service")
+
+
+def test_backlog_and_blocked_statuses(ws):
+    p = ops.new_project(ws, "Roof Repair", "House", status="backlog")
+    assert Project.load(p.dir).status == "backlog"
+    ops.set_status(p, "blocked")
+    assert Project.load(p.dir).status == "blocked"
+    assert not [i for i in lint_workspace(ws) if i.code == "L009"]
+    with pytest.raises(ops.OpError):
+        ops.set_status(p, "stuck")

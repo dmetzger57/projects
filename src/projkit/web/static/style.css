@@ -139,6 +139,8 @@ form.inline { display: inline-flex; gap: 6px; align-items: center; }
 .s-active { background: var(--accent-soft); color: var(--accent); }
 .s-on-hold { background: var(--hold-soft); color: var(--hold); }
 .s-idea { background: var(--info-soft); color: var(--info); }
+.s-blocked { background: var(--err-soft); color: var(--err); }
+.s-backlog { background: var(--surface-2); color: var(--muted); }
 .s-legacy, .sev-warn { background: var(--warn-soft); color: var(--warn); }
 .sev-error { background: var(--err-soft); color: var(--err); }
 .sev-info { background: var(--info-soft); color: var(--info); }

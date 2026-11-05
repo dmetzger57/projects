@@ -35,7 +35,7 @@ proj file add photo "Documents/Manuals/scanner.pdf" -n "Scanner manual"   # Proj
 proj file add photo https://docs.google.com/… -n "Plan"                    # …or a URL
 proj file ls|edit|rm|open photo <entry>   # ls --paths shows targets
 proj receipt add roof ~/Documents/Receipts/2026/inv.pdf -$ 412.50 -v Lowes   # records the path; no copy
-proj status photo on-hold
+proj status photo blocked                # idea | backlog | active | blocked | on-hold
 proj rename web "Web-Check Service"
 proj close roof            # → 2 - Closed, area kept
 proj reopen roof [-a AREA]
