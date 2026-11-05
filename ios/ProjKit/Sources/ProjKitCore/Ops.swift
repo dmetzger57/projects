@@ -225,8 +225,76 @@ public enum Ops {
         try editBody(ws, p) { try ReadmeBody.addTask($0, text: text) }
     }
 
+    /// Ticks or unticks a task, and every linked copy (Today <-> its project).
     public static func setTask(_ ws: Workspace, _ p: Project, index: Int, done: Bool) throws {
         try editBody(ws, p) { try ReadmeBody.setTask($0, index: index, done: done) }
+        let t = ws.load(p.url).tasks
+        if t.indices.contains(index), let id = t[index].linkID {
+            try syncTaskDone(ws, id: id, done: done, skip: p.url)
+        }
+    }
+
+    // MARK: Today list — mirrors projkit/ops.py (ensure_today, copy_to_today, sync_task_done, …)
+
+    static let todayReadme = "---\nformat: 1\ntitle: Today\narea: Today\nstatus: active\n---\n\n## Tasks\n"
+
+    public static func newTaskID() -> String {
+        let alphabet = Array("abcdefghijkmnpqrstuvwxyz23456789")
+        return String((0..<8).map { _ in alphabet.randomElement()! })
+    }
+
+    @discardableResult
+    public static func ensureToday(_ ws: Workspace) throws -> Project {
+        if let t = ws.today() { return t }
+        if !ws.fs.isDirectory(ws.todayDir) { try ws.fs.createDirectory(ws.todayDir) }
+        let readme = ws.todayDir.appendingPathComponent(readmeName)
+        if !ws.fs.exists(readme) { try ws.fs.writeText(todayReadme, to: readme) }
+        return ws.load(ws.todayDir)
+    }
+
+    /// Everything a task link can point into: all projects (closed too) plus Today.
+    static func linkedProjects(_ ws: Workspace) -> [Project] {
+        ws.projects().filter { $0.document != nil } + (ws.today().map { [$0] } ?? [])
+    }
+
+    static func syncTaskDone(_ ws: Workspace, id: String, done: Bool, skip: URL?) throws {
+        for q in linkedProjects(ws) where q.url.standardizedFileURL != skip?.standardizedFileURL {
+            let hits = q.tasks.filter { $0.linkID == id && $0.done != done }
+            guard !hits.isEmpty else { continue }
+            try editBody(ws, q) { body in
+                try hits.reduce(body) { try ReadmeBody.setTask($0, index: $1.index, done: done) }
+            }
+        }
+    }
+
+    /// Copies a project's task into Today, linked so done state stays in step.
+    /// Returns false when it was already there.
+    @discardableResult
+    public static func copyToToday(_ ws: Workspace, _ p: Project, index: Int) throws -> Bool {
+        guard !ws.isToday(p) else { throw OpError("that task is already in Today") }
+        let tasks = try fresh(ws, p).tasks
+        guard tasks.indices.contains(index) else { throw OpError("no task #\(index + 1)") }
+        let t = tasks[index]
+        let id = t.linkID ?? newTaskID()
+        if t.linkID == nil { try editBody(ws, p) { try ReadmeBody.setTaskID($0, index: index, id: id) } }
+        let today = try ensureToday(ws)
+        if today.tasks.contains(where: { $0.linkID == id }) { return false }
+        try editBody(ws, today) { body in
+            var b = try ReadmeBody.addTask(body, text: t.text, linkID: id)
+            if t.done { b = try ReadmeBody.setTask(b, index: ReadmeBody.tasks(b).count - 1, done: true) }
+            return b
+        }
+        return true
+    }
+
+    /// Removes ticked-off tasks from Today (their originals are untouched). Returns how many.
+    @discardableResult
+    public static func clearTodayDone(_ ws: Workspace) throws -> Int {
+        guard let today = ws.today() else { return 0 }
+        let done = today.tasks.filter(\.done).map(\.index)
+        guard !done.isEmpty else { return 0 }
+        try editBody(ws, today) { body in try done.reversed().reduce(body) { try ReadmeBody.removeTask($0, index: $1) } }
+        return done.count
     }
 
     public static func editTask(_ ws: Workspace, _ p: Project, index: Int, text: String) throws {

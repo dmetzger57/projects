@@ -16,6 +16,7 @@ from markdown_it import MarkdownIt
 from .. import ops
 from ..lint import lint_workspace
 from ..project import STATUSES, Project, ProjectError
+from ..workspace import TODAY_DIR
 from ..workspace import Workspace
 
 HERE = Path(__file__).parent
@@ -71,6 +72,8 @@ def create_app(ws: Workspace) -> FastAPI:
         return tpl.TemplateResponse(request, template, ctx)
 
     def get_project(key: str) -> Project:
+        if key == TODAY_DIR:
+            return ops.ensure_today(ws)
         for p in ws.projects():
             if p.folder_name == key:
                 return p
@@ -124,14 +127,34 @@ def create_app(ws: Workspace) -> FastAPI:
     @app.get("/p/{key}", response_class=HTMLResponse)
     def project_page(request: Request, key: str):
         p = get_project(key)
+        if ws.is_today(p):
+            return page(request, "today.html", nav="today", today_date=dt.date.today().strftime("%A, %B %-d"),
+                        **_project_ctx(p))
         return page(request, "project.html", **_project_ctx(p))
+
+    @app.get("/today", response_class=HTMLResponse)
+    def today_page(request: Request):
+        return project_page(request, TODAY_DIR)
+
+    @app.post("/today/clear")
+    def today_clear(request: Request):
+        ops.clear_today_done(ws)
+        return tasks_partial(request, ops.ensure_today(ws))
 
     def _project_ctx(p: Project) -> dict:
         return dict(p=p, url=purl(p), card=card(p), areas=ws.areas(), closed=ws.is_in_closed(p),
                     notes=list(reversed(p.notes)), today=dt.date.today().isoformat(),
                     files=files_info(p.files), file_edit=None,
                     task_files=[files_info(t["files"]) for t in p.tasks], task_attach=None,
-                    task_note_add=None, task_note_edit=None)
+                    task_note_add=None, task_note_edit=None, **_today_ctx(p))
+
+    def _today_ctx(p: Project) -> dict:
+        """Today links: on Today, each task's source project; elsewhere, which tasks are in Today."""
+        if ws.is_today(p):
+            src = ops.task_sources(ws)
+            return dict(is_today=True, in_today=set(),
+                        task_source=[(lambda q: q and dict(title=q.title, url=purl(q)))(src.get(t["id"])) for t in p.tasks])
+        return dict(is_today=False, in_today=ops.today_ids(ws), task_source=[None] * len(p.tasks))
 
     def files_info(entries: list[dict]) -> list[dict]:
         """Link entries plus whether the file exists and its full path (for display)."""
@@ -240,7 +263,13 @@ def create_app(ws: Workspace) -> FastAPI:
     def task_toggle(request: Request, key: str, n: int):
         p = get_project(key)
         tasks = p.tasks
-        ops.set_task(p, str(n), not tasks[n - 1]["done"] if 0 < n <= len(tasks) else True)
+        ops.set_task(p, str(n), not tasks[n - 1]["done"] if 0 < n <= len(tasks) else True, ws)
+        return tasks_partial(request, p)
+
+    @app.post("/p/{key}/tasks/{n}/today")
+    def task_copy_today(request: Request, key: str, n: int):
+        p = get_project(key)
+        ops.copy_to_today(ws, p, str(n))
         return tasks_partial(request, p)
 
     @app.post("/p/{key}/tasks/{n}/edit")

@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Today · Projects{% endblock %}
+{% block body %}
+<div class="proj-head">
+  <div>
+    <h1>Today</h1>
+    <div class="muted">{{ today_date }} · Copy tasks here with ☀ on any project's task list. Ticking a copy ticks its original too.</div>
+  </div>
+</div>
+<div class="today-col">
+  {% include "_tasks.html" %}
+</div>
+{% endblock %}

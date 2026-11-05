@@ -153,12 +153,12 @@ def test_tasks_add_toggle_edit_delete(client, ws):
     assert r.status_code == 200 and "Buy shingles" in r.text and 'id="tasks"' in r.text
     client.post(f"{url}/tasks", data={"text": "Hire roofer"}, headers=HX)
     client.post(f"{url}/tasks/2/toggle", headers=HX)
-    assert proj(ws).tasks == [{"text": "Buy shingles", "done": False, "files": [], "notes": []}, {"text": "Hire roofer", "done": True, "files": [], "notes": []}]
+    assert proj(ws).tasks == [{"text": "Buy shingles", "done": False, "files": [], "notes": [], "id": None}, {"text": "Hire roofer", "done": True, "files": [], "notes": [], "id": None}]
     r = client.get(f"{url}/tasks?edit=1")
     assert 'value="Buy shingles"' in r.text and "/tasks/1/edit" in r.text
     client.post(f"{url}/tasks/1/edit", data={"text": "Buy cedar shingles"}, headers=HX)
     client.post(f"{url}/tasks/2/delete", headers=HX)
-    assert proj(ws).tasks == [{"text": "Buy cedar shingles", "done": False, "files": [], "notes": []}]
+    assert proj(ws).tasks == [{"text": "Buy cedar shingles", "done": False, "files": [], "notes": [], "id": None}]
     assert client.post(f"{url}/tasks/1/edit", data={"text": "  "}, headers=HX).status_code == 400
     page = client.get(url).text
     assert "Buy cedar shingles" in page and page.index('id="tasks"') < page.index("Project Files")
@@ -244,3 +244,24 @@ def test_task_notes_web(client, ws):
     assert client.post(f"{url}/tasks/1/notes/1/edit", data={"text": " "}, headers=HX).status_code == 400
     assert client.post(f"{url}/tasks/1/notes/5/delete", headers=HX).status_code == 400
     assert "Three quotes" in client.get(url).text
+
+
+def test_today_web(client, ws):
+    url = "/p/Roof%20Repair"
+    for t in ("Buy shingles", "Hire roofer"):
+        client.post(f"{url}/tasks", data={"text": t}, headers=HX)
+    r = client.get("/today")
+    assert r.status_code == 200 and "Today’s tasks" in r.text and 'href="/today" class="on"' in r.text
+    assert "Copy “Buy shingles” to Today" in client.get(url).text
+    r = client.post(f"{url}/tasks/1/today", headers=HX)
+    assert r.status_code == 200 and "☀ In Today" in r.text and "Copy “Buy shingles” to Today" not in r.text
+    today = client.get("/today").text
+    assert "Buy shingles" in today and 'from Roof Repair' in today and f'href="{url}"' in today
+    client.post("/p/0%20-%20Today/tasks/1/toggle", headers=HX)          # tick in Today
+    assert proj(ws).tasks[0]["done"] is True
+    client.post(f"{url}/tasks/1/toggle", headers=HX)                     # untick in project
+    assert ws.today().tasks[0]["done"] is False
+    client.post("/p/0%20-%20Today/tasks", data={"text": "Call bank"}, headers=HX)
+    client.post("/p/0%20-%20Today/tasks/2/toggle", headers=HX)
+    r = client.post("/today/clear", headers=HX)
+    assert r.status_code == 200 and "Call bank" not in r.text and "Buy shingles" in r.text

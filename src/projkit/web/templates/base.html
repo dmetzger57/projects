@@ -11,6 +11,7 @@
   <header class="topbar">
     <a class="brand" href="/">Projects</a>
     <nav>
+      <a href="/today" class="{{ 'on' if nav == 'today' }}">Today</a>
       <a href="/" class="{{ 'on' if nav == 'projects' }}">Overview</a>
       <a href="/ideas" class="{{ 'on' if nav == 'ideas' }}">Ideas</a>
       <a href="/lint" class="{{ 'on' if nav == 'lint' }}">Health{% if issue_count %} <span class="badge">{{ issue_count }}</span>{% endif %}</a>

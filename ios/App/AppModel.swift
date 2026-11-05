@@ -14,6 +14,7 @@ final class AppModel {
     private(set) var receiptsInside = false
     private(set) var needsSetup = false
     private(set) var projects: [Project] = []
+    private(set) var today: Project?
     private(set) var ideas: [String] = []
     private(set) var areas: [String] = []
     private(set) var isLoading = false
@@ -180,14 +181,27 @@ final class AppModel {
         guard let ws = workspace else { return }
         isLoading = true
         defer { isLoading = false }
-        let result = await Task.detached(priority: .userInitiated) { () -> ([Project], [String], [String], Bool) in
-            (ws.projects(), Ops.ideas(ws), ws.areas(), ws.needsSetup)
+        let result = await Task.detached(priority: .userInitiated) { () -> ([Project], [String], [String], Bool, Project?) in
+            (ws.projects(), Ops.ideas(ws), ws.areas(), ws.needsSetup, ws.today())
         }.value
-        (projects, ideas, areas, needsSetup) = result
+        (projects, ideas, areas, needsSetup, today) = result
         lastLoaded = Date()
     }
 
-    func project(_ folder: String) -> Project? { projects.first { $0.folderName == folder } }
+    func project(_ folder: String) -> Project? {
+        folder == todayDirName ? today : projects.first { $0.folderName == folder }
+    }
+
+    func isToday(_ p: Project) -> Bool { p.folderName == todayDirName && today?.url == p.url }
+
+    /// Link ids of the tasks in Today (a project task with one of these is "in Today").
+    var todayIDs: Set<String> { Set(today?.tasks.compactMap(\.linkID) ?? []) }
+
+    /// The project (not Today) whose task carries `id`.
+    func taskSource(_ id: String?) -> Project? {
+        guard let id else { return nil }
+        return projects.first { $0.tasks.contains { $0.linkID == id } }
+    }
 
     /// Runs one file operation off the main thread, then reloads. Returns its result or nil on error.
     @discardableResult

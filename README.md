@@ -30,6 +30,11 @@ proj task attach photo <task> ~/Documents/Quotes/epson.pdf   # or a URL; --name 
 proj task detach|open photo <task> <attachment>              # web: 📎 on a task; iPhone: long-press › Attach
 proj task note photo <task> "Ask about the warranty"         # notes shown indented under the task
 proj task note-edit|note-rm photo <task> <note> ["new text"] # web: 📝, ✎, ×; iPhone: long-press › Add Note, tap a note to edit
+proj task today photo <task>            # copy a task into the Today list (web: ☀; iPhone: swipe right)
+proj today                              # Today's tasks, each with the project it came from
+proj today add "Call the bank"          # …or add one directly
+proj today done|undo|rm <task>          # ticking a copy ticks its original too (and vice versa)
+proj today clear                        # remove done tasks from Today; originals stay ticked
 proj link add web https://… -t "Docs"
 proj file add photo "Documents/Manuals/scanner.pdf" -n "Scanner manual"   # Project Files link
 proj file add photo https://docs.google.com/… -n "Plan"                    # …or a URL

@@ -29,6 +29,8 @@ struct RootView: View {
                 SetupView()
             } else if model.isConfigured {
                 TabView {
+                    TodayView()
+                        .tabItem { Label("Today", systemImage: "sun.max") }
                     ProjectsView()
                         .tabItem { Label("Projects", systemImage: "folder") }
                     IdeasView()

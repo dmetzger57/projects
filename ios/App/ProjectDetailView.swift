@@ -72,6 +72,7 @@ struct ProjectDetailView: View {
     @State private var renaming = false
     @State private var renameText = ""
     @State private var confirmClose = false
+    @State private var confirmClearDone = false
     @FocusState private var goalFieldFocused: Bool
 
     var body: some View {
@@ -87,6 +88,68 @@ struct ProjectDetailView: View {
 
     @ViewBuilder
     private func content(_ p: Project) -> some View {
+        if model.isToday(p) { todayContent(p) } else { projectContent(p) }
+    }
+
+    /// Today: just its task list (copied tasks show where they came from).
+    private func todayContent(_ p: Project) -> some View {
+        let done = p.taskProgress.done
+        return List {
+            Section {
+                Text(Date.now.formatted(.dateTime.weekday(.wide).month(.wide).day()))
+                    .font(.subheadline).foregroundStyle(.secondary)
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets(top: 0, leading: 4, bottom: 0, trailing: 4))
+            }
+            tasks(p)
+            if p.tasks.isEmpty {
+                Section {
+                    Label("Swipe right on a task in any project (or long-press › Copy to Today) to add it here.",
+                          systemImage: "sun.max")
+                        .font(.callout).foregroundStyle(.secondary)
+                }
+            }
+        }
+        .navigationTitle("Today")
+        .refreshable { await model.reload() }
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button("Clear Done") { confirmClearDone = true }
+                    .disabled(done == 0)
+            }
+        }
+        .confirmationDialog("Remove \(done) done task\(done == 1 ? "" : "s") from Today?", isPresented: $confirmClearDone,
+                            titleVisibility: .visible) {
+            Button("Clear Done", role: .destructive) { Task { await model.perform { try Ops.clearTodayDone($0) } } }
+        } message: {
+            Text("Their originals stay in their projects.")
+        }
+        .sheet(item: $edit) { e in
+            TextEditSheet(title: e.title, initial: e.initial, hint: e.hint) { text in await saveTextEdit(e, p, text) }
+        }
+        .sheet(item: $fileSheet) { s in fileEntrySheet(s, p) }
+        .quickLookPreview($preview)
+        .alert("Edit Task", isPresented: Binding(get: { editingTask != nil }, set: { if !$0 { editingTask = nil } })) {
+            editTaskAlertContent(p)
+        }
+        .fileImporter(isPresented: $importing, allowedContentTypes: [.folder]) { result in
+            guard case let .success(url) = result else { return }
+            Task {
+                let ok = await model.setDocumentsFolder(url)
+                if let f = pendingOpen { pendingOpen = nil; if ok { open(f) } }
+            }
+        }
+        .alert("Allow Access to Documents", isPresented: Binding(get: { pendingOpen != nil && !importing },
+                                                                set: { if !$0 && !importing { pendingOpen = nil } })) {
+            Button("Choose Documents Folder") { importing = true }
+            Button("Cancel", role: .cancel) { pendingOpen = nil }
+        } message: {
+            Text("To open “\(pendingOpen?.name ?? "this file")”, choose iCloud Drive › Documents.")
+        }
+    }
+
+    @ViewBuilder
+    private func projectContent(_ p: Project) -> some View {
         let closed = model.isClosed(p)
         List {
             if p.isLegacy {
@@ -114,19 +177,7 @@ struct ProjectDetailView: View {
             ToolbarItem(placement: .primaryAction) { actionsMenu(p, closed: closed) }
         }
         .sheet(item: $edit) { e in
-            TextEditSheet(title: e.title, initial: e.initial, hint: e.hint) { text in
-                switch e.kind {
-                case let .section(name): await model.perform { try Ops.setSection($0, p, name, text) }
-                case .note: await model.perform { try Ops.addNote($0, p, text) }
-                case let .taskNote(task, nil): await model.perform { try Ops.addTaskNote($0, p, task: task, text: text) }
-                case let .taskNote(task, index?):
-                    if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {   // emptied = delete
-                        await model.perform { try Ops.removeTaskNote($0, p, task: task, index: index) }
-                    } else {
-                        await model.perform { try Ops.editTaskNote($0, p, task: task, index: index, text: text) }
-                    }
-                }
-            }
+            TextEditSheet(title: e.title, initial: e.initial, hint: e.hint) { text in await saveTextEdit(e, p, text) }
         }
         .sheet(isPresented: $showAddLink) {
             AddLinkSheet { url, title in await model.perform { try Ops.addLink($0, p, url: url, title: title) } }
@@ -173,19 +224,7 @@ struct ProjectDetailView: View {
         } message: {
             Text("To open “\(pendingOpen?.name ?? "this file")”, choose iCloud Drive › Documents. Proj remembers it for all Project Files.")
         }
-        .sheet(item: $fileSheet) { s in
-            FileEntrySheet(sheet: s, documentsRoot: model.documentsRoot) { name, target in
-                if let task = s.task {
-                    return await model.perform { try Ops.addTaskFile($0, p, task: task, target: target, name: name) } != nil
-                }
-                switch s.mode {
-                case .add:
-                    return await model.perform { try Ops.addFile($0, p, target: target, name: name) } != nil
-                case let .edit(i):
-                    return await model.perform { try Ops.editFile($0, p, index: i, name: name, target: target) } != nil
-                }
-            }
-        }
+        .sheet(item: $fileSheet) { s in fileEntrySheet(s, p) }
         .documentScanner(isPresented: $scanning) { pdf in
             pendingReceipt = PendingReceipt(data: pdf, fileExtension: "pdf", suggestedName: "")
         }
@@ -204,19 +243,58 @@ struct ProjectDetailView: View {
         }
         .alert("Edit Task", isPresented: Binding(get: { editingTask != nil },
                                                  set: { if !$0 { editingTask = nil } })) {
-            TextField("Task", text: $editTaskText)
-            Button("Cancel", role: .cancel) {}
-            Button("Save") {
-                guard let t = editingTask else { return }
-                let text = editTaskText
-                Task { await model.perform { try Ops.editTask($0, p, index: t.index, text: text) } }
-            }
+            editTaskAlertContent(p)
         }
         .confirmationDialog("Close “\(p.title)”?", isPresented: $confirmClose, titleVisibility: .visible) {
             Button("Close Project") { Task { await model.perform { try Ops.close($0, p) } } }
         } message: {
             Text("It moves to “2 - Closed” and keeps its area so it can be reopened.")
         }
+    }
+
+    // MARK: shared by the project and Today layouts
+
+    private func saveTextEdit(_ e: TextEdit, _ p: Project, _ text: String) async {
+        switch e.kind {
+        case let .section(name): await model.perform { try Ops.setSection($0, p, name, text) }
+        case .note: await model.perform { try Ops.addNote($0, p, text) }
+        case let .taskNote(task, nil): await model.perform { try Ops.addTaskNote($0, p, task: task, text: text) }
+        case let .taskNote(task, index?):
+            if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {   // emptied = delete
+                await model.perform { try Ops.removeTaskNote($0, p, task: task, index: index) }
+            } else {
+                await model.perform { try Ops.editTaskNote($0, p, task: task, index: index, text: text) }
+            }
+        }
+    }
+
+    private func fileEntrySheet(_ s: FileSheet, _ p: Project) -> some View {
+        FileEntrySheet(sheet: s, documentsRoot: model.documentsRoot) { name, target in
+            if let task = s.task {
+                return await model.perform { try Ops.addTaskFile($0, p, task: task, target: target, name: name) } != nil
+            }
+            switch s.mode {
+            case .add:
+                return await model.perform { try Ops.addFile($0, p, target: target, name: name) } != nil
+            case let .edit(i):
+                return await model.perform { try Ops.editFile($0, p, index: i, name: name, target: target) } != nil
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func editTaskAlertContent(_ p: Project) -> some View {
+        TextField("Task", text: $editTaskText)
+        Button("Cancel", role: .cancel) {}
+        Button("Save") {
+            guard let t = editingTask else { return }
+            let text = editTaskText
+            Task { await model.perform { try Ops.editTask($0, p, index: t.index, text: text) } }
+        }
+    }
+
+    private func copyToToday(_ p: Project, _ t: ProjectTask) {
+        Task { await model.perform { try Ops.copyToToday($0, p, index: t.index) } }
     }
 
     private func actionsMenu(_ p: Project, closed: Bool) -> some View {
@@ -315,6 +393,8 @@ struct ProjectDetailView: View {
 
     private func tasks(_ p: Project) -> some View {
         let (done, total) = p.taskProgress
+        let isToday = model.isToday(p)
+        let inToday = isToday ? [] : model.todayIDs
         return Section {
             if total > 0 {
                 ProgressView(value: Double(done), total: Double(total)).tint(.blue)
@@ -338,6 +418,13 @@ struct ProjectDetailView: View {
                             .contentShape(Rectangle())
                             .onTapGesture { startEditing(t) }
                             .accessibilityHint("Double-tap to edit")
+                        if isToday, let src = model.taskSource(t.linkID) {
+                            Text("from \(src.title)").font(.caption).foregroundStyle(.secondary)
+                        } else if !isToday, let id = t.linkID, inToday.contains(id) {
+                            Label("In Today", systemImage: "sun.max.fill")
+                                .font(.caption.weight(.semibold)).foregroundStyle(.orange)
+                                .accessibilityLabel("In Today. Ticking it here or in Today ticks both.")
+                        }
                         ForEach(t.notes) { n in
                             HStack(alignment: .firstTextBaseline, spacing: 6) {
                                 Text("–").accessibilityHidden(true)
@@ -372,15 +459,28 @@ struct ProjectDetailView: View {
                         }
                     }
                 }
+                .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                    if !isToday && !(t.linkID.map(inToday.contains) ?? false) {
+                        Button { copyToToday(p, t) } label: { Label("Today", systemImage: "sun.max") }
+                            .tint(.orange)
+                    }
+                }
                 .swipeActions(edge: .trailing) {
                     Button(role: .destructive) {
                         Task { await model.perform { try Ops.removeTask($0, p, index: t.index) } }
-                    } label: { Label("Delete", systemImage: "trash") }
+                    } label: { Label(isToday ? "Remove" : "Delete", systemImage: "trash") }
                     Button { startEditing(t) } label: { Label("Edit", systemImage: "pencil") }
                         .tint(.accentColor)
                 }
                 .contextMenu {
                     Button { startEditing(t) } label: { Label("Edit", systemImage: "pencil") }
+                    if !isToday {
+                        if t.linkID.map(inToday.contains) ?? false {
+                            Label("In Today", systemImage: "sun.max.fill")
+                        } else {
+                            Button { copyToToday(p, t) } label: { Label("Copy to Today", systemImage: "sun.max") }
+                        }
+                    }
                     Section("Notes") {
                         Button { edit = TextEdit(kind: .taskNote(task: t.index, index: nil), initial: "") } label: {
                             Label("Add Note…", systemImage: "note.text.badge.plus")

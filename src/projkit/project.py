@@ -19,6 +19,14 @@ FORMAT_VERSION = 1
 _FM_RE = re.compile(r"\A---[ \t]*\n(.*?\n)---[ \t]*\n?", re.S)
 _NOTE_HEAD = re.compile(r"^###\s+(\d{4}-\d{2}-\d{2})\s*$")
 TASK_RE = re.compile(r"^- \[([ xX])\] (.+)$")   # GitHub-style task list item
+# Hidden link between a task and its copy in Today: "- [ ] Order scanner <!-- task:k3x9q2 -->"
+TASK_ID_RE = re.compile(r"\s*<!--\s*task:([A-Za-z0-9]+)\s*-->\s*$")
+
+
+def split_task_text(text: str) -> tuple[str, str | None]:
+    """(visible text, link id or None) of a task line's text."""
+    m = TASK_ID_RE.search(text)
+    return (text[:m.start()].strip(), m.group(1)) if m else (text.strip(), None)
 
 
 def section_bounds(lines: list[str], heading: str) -> tuple[int, int] | None:
@@ -265,7 +273,8 @@ class Project:
             m = TASK_RE.match(lines[start])
             files = [parse_file_line(lines[j].lstrip(" \t")) for j in task_file_indices(lines, (start, end))]
             notes = [parse_task_note(lines[j]) for j in task_note_indices(lines, (start, end))]
-            out.append({"text": m.group(2).strip(), "done": m.group(1) != " ", "files": files, "notes": notes})
+            text, tid = split_task_text(m.group(2))
+            out.append({"text": text, "done": m.group(1) != " ", "files": files, "notes": notes, "id": tid})
         return out
 
     @property

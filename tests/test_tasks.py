@@ -24,7 +24,7 @@ def test_add_without_notes_and_into_section_with_intro_text():
 def test_toggle_edit_remove_keep_other_lines():
     b = "\n## Tasks\n- [ ] one\n  indented detail\n- [X] two\n* [ ] not a task\n\n## Notes\n"
     p = Project(dir=None, body=b)
-    assert p.tasks == [{"text": "one", "done": False, "files": [], "notes": ["indented detail"]}, {"text": "two", "done": True, "files": [], "notes": []}]
+    assert p.tasks == [{"text": "one", "done": False, "files": [], "notes": ["indented detail"], "id": None}, {"text": "two", "done": True, "files": [], "notes": [], "id": None}]
     b = ops.body_set_task(b, 0, True)
     b = ops.body_set_task(b, 1, False)
     assert b == "\n## Tasks\n- [x] one\n  indented detail\n- [ ] two\n* [ ] not a task\n\n## Notes\n"
@@ -46,13 +46,13 @@ def test_project_level_ops(tmp_path):
     p.save()
     ops.add_task(p, "Buy shingles")
     ops.add_task(p, "Hire roofer")
-    assert ops.set_task(p, "roofer", True) == {"text": "Hire roofer", "done": True, "files": [], "notes": []}
+    assert ops.set_task(p, "roofer", True) == {"text": "Hire roofer", "done": True, "files": [], "notes": [], "id": None}
     ops.edit_task(p, "1", "Buy cedar shingles")
     q = Project.load(d)
-    assert q.tasks == [{"text": "Buy cedar shingles", "done": False, "files": [], "notes": []}, {"text": "Hire roofer", "done": True, "files": [], "notes": []}]
+    assert q.tasks == [{"text": "Buy cedar shingles", "done": False, "files": [], "notes": [], "id": None}, {"text": "Hire roofer", "done": True, "files": [], "notes": [], "id": None}]
     assert q.task_progress == (1, 2)
     ops.remove_task(q, "cedar")
-    assert Project.load(d).tasks == [{"text": "Hire roofer", "done": True, "files": [], "notes": []}]
+    assert Project.load(d).tasks == [{"text": "Hire roofer", "done": True, "files": [], "notes": [], "id": None}]
     assert Project.load(d).notes[0].text == "- n"          # notes untouched
 
 

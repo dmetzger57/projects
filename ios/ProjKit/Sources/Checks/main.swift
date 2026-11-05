@@ -73,6 +73,12 @@ if args.count == 4, args[1] == "--mutate" {
         try Ops.editTaskNote(ws, photo, task: 1, index: 1, text: "Check B&H and Adorama prices")
         try Ops.addTaskNote(ws, photo, task: 0, text: "Delete me")
         try Ops.removeTaskNote(ws, photo, task: 0, index: 0)
+        // Today: copy two tasks, tick one in Today and untick it from the project (ends unchanged)
+        try Ops.copyToToday(ws, ws.load(photo.url), index: 0)
+        try Ops.copyToToday(ws, ws.load(photo.url), index: 2)       // already done: copied done
+        try Ops.setTask(ws, ws.today()!, index: 0, done: true)
+        try Ops.setTask(ws, ws.load(photo.url), index: 0, done: false)
+        try Ops.addTask(ws, ws.today()!, "Call the bank")
         try Ops.addFile(ws, photo, target: "Documents/Manuals/Epson FF-680W.pdf", name: "Scanner manual")
         try Ops.addFile(ws, photo, target: "https://docs.google.com/document/d/abc/edit?tab=t.0", name: nil)
         try Ops.editFile(ws, photo, index: 1, name: "Plan", target: nil)
@@ -290,6 +296,52 @@ test("task notes: identical output to projkit/ops.py (same literals as tests/tes
     do { _ = try ReadmeBody.removeTaskNote(b, task: 1, index: 2) } catch { threw += 1 }
     do { _ = try ReadmeBody.addTaskNote(b, task: 0, text: "[link](https://x.org)") } catch { threw += 1 }
     eq(threw, 5, "bad task / note / empty / bare link rejected")
+}
+
+test("today links: identical output to projkit (same literals as tests/test_today.py)") {
+    let link = "\n## Tasks\n- [ ] Get quotes <!-- task:ab12cd34 -->\n- [x] Hire roofer\n\n## Notes\n"
+    eq(ReadmeBody.splitTaskText("Get quotes <!-- task:ab12cd34 -->").0, "Get quotes")
+    eq(ReadmeBody.splitTaskText("Get quotes <!-- task:ab12cd34 -->").1, "ab12cd34")
+    eq(ReadmeBody.splitTaskText("Plain").1, nil)
+    let t = ReadmeBody.tasks(link)
+    eq(t.map(\.text), ["Get quotes", "Hire roofer"])
+    eq(t.map(\.linkID), ["ab12cd34", nil])
+    var b = try ReadmeBody.editTask(link, index: 0, text: "Get 3 quotes")
+    eq(b, "\n## Tasks\n- [ ] Get 3 quotes <!-- task:ab12cd34 -->\n- [x] Hire roofer\n\n## Notes\n")
+    b = try ReadmeBody.setTask(b, index: 0, done: true)
+    check(b.hasPrefix("\n## Tasks\n- [x] Get 3 quotes <!-- task:ab12cd34 -->\n"), "tick keeps id")
+    b = try ReadmeBody.setTaskID(b, index: 1, id: "zz99yy88")
+    check(b.contains("- [x] Hire roofer <!-- task:zz99yy88 -->\n"), "set id")
+    b = try ReadmeBody.addTask(b, text: "Call bank", linkID: "qq77ww66")
+    check(b.hasSuffix("- [x] Hire roofer <!-- task:zz99yy88 -->\n- [ ] Call bank <!-- task:qq77ww66 -->\n\n## Notes\n"), "add with id")
+    eq(Ops.newTaskID().count, 8)
+}
+
+test("today: copy, two-way done sync, clear") {
+    let ws = try tempWorkspace()
+    let p = try Ops.newProject(ws, title: "Roof Repair", area: "House")
+    try Ops.addTask(ws, p, "Get quotes")
+    try Ops.addTask(ws, p, "Hire roofer")
+    eq(ws.today() == nil, true)
+    eq(try Ops.copyToToday(ws, p, index: 0), true)
+    eq(try Ops.copyToToday(ws, ws.load(p.url), index: 0), false, "no duplicates")
+    let id = ws.load(p.url).tasks[0].linkID
+    check(id != nil && ws.today()!.tasks[0].linkID == id, "shared id")
+    try Ops.setTask(ws, ws.today()!, index: 0, done: true)
+    eq(ws.load(p.url).tasks[0].done, true, "done in Today ticks the project task")
+    try Ops.setTask(ws, ws.load(p.url), index: 0, done: false)
+    eq(ws.today()!.tasks[0].done, false, "undone in project unticks Today")
+    try Ops.setTask(ws, ws.load(p.url), index: 1, done: true)
+    eq(ws.today()!.tasks.map(\.done), [false], "unlinked task leaves Today alone")
+    try Ops.addTask(ws, ws.today()!, "Call bank")
+    try Ops.setTask(ws, ws.today()!, index: 0, done: true)
+    eq(try Ops.clearTodayDone(ws), 1)
+    eq(ws.today()!.tasks.map(\.text), ["Call bank"])
+    eq(ws.load(p.url).tasks[0].done, true, "original kept")
+    check(!ws.areas().contains(todayDirName) && !ws.projects().contains { ws.isToday($0) }, "Today is not an area project")
+    var threw = false
+    do { try Ops.copyToToday(ws, ws.today()!, index: 0) } catch { threw = true }
+    check(threw, "can't copy Today into Today")
 }
 
 test("tasks: move and remove carry detail lines (same literals as tests/test_tasks.py)") {

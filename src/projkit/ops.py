@@ -11,7 +11,7 @@ from pathlib import Path
 
 from ruamel.yaml.comments import CommentedMap, CommentedSeq
 
-from .project import (FILE_RE, FORMAT_VERSION, ProjectError, README, STATUSES, URL_SCHEME_RE, Project, file_line_indices,
+from .project import (FILE_RE, split_task_text, FORMAT_VERSION, ProjectError, README, STATUSES, URL_SCHEME_RE, Project, file_line_indices,
                       parse_file_line, section_bounds, task_blocks, task_file_indices, task_line_indices,
                       task_note_indices)
 from .workspace import BACKLOG_STEM, Workspace
@@ -280,9 +280,13 @@ def _clean_task(text: str) -> str:
     return t
 
 
-def body_add_task(body: str, text: str) -> str:
+def _task_suffix(task_id: str | None) -> str:
+    return f" <!-- task:{task_id} -->" if task_id else ""
+
+
+def body_add_task(body: str, text: str, task_id: str | None = None) -> str:
     lines = body.rstrip("\n").split("\n")
-    bullet = f"- [ ] {_clean_task(text)}"
+    bullet = f"- [ ] {_clean_task(text)}{_task_suffix(task_id)}"
     b = section_bounds(lines, "Tasks")
     if b is None:
         notes = next((i for i, l in enumerate(lines) if l.strip().lower() == "## notes"), len(lines))
@@ -321,8 +325,9 @@ def body_set_task(body: str, index: int, done: bool) -> str:
 
 
 def body_edit_task(body: str, index: int, text: str) -> str:
+    """Replaces the task's text, keeping its done mark and Today link id."""
     lines, i = _task_line(body, index)
-    lines[i] = lines[i][:6] + _clean_task(text)
+    lines[i] = lines[i][:6] + _clean_task(text) + _task_suffix(split_task_text(lines[i][6:])[1])
     return "\n".join(lines) + "\n"
 
 
@@ -373,11 +378,15 @@ def add_task(p: Project, text: str) -> None:
     p.save()
 
 
-def set_task(p: Project, ref: str, done: bool) -> dict:
+def set_task(p: Project, ref: str, done: bool, ws: Workspace | None = None) -> dict:
+    """Ticks or unticks a task; with `ws`, also every linked copy (Today <-> its project)."""
     i = _task_index(p, ref)
     p.body = body_set_task(p.body, i, done)
     p.save()
-    return p.tasks[i]
+    t = p.tasks[i]
+    if ws is not None and t["id"]:
+        sync_task_done(ws, t["id"], done, skip=p.dir)
+    return t
 
 
 def edit_task(p: Project, ref: str, text: str) -> dict:
@@ -861,3 +870,119 @@ def promote_idea(ws: Workspace, ref: str, area: str, title: str | None = None) -
     add_note(p, f"Promoted from idea backlog: {idea}")
     remove_idea(ws, ref)
     return p
+
+
+# ---- Today list (0 - Today/README.md: tasks to do today, many copied from projects) ----
+# A copied task and its original share a hidden id ("<!-- task:k3x9q2 -->" at the end of
+# both lines); ticking either one ticks every task with that id. Mirrors ios/ProjKit Ops.
+TODAY_README = """---
+format: 1
+title: Today
+area: Today
+status: active
+---
+
+## Tasks
+"""
+
+
+def new_task_id() -> str:
+    import secrets
+    alphabet = "abcdefghijkmnpqrstuvwxyz23456789"
+    return "".join(secrets.choice(alphabet) for _ in range(8))
+
+
+def body_set_task_id(body: str, index: int, task_id: str) -> str:
+    """Gives task `index` a link id (replacing any it had)."""
+    lines, i = _task_line(body, index)
+    lines[i] = lines[i][:6] + split_task_text(lines[i][6:])[0] + _task_suffix(task_id)
+    return "\n".join(lines) + "\n"
+
+
+def ensure_today(ws: Workspace) -> Project:
+    t = ws.today()
+    if t is None:
+        ws.today_dir.mkdir(parents=True, exist_ok=True)
+        readme = ws.today_dir / README
+        if not readme.exists():
+            readme.write_text(TODAY_README)
+        t = Project.load(ws.today_dir)
+    return t
+
+
+def linked_projects(ws: Workspace) -> list[Project]:
+    """Everything a task link can point into: all projects (closed too) plus Today."""
+    t = ws.today()
+    return [p for p in ws.projects() if not p.legacy and p.parse_error is None] + ([t] if t else [])
+
+
+def sync_task_done(ws: Workspace, task_id: str, done: bool, skip: Path | None = None) -> int:
+    """Sets done on every task carrying `task_id` (except in `skip`'s folder). Returns how many changed."""
+    changed = 0
+    for q in linked_projects(ws):
+        if skip is not None and q.dir.resolve() == skip.resolve():
+            continue
+        body = q.body
+        for i, t in enumerate(q.tasks):
+            if t["id"] == task_id and t["done"] != done:
+                body = body_set_task(body, i, done)
+                changed += 1
+        if body != q.body:
+            q.body = body
+            q.save()
+    return changed
+
+
+def today_ids(ws: Workspace) -> set[str]:
+    t = ws.today()
+    return {x["id"] for x in t.tasks if x["id"]} if t else set()
+
+
+def task_sources(ws: Workspace) -> dict[str, Project]:
+    """Link id -> the project (not Today) whose task carries it."""
+    out = {}
+    for q in ws.projects():
+        if q.legacy or q.parse_error:
+            continue
+        for t in q.tasks:
+            if t["id"]:
+                out.setdefault(t["id"], q)
+    return out
+
+
+def copy_to_today(ws: Workspace, p: Project, ref: str) -> tuple[dict, bool]:
+    """Copies a project's task into Today, linked so done state stays in step.
+    Returns (the Today task, False if it was already there)."""
+    if ws.is_today(p):
+        raise OpError("that task is already in Today")
+    i = _task_index(p, ref)
+    t = p.tasks[i]
+    tid = t["id"]
+    if not tid:
+        tid = new_task_id()
+        p.body = body_set_task_id(p.body, i, tid)
+        p.save()
+    today = ensure_today(ws)
+    for x in today.tasks:
+        if x["id"] == tid:
+            return x, False
+    today.body = body_add_task(today.body, t["text"], tid)
+    if t["done"]:
+        today.body = body_set_task(today.body, len(today.tasks) - 1, True)
+    today.save()
+    return today.tasks[-1], True
+
+
+def clear_today_done(ws: Workspace) -> int:
+    """Removes ticked-off tasks from Today (their originals are untouched). Returns how many."""
+    today = ws.today()
+    if today is None:
+        return 0
+    done = [i for i, t in enumerate(today.tasks) if t["done"]]
+    body = today.body
+    for i in reversed(done):
+        body = body_remove_task(body, i)
+    if done:
+        today.body = body
+        today.save()
+    return len(done)

@@ -283,9 +283,12 @@ app.add_typer(task_app, name="task")
 
 @task_app.command("ls")
 def task_ls(project: str, root: Optional[Path] = RootOpt, receipts: Optional[Path] = ReceiptsOpt):
-    p = _pick(_ws(root, receipts), project)
+    ws = _ws(root, receipts)
+    p = _pick(ws, project)
+    in_today = ops.today_ids(ws)
     for i, t in enumerate(p.tasks, 1):
-        console.print(f"{i:3}. {'[green]✔[/]' if t['done'] else '☐'} {t['text']}", highlight=False)
+        sun = "  [yellow]☀ in Today[/]" if t["id"] in in_today else ""
+        console.print(f"{i:3}. {'[green]✔[/]' if t['done'] else '☐'} {t['text']}{sun}", highlight=False)
         for j, n in enumerate(t["notes"], 1):
             console.print(f"       {j}. [dim]—[/] {n}", highlight=False)
         for j, f in enumerate(t["files"], 1):
@@ -304,13 +307,15 @@ def task_add(project: str, text: str, root: Optional[Path] = RootOpt, receipts: 
 
 @task_app.command("done")
 def task_done(project: str, task: str, root: Optional[Path] = RootOpt, receipts: Optional[Path] = ReceiptsOpt):
-    t = _run(ops.set_task, _pick(_ws(root, receipts), project), task, True)
+    ws = _ws(root, receipts)
+    t = _run(ops.set_task, _pick(ws, project), task, True, ws)
     console.print(f"[green]✔[/] {t['text']}", highlight=False)
 
 
 @task_app.command("undo")
 def task_undo(project: str, task: str, root: Optional[Path] = RootOpt, receipts: Optional[Path] = ReceiptsOpt):
-    t = _run(ops.set_task, _pick(_ws(root, receipts), project), task, False)
+    ws = _ws(root, receipts)
+    t = _run(ops.set_task, _pick(ws, project), task, False, ws)
     console.print(f"☐ {t['text']}", highlight=False)
 
 
@@ -357,6 +362,14 @@ def task_note_rm(project: str, task: str, note: str, root: Optional[Path] = Root
     console.print(f"deleted note: {n}", highlight=False)
 
 
+@task_app.command("today")
+def task_today(project: str, task: str, root: Optional[Path] = RootOpt, receipts: Optional[Path] = ReceiptsOpt):
+    """Copy a task into the Today list (ticking either copy ticks both)."""
+    ws = _ws(root, receipts)
+    t, added = _run(ops.copy_to_today, ws, _pick(ws, project), task)
+    console.print(f"[green]copied to Today:[/] {t['text']}" if added else f"already in Today: {t['text']}", highlight=False)
+
+
 @task_app.command("attach")
 def task_attach(project: str, task: str, target: str,
                 name: Optional[str] = typer.Option(None, "--name", "-n", help="Friendly name (default: file name or website)"),
@@ -381,6 +394,73 @@ def task_open(project: str, task: str, attachment: str = typer.Argument("1"),
     p = _pick(_ws(root, receipts), project)
     t = p.tasks[_run(ops._task_index, p, task)]
     _run(ops.open_file_entry, t["files"][_run(ops._task_file_index, t, attachment)])
+
+
+today_app = typer.Typer(invoke_without_command=True,
+                        help="The Today list: tasks to do today (refer to a task by number or text).")
+app.add_typer(today_app, name="today")
+
+
+def _today(ws: Workspace) -> Project:
+    return ops.ensure_today(ws)
+
+
+@today_app.callback()
+def today_ls(ctx: typer.Context, root: Optional[Path] = RootOpt, receipts: Optional[Path] = ReceiptsOpt):
+    """Show the Today list (with each copied task's project)."""
+    if ctx.invoked_subcommand:
+        return
+    ws = _ws(root, receipts)
+    t = ws.today()
+    tasks = t.tasks if t else []
+    src = ops.task_sources(ws)
+    for i, x in enumerate(tasks, 1):
+        from_ = f"  [dim]· {src[x['id']].title}[/]" if x["id"] in src else ""
+        console.print(f"{i:3}. {'[green]✔[/]' if x['done'] else '☐'} {x['text']}{from_}", highlight=False)
+    if not tasks:
+        console.print("[dim]Nothing in Today yet. Add with `proj today add` or `proj task today <project> <task>`.[/]")
+
+
+@today_app.command("add")
+def today_add(text: str, root: Optional[Path] = RootOpt, receipts: Optional[Path] = ReceiptsOpt):
+    t = _today(_ws(root, receipts))
+    _run(ops.add_task, t, text)
+    console.print(f"[green]added to Today:[/] {text}", highlight=False)
+
+
+@today_app.command("copy")
+def today_copy(project: str, task: str, root: Optional[Path] = RootOpt, receipts: Optional[Path] = ReceiptsOpt):
+    """Copy a project's task into Today (same as `proj task today`)."""
+    task_today(project, task, root, receipts)
+
+
+@today_app.command("done")
+def today_done(task: str, root: Optional[Path] = RootOpt, receipts: Optional[Path] = ReceiptsOpt):
+    """Tick a Today task (and its original in its project)."""
+    ws = _ws(root, receipts)
+    t = _run(ops.set_task, _today(ws), task, True, ws)
+    console.print(f"[green]✔[/] {t['text']}", highlight=False)
+
+
+@today_app.command("undo")
+def today_undo(task: str, root: Optional[Path] = RootOpt, receipts: Optional[Path] = ReceiptsOpt):
+    ws = _ws(root, receipts)
+    t = _run(ops.set_task, _today(ws), task, False, ws)
+    console.print(f"☐ {t['text']}", highlight=False)
+
+
+@today_app.command("rm")
+def today_rm(task: str, root: Optional[Path] = RootOpt, receipts: Optional[Path] = ReceiptsOpt):
+    """Remove a task from Today (its original stays in its project)."""
+    t = _run(ops.remove_task, _today(_ws(root, receipts)), task)
+    console.print(f"removed from Today: {t['text']}", highlight=False)
+
+
+@today_app.command("clear")
+def today_clear(root: Optional[Path] = RootOpt, receipts: Optional[Path] = ReceiptsOpt):
+    """Remove ticked-off tasks from Today (start a fresh day)."""
+    n = ops.clear_today_done(_ws(root, receipts))
+    console.print(f"cleared {n} done task{'s' if n != 1 else ''} from Today")
 
 
 file_app = typer.Typer(no_args_is_help=True,

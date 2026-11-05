@@ -36,6 +36,15 @@ assert [(f["name"], f["target"], f["kind"]) for f in p.tasks[1]["files"]] == [
     ("Product page", "https://epson.com/ff-680w", "url")], p.tasks[1]
 assert ops.add_task_file(p, "Order", "https://b-h.example/epson")["name"] == "b-h.example"
 assert p.tasks[1]["notes"] == ["Ask about the 3-year warranty", "Check B&H and Adorama prices"], p.tasks[1]
+today = ws.today()                                       # Today written by Swift
+assert [(t["text"], t["done"]) for t in today.tasks] == [("Move me to the top", False), ("Pick storage", True),
+                                                        ("Call the bank", False)], today.tasks
+assert today.tasks[0]["id"] == p.tasks[0]["id"] and today.tasks[1]["id"] == p.tasks[2]["id"] and today.tasks[2]["id"] is None
+ops.set_task(today, "1", True, ws)                       # Python ticks Swift's copy -> original ticks
+assert Project.load(p.dir).tasks[0]["done"] is True
+ops.set_task(Project.load(p.dir), "1", False, ws)
+assert ws.today().tasks[0]["done"] is False
+p = Project.load(p.dir)
 assert p.tasks[0]["notes"] == [], p.tasks[0]
 assert ops.edit_task_note(p, "Order", "warranty", "Ask about the warranty") == "Ask about the warranty"
 assert Project.load(p.dir).tasks[1]["notes"][0] == "Ask about the warranty"

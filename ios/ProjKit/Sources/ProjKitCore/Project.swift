@@ -42,6 +42,8 @@ public struct ProjectTask: Identifiable, Hashable, Sendable {
     public var files: [ProjectFile] = []
     /// Notes: the task's other indented detail lines ("  - text"); index is per task.
     public var notes: [TaskNote] = []
+    /// Hidden link shared with its copy in Today ("<!-- task:k3x9q2ab -->" at the end of the line).
+    public var linkID: String? = nil
     public var id: Int { index }
 }
 
@@ -258,13 +260,15 @@ public enum ReadmeBody {
     public static func tasks(_ body: String) -> [ProjectTask] {
         let lines = body.components(separatedBy: "\n")
         return taskBlocks(lines).enumerated().map { n, b in
-            let t = parseTask(lines[b.start])!
+            let raw = parseTask(lines[b.start])!
+            let (text, linkID) = splitTaskText(raw.text)
+            let t = (done: raw.done, text: text)
             let files = taskFileIndices(lines, b).enumerated().map { k, j in
                 let f = parseFileLine(stripIndent(lines[j]))!
                 return ProjectFile(index: k, name: f.name, target: f.target)
             }
             let notes = taskNoteIndices(lines, b).enumerated().map { k, j in TaskNote(index: k, text: parseTaskNote(lines[j])) }
-            return ProjectTask(index: n, text: t.text, done: t.done, files: files, notes: notes)
+            return ProjectTask(index: n, text: t.text, done: t.done, files: files, notes: notes, linkID: linkID)
         }
     }
 
@@ -279,9 +283,31 @@ public enum ReadmeBody {
         trimTrailingNewlines(body).components(separatedBy: "\n")
     }
 
-    public static func addTask(_ body: String, text: String) throws -> String {
+    // MARK: Today links — byte-identical with projkit (TASK_ID_RE, split_task_text, _task_suffix)
+
+    static let taskIDRegex = try! NSRegularExpression(pattern: #"\s*<!--\s*task:([A-Za-z0-9]+)\s*-->\s*$"#)
+
+    /// (visible text, link id or nil) of a task line's text.
+    public static func splitTaskText(_ text: String) -> (String, String?) {
+        let ns = text as NSString
+        guard let m = taskIDRegex.firstMatch(in: text, range: NSRange(location: 0, length: ns.length)) else {
+            return (text.trimmingCharacters(in: .whitespaces), nil)
+        }
+        return (ns.substring(to: m.range.location).trimmingCharacters(in: .whitespaces), ns.substring(with: m.range(at: 1)))
+    }
+
+    static func taskSuffix(_ id: String?) -> String { id.map { " <!-- task:\($0) -->" } ?? "" }
+
+    /// Gives task `index` a link id (replacing any it had).
+    public static func setTaskID(_ body: String, index: Int, id: String) throws -> String {
+        var (lines, i) = try taskLine(body, index)
+        lines[i] = String(lines[i].prefix(6)) + splitTaskText(String(lines[i].dropFirst(6))).0 + taskSuffix(id)
+        return lines.joined(separator: "\n") + "\n"
+    }
+
+    public static func addTask(_ body: String, text: String, linkID: String? = nil) throws -> String {
         var lines = splitBody(body)
-        let bullet = "- [ ] " + (try cleanTask(text))
+        let bullet = "- [ ] " + (try cleanTask(text)) + taskSuffix(linkID)
         if let b = sectionBounds(lines, "Tasks") {
             var pos: Int
             if let last = taskBlocks(lines).last {
@@ -315,7 +341,7 @@ public enum ReadmeBody {
 
     public static func editTask(_ body: String, index: Int, text: String) throws -> String {
         var (lines, i) = try taskLine(body, index)
-        lines[i] = String(lines[i].prefix(6)) + (try cleanTask(text))
+        lines[i] = String(lines[i].prefix(6)) + (try cleanTask(text)) + taskSuffix(splitTaskText(String(lines[i].dropFirst(6))).1)
         return lines.joined(separator: "\n") + "\n"
     }
 

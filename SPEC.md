@@ -92,6 +92,13 @@ Rules:
   `- ` or `* `. Writers store a note as one line `  - text` (newlines folded to spaces), add new ones after
   the task's last note (else directly under the task line), and refuse a note that would read as an attachment. Goals (front matter) are longer-term outcomes;
   tasks are the to-do checklist.
+- **Today list:** `0 - Today/README.md` at the projects root is a project outside the areas (front matter
+  `title: Today`, `area: Today`), created on first use. Its `## Tasks` are the tasks to do today. A task copied
+  in from a project gets a link id, written at the end of both task lines as `<!-- task:k3x9q2ab -->` (8 chars
+  of `a-z2-9`, hidden when rendered); the visible text is the line without it, and editing a task keeps it.
+  Ticking or unticking any task with an id sets every task with that id (in Today and all projects, closed
+  ones included) the same way. A task is copied at most once; removing or clearing it from Today leaves the
+  original alone. Tasks added directly to Today have no id.
 - Unknown front-matter keys must be preserved (forward compatibility).
 
 - Project Files entries are Markdown links on their own line: `- [Friendly name](<target>)`. The target is

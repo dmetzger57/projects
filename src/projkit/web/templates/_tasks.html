@@ -2,8 +2,12 @@
   {% set tasks = p.tasks %}
   {% set done = tasks|selectattr('done')|list|length %}
   <div class="panel-head">
-    <h3>Tasks</h3>
+    <h3>{{ 'Today’s tasks' if is_today else 'Tasks' }}</h3>
     {% if tasks %}<span class="muted">{{ done }}/{{ tasks|length }}</span>{% endif %}
+    {% if is_today and done %}
+    <button class="btn small" hx-post="/today/clear" hx-target="#tasks" hx-swap="outerHTML"
+            hx-confirm="Remove the {{ done }} done task{{ 's' if done != 1 }} from Today? Their originals stay in their projects.">Clear done</button>
+    {% endif %}
   </div>
   {% if tasks %}<div class="bar tasks-bar" role="img" aria-label="{{ done }} of {{ tasks|length }} tasks done"><i style="width: {{ (100 * done / tasks|length)|int }}%"></i></div>{% endif %}
   <ul class="goals tasks" data-move-url="{{ url }}/tasks">
@@ -29,6 +33,11 @@
                  hx-post="{{ url }}/tasks/{{ n }}/toggle" hx-target="#tasks" hx-swap="outerHTML">
           <span>{{ t.text }}</span>
         </label>
+        {% if task_source[n - 1] %}
+        <a class="task-from muted small" href="{{ task_source[n - 1].url }}">from {{ task_source[n - 1].title }}</a>
+        {% elif not is_today and t.id in in_today %}
+        <span class="task-from today-mark small" title="Ticking it here or in Today ticks both">☀ In Today</span>
+        {% endif %}
         {% if t.notes %}
         <ul class="plain task-notes">
           {% for note in t.notes %}
@@ -96,6 +105,10 @@
         </form>
         {% endif %}
       </div>
+      {% if not is_today and t.id not in in_today %}
+      <button class="x edit" title="Copy to Today" aria-label="Copy “{{ t.text }}” to Today"
+              hx-post="{{ url }}/tasks/{{ n }}/today" hx-target="#tasks" hx-swap="outerHTML">☀</button>
+      {% endif %}
       <button class="x edit" title="Add a note" aria-label="Add a note to “{{ t.text }}”"
               hx-get="{{ url }}/tasks?note={{ n }}" hx-target="#tasks" hx-swap="outerHTML">📝</button>
       <button class="x edit" title="Attach a file or link" aria-label="Attach a file or link to “{{ t.text }}”"

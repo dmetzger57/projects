@@ -13,6 +13,7 @@ RESERVED_RE = re.compile(r"^\d+ - ")
 TEMPLATE_DIR = "1 - Template"
 CLOSED_DIR = "2 - Closed"
 BACKLOG_STEM = "0 - Idea Backlog"
+TODAY_DIR = "0 - Today"          # the Today list: a project outside the areas
 
 
 def default_root() -> Path:
@@ -45,6 +46,16 @@ class Workspace:
     @property
     def closed_dir(self) -> Path:
         return self.root / CLOSED_DIR
+
+    @property
+    def today_dir(self) -> Path:
+        return self.root / TODAY_DIR
+
+    def today(self) -> Project | None:
+        return Project.load(self.today_dir) if (self.today_dir / "README.md").is_file() else None
+
+    def is_today(self, p: Project) -> bool:
+        return p.dir.resolve() == self.today_dir.resolve()
 
     def area_dirs(self) -> list[Path]:
         return [d for d in _visible_dirs(self.root) if not RESERVED_RE.match(d.name)]
