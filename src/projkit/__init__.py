@@ -1,5 +1,5 @@
 """projkit: project folder model, CLI and UI."""
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 
 def _allow_icloud_downloads() -> None:
