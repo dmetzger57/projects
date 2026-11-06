@@ -168,6 +168,9 @@ build-mac: signing-probe ## Build the Mac app (Release)
 	codesign -v $(MAC_APP)
 
 install-mac: build-mac ## Build the Mac app, put it in /Applications (MAC_DEST=…) and open it
+	@if [ -e "$(MAC_DEST)/Proj.app" ] && [ ! -w "$(MAC_DEST)/Proj.app/Contents" ]; then \
+	  echo "$(MAC_DEST)/Proj.app was installed by the .pkg (owned by root). Remove it once, then re-run:" >&2; \
+	  echo "  sudo rm -rf $(MAC_DEST)/Proj.app        (or install with: make pkg, then open dist/*.pkg)" >&2; exit 1; fi
 	@pkill -x Proj 2>/dev/null; sleep 0.5; \
 	rm -rf "$(MAC_DEST)/Proj.app" && ditto $(MAC_APP) "$(MAC_DEST)/Proj.app" && open "$(MAC_DEST)/Proj.app" && \
 	echo "Mac: installed in $(MAC_DEST) and opened"
