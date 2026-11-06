@@ -4,7 +4,10 @@ import ProjKitCore
 struct SettingsView: View {
     enum Target { case projects, receipts, documents }
     @Environment(AppModel.self) private var model
-    @State private var picking: Target?
+    /// Which folder the picker is choosing. Kept apart from `showPicker`: the picker clears its
+    /// presentation binding before calling back, so the target must survive that.
+    @State private var pickTarget: Target?
+    @State private var showPicker = false
     @State private var receiptsOptions = false
 
     var body: some View {
@@ -18,7 +21,7 @@ struct SettingsView: View {
                                                                      : model.receiptsRoot.map(displayPath))
                     }
                     .confirmationDialog("Where should receipts be saved?", isPresented: $receiptsOptions, titleVisibility: .visible) {
-                        Button("Choose a Folder…") { picking = .receipts }
+                        Button("Choose a Folder…") { pick(.receipts) }
                         Button("Inside Projects (\(internalReceiptsDirName))") { Task { await model.useReceiptsInside() } }
                     } message: {
                         Text("On the Mac, receipts usually live in iCloud Drive › Documents › Receipts.")
@@ -42,10 +45,19 @@ struct SettingsView: View {
                         .foregroundStyle(.secondary)
                 } header: { Text("Note") }
             }
+            .readableWidth()
             .navigationTitle("Settings")
-            .fileImporter(isPresented: Binding(get: { picking != nil }, set: { if !$0 { picking = nil } }),
-                          allowedContentTypes: [.folder]) { result in
-                guard case let .success(url) = result, let target = picking else { return }
+            .fileImporter(isPresented: $showPicker, allowedContentTypes: [.folder]) { result in
+                let target = pickTarget
+                pickTarget = nil
+                let url: URL
+                switch result {
+                case let .success(u): url = u
+                case let .failure(e):
+                    model.errorMessage = "Couldn't open that folder: \(e.localizedDescription)"
+                    return
+                }
+                guard let target else { return }
                 Task {
                     switch target {
                     case .projects: await model.setProjectsFolder(url)
@@ -58,7 +70,12 @@ struct SettingsView: View {
     }
 
     private func folderRow(_ label: String, _ url: URL?, target: Target) -> some View {
-        Button { picking = target } label: { folderLabel(label, url.map(displayPath)) }
+        Button { pick(target) } label: { folderLabel(label, url.map(displayPath)) }
+    }
+
+    private func pick(_ target: Target) {
+        pickTarget = target
+        showPicker = true
     }
 
     private func folderLabel(_ label: String, _ location: String?) -> some View {

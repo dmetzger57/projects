@@ -39,6 +39,7 @@ struct IdeasView: View {
                     if !model.ideas.isEmpty { Text("Swipe right to turn an idea into a project.") }
                 }
             }
+            .readableWidth()
             .navigationTitle("Ideas")
             .refreshable { await model.reload() }
             .overlay {

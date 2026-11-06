@@ -23,6 +23,11 @@ type a path, friendly names, Show Paths, tap to open), links, and receipts (scan
 preview, detach), rename, close and reopen · **Ideas:** add, delete, make into a project ·
 pull to refresh; reloads when you return to the app.
 
+**On iPad** (and other wide windows): Projects shows a sidebar of projects beside the selected project,
+or, with none selected, an **Overview** of project tiles by area like the web UI (tap the area name to collapse
+it, long-press a tile to move it; the ⊞ button returns to it). Other screens keep their content in a centered,
+readable column. In narrow Split View or Slide Over it falls back to the iPhone layout.
+
 ## Install on your iPhone (free Apple ID)
 
 1. **Install Xcode** from the Mac App Store and open it once. Accept the license and let it
@@ -105,6 +110,9 @@ The build appears in App Store Connect → **TestFlight** after processing.
   so run `proj lint --fix` on the Mac to add the `receipt` tag (lint reports it as L013).
 
 ## Checks (no Xcode needed)
+
+Simulator testing (Debug builds): `PROJ_DEBUG_ROOT=<folder>` uses that projects folder, `PROJ_DEBUG_TAB=projects|ideas|archive|settings`
+picks the starting tab, and `PROJ_DEBUG_OPEN=<project>` opens a project (pass them to `simctl launch` with a `SIMCTL_CHILD_` prefix).
 
 ```sh
 cd ios/ProjKit && swift run Checks   # core tests, including byte-identical round-trip of real READMEs

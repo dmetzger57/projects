@@ -21,6 +21,16 @@ struct ProjApp: App {
 
 struct RootView: View {
     @Environment(AppModel.self) private var model
+    @State private var tab: String = {
+        #if DEBUG
+        // Simulator testing: PROJ_DEBUG_TAB=projects|ideas|archive|settings picks the starting tab;
+        // PROJ_DEBUG_OPEN (open a project) implies the Projects tab.
+        let env = ProcessInfo.processInfo.environment
+        if let t = env["PROJ_DEBUG_TAB"] { return t }
+        if env["PROJ_DEBUG_OPEN"] != nil { return "projects" }
+        #endif
+        return "today"
+    }()
 
     var body: some View {
         @Bindable var model = model
@@ -28,17 +38,22 @@ struct RootView: View {
             if model.isConfigured && model.needsSetup {
                 SetupView()
             } else if model.isConfigured {
-                TabView {
+                TabView(selection: $tab) {
                     TodayView()
                         .tabItem { Label("Today", systemImage: "sun.max") }
+                        .tag("today")
                     ProjectsView()
                         .tabItem { Label("Projects", systemImage: "folder") }
+                        .tag("projects")
                     IdeasView()
                         .tabItem { Label("Ideas", systemImage: "lightbulb") }
+                        .tag("ideas")
                     ArchiveView()
                         .tabItem { Label("Archive", systemImage: "archivebox") }
+                        .tag("archive")
                     SettingsView()
                         .tabItem { Label("Settings", systemImage: "gearshape") }
+                        .tag("settings")
                 }
             } else {
                 OnboardingView()

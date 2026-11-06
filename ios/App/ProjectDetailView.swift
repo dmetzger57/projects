@@ -4,13 +4,14 @@ import UniformTypeIdentifiers
 import ProjKitCore
 
 struct TextEdit: Identifiable {
-    enum Kind { case section(String), note, taskNote(task: Int, index: Int?) }   // index nil = new task note
+    enum Kind { case section(String), note, task(Int), taskNote(task: Int, index: Int?) }   // index nil = new task note
     let kind: Kind
     let initial: String
     var id: String {
         switch kind {
         case let .section(s): "section-\(s)"
         case .note: "note"
+        case let .task(t): "task-\(t)"
         case let .taskNote(t, i): "task-\(t)-note-\(i.map(String.init) ?? "new")"
         }
     }
@@ -18,11 +19,13 @@ struct TextEdit: Identifiable {
         switch kind {
         case let .section(s): s
         case .note: "New Note"
+        case .task: "Edit Task"
         case let .taskNote(_, i): i == nil ? "Add Task Note" : "Edit Task Note"
         }
     }
     var hint: String {
         switch kind {
+        case .task: "One line (line breaks become spaces). Markdown: **bold**, *italic*."
         case let .taskNote(_, i): "One line, shown under the task. Markdown: **bold**, *italic*."
                                   + (i == nil ? "" : " Clear it to delete the note.")
         default: "Markdown: **bold**, *italic*, `- item` for lists."
@@ -57,6 +60,7 @@ struct ProjectDetailView: View {
     @State private var edit: TextEdit?
     @State private var newGoal = ""
     @State private var newTask = ""
+    @Environment(\.horizontalSizeClass) private var sizeClass
     @State private var editingTask: ProjectTask?
     @State private var editTaskText = ""
     @State private var showAddLink = false
@@ -115,6 +119,7 @@ struct ProjectDetailView: View {
                 }
             }
         }
+        .readableWidth()
         .navigationTitle("Today")
         .refreshable { await model.reload() }
         .toolbar {
@@ -176,6 +181,7 @@ struct ProjectDetailView: View {
                 receipts(p)
             }
         }
+        .readableWidth()
         .navigationTitle(p.title)
         .inlineTitle()
         .refreshable { await model.reload() }
@@ -264,6 +270,7 @@ struct ProjectDetailView: View {
         switch e.kind {
         case let .section(name): await model.perform { try Ops.setSection($0, p, name, text) }
         case .note: await model.perform { try Ops.addNote($0, p, text) }
+        case let .task(index): await model.perform { try Ops.editTask($0, p, index: index, text: text) }
         case let .taskNote(task, nil): await model.perform { try Ops.addTaskNote($0, p, task: task, text: text) }
         case let .taskNote(task, index?):
             if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {   // emptied = delete
@@ -462,6 +469,7 @@ struct ProjectDetailView: View {
                 }
             }
         }
+        .readableWidth()
         .navigationTitle("Archive")
         .refreshable { await model.reload() }
         .confirmationDialog("Delete “\(deletingArchived?.text ?? "")” for good?",
@@ -804,8 +812,13 @@ struct ProjectDetailView: View {
     }
 
     private func startEditing(_ t: ProjectTask) {
-        editTaskText = t.text
-        editingTask = t
+        if sizeClass == .regular {
+            // iPad: a full-width sheet (alerts are a fixed ~270 pt wide, too narrow for long tasks)
+            edit = TextEdit(kind: .task(t.index), initial: t.text)
+        } else {
+            editTaskText = t.text
+            editingTask = t
+        }
     }
 
     private func notes(_ p: Project) -> some View {

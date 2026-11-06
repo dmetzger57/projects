@@ -14,13 +14,19 @@ struct ProjectsView: View {
     @State private var showNewArea = false
     @State private var newAreaName = ""
     @State private var showReorderAreas = false
-    @State private var path: [String] = {
+    @Environment(\.horizontalSizeClass) private var sizeClass
+    @State private var path: [String] = Self.debugOpen.map { [$0] } ?? []
+    /// Selected project in the iPad sidebar (nil: the overview grid).
+    @State private var selected: String? = Self.debugOpen
+
+    private static var debugOpen: String? {
         #if DEBUG
         // Simulator testing: PROJ_DEBUG_OPEN=<project folder name> opens that project at launch.
-        if let f = ProcessInfo.processInfo.environment["PROJ_DEBUG_OPEN"] { return [f] }
+        return ProcessInfo.processInfo.environment["PROJ_DEBUG_OPEN"]
+        #else
+        return nil
         #endif
-        return []
-    }()
+    }
 
     private var filtered: [Project] {
         model.projects.filter { p in
@@ -49,43 +55,79 @@ struct ProjectsView: View {
     }
 
     var body: some View {
-        NavigationStack(path: $path) {
-            List {
-                Section {
-                    Picker("Show", selection: $filter) {
-                        ForEach(ProjectFilter.allCases) { Text($0.rawValue).tag($0) }
-                    }
-                    .pickerStyle(.segmented)
-                    .listRowBackground(Color.clear)
-                    .listRowInsets(EdgeInsets())
-                    SummaryRow(projects: filtered)
-                }
-                ForEach(grouped, id: \.area) { group in
-                    Section {
-                        if !model.overview.isCollapsed(group.area) {
-                            if group.items.isEmpty {
-                                Text("No projects").foregroundStyle(.secondary).italic()
-                            }
-                            ForEach(group.items) { p in
-                                projectRow(p, in: group.items)
-                            }
-                            .onMove { source, destination in
-                                // SwiftUI gives the destination as an offset in the list *before* removal
-                                guard let from = source.first, from != destination, from + 1 != destination else { return }
-                                let items = group.items
-                                if destination < items.count { move(items[from], before: items[destination]) }
-                                else { move(items[from], after: items[items.count - 1]) }
-                            }
+        if sizeClass == .regular {
+            // iPad (and wide windows): projects in a sidebar, the project or the overview grid beside it
+            NavigationSplitView {
+                decorated(List(selection: $selected) { listRows })
+            } detail: {
+                NavigationStack {
+                    Group {
+                        if let f = selected {
+                            ProjectDetailView(folder: f)
+                                .id(f)
+                                .toolbar {
+                                    ToolbarItem(placement: .topBarLeading) {
+                                        Button { selected = nil } label: { Label("Overview", systemImage: "square.grid.2x2") }
+                                    }
+                                }
+                        } else {
+                            ProjectGridView(groups: grouped, summary: filtered) { selected = $0 }
                         }
-                    } header: {
-                        areaHeader(group.area, items: group.items, all: grouped.map(\.area))
                     }
+                    .navigationDestination(for: String.self) { ProjectDetailView(folder: $0) }
                 }
             }
-            .navigationTitle("Projects")
-            .navigationDestination(for: String.self) { folder in
-                ProjectDetailView(folder: folder)
+        } else {
+            NavigationStack(path: $path) {
+                decorated(List { listRows })
+                    .navigationDestination(for: String.self) { folder in
+                        ProjectDetailView(folder: folder)
+                    }
             }
+        }
+    }
+
+    private func open(_ folder: String) {
+        if sizeClass == .regular { selected = folder } else { path.append(folder) }
+    }
+
+    @ViewBuilder
+    private var listRows: some View {
+        Section {
+            Picker("Show", selection: $filter) {
+                ForEach(ProjectFilter.allCases) { Text($0.rawValue).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            .listRowBackground(Color.clear)
+            .listRowInsets(EdgeInsets())
+            if sizeClass != .regular { SummaryRow(projects: filtered) }   // iPad: shown on the overview
+        }
+        ForEach(grouped, id: \.area) { group in
+            Section {
+                if !model.overview.isCollapsed(group.area) {
+                    if group.items.isEmpty {
+                        Text("No projects").foregroundStyle(.secondary).italic()
+                    }
+                    ForEach(group.items) { p in
+                        projectRow(p, in: group.items)
+                    }
+                    .onMove { source, destination in
+                        // SwiftUI gives the destination as an offset in the list *before* removal
+                        guard let from = source.first, from != destination, from + 1 != destination else { return }
+                        let items = group.items
+                        if destination < items.count { move(items[from], before: items[destination]) }
+                        else { move(items[from], after: items[items.count - 1]) }
+                    }
+                }
+            } header: {
+                areaHeader(group.area, items: group.items, all: grouped.map(\.area))
+            }
+        }
+    }
+
+    private func decorated(_ list: some View) -> some View {
+        list
+            .navigationTitle("Projects")
             .searchable(text: $search, prompt: "Projects, goals, notes")
             .refreshable { await model.reload() }
             .overlay {
@@ -115,7 +157,7 @@ struct ProjectsView: View {
             }
             .sheet(isPresented: $showReorderAreas) { ReorderAreasSheet() }
             .sheet(isPresented: $showNew) {
-                NewProjectSheet { folder in path.append(folder) }
+                NewProjectSheet { folder in open(folder) }
             }
             .alert("New Area", isPresented: $showNewArea) {
                 TextField("Name", text: $newAreaName)
@@ -127,12 +169,17 @@ struct ProjectsView: View {
             } message: {
                 Text("Areas group related projects, e.g. Home or Garden.")
             }
-        }
     }
 
     private func projectRow(_ p: Project, in items: [Project]) -> some View {
         let i = items.firstIndex { $0.folderName == p.folderName } ?? 0
-        return NavigationLink(value: p.folderName) { ProjectRow(project: p) }
+        return NavigationLink(value: p.folderName) {
+            if sizeClass == .regular {
+                CompactProjectRow(project: p)       // iPad sidebar: the tiles and the project show the details
+            } else {
+                ProjectRow(project: p)
+            }
+        }
             .contextMenu {
                 if items.count > 1 {
                     Section("Move") {
@@ -295,6 +342,18 @@ struct ProjectRow: View {
             .foregroundStyle(.secondary)
         }
         .padding(.vertical, 2)
+    }
+}
+
+/// Sidebar row on iPad: name and status only.
+struct CompactProjectRow: View {
+    let project: Project
+    var body: some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text(project.title).lineLimit(2)
+            Spacer(minLength: 8)
+            StatusBadge(status: project.status)
+        }
     }
 }
 
