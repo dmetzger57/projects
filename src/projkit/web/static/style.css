@@ -315,6 +315,8 @@ li.done .archived-text { color: var(--muted); text-decoration: line-through; }
 .photo-add { display: grid; gap: 8px; margin-top: 12px; }
 .task-photos { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 10px; }
 .small-photo { width: 120px; }
+/* a task photo sits inside a .list row: undo that row layout so the note stays under the photo */
+.task-photos > .photo { display: grid; justify-content: stretch; align-items: start; gap: 4px; padding: 0; border: 0; }
 .task-photo-add { margin-top: 8px; }
 
 /* move a task to another project */
