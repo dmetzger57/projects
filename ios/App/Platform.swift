@@ -110,6 +110,44 @@ extension View {
     }
 }
 
+/// A grip to drag a list row by. On the Mac, a drag that starts on a button or a
+/// click-to-edit text never reaches the List's reordering, so rows get a handle with no
+/// click action of its own. iOS has its own handles in edit mode and shows nothing.
+struct DragHandle: View {
+    var body: some View {
+        #if os(macOS)
+        Image(systemName: "line.3.horizontal")
+            .foregroundStyle(.tertiary)
+            .help("Drag to reorder")
+            .accessibilityHidden(true)
+        #else
+        EmptyView()
+        #endif
+    }
+}
+
+/// Context-menu commands to move item `index` of `count` to the top, up, down or to the bottom.
+struct MoveMenu: View {
+    let index: Int
+    let count: Int
+    let move: (Int) -> Void
+
+    var body: some View {
+        if count > 1 {
+            Section("Move") {
+                Button { move(0) } label: { Label("Move to Top", systemImage: "arrow.up.to.line") }
+                    .disabled(index == 0)
+                Button { move(index - 1) } label: { Label("Move Up", systemImage: "arrow.up") }
+                    .disabled(index == 0)
+                Button { move(index + 1) } label: { Label("Move Down", systemImage: "arrow.down") }
+                    .disabled(index == count - 1)
+                Button { move(count - 1) } label: { Label("Move to Bottom", systemImage: "arrow.down.to.line") }
+                    .disabled(index == count - 1)
+            }
+        }
+    }
+}
+
 func copyToClipboard(_ s: String) {
     #if os(iOS)
     UIPasteboard.general.string = s

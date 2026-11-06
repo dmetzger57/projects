@@ -518,6 +518,14 @@ test("ops: new project, goals, close/reopen, rename, uniqueness") {
     check(p.goals[0].doneOn != nil, "done_on set")
     try Ops.setGoal(ws, p, index: 0, done: false)
     eq(ws.load(p.url).goals[0].doneOn, nil)
+    try Ops.addGoal(ws, p, "Pick a roofer")
+    try Ops.addGoal(ws, p, "Schedule the work")
+    try Ops.moveGoal(ws, ws.load(p.url), from: 2, to: 0)
+    eq(ws.load(p.url).goals.map(\.text), ["Schedule the work", "Get quotes", "Pick a roofer"])
+    try Ops.moveGoal(ws, ws.load(p.url), from: 0, to: 2)
+    eq(ws.load(p.url).goals.map(\.text), ["Get quotes", "Pick a roofer", "Schedule the work"])
+    for i in [2, 1] { try Ops.removeGoal(ws, ws.load(p.url), index: i) }
+    p = ws.load(p.url)
 
     var threw = false
     do { try Ops.newProject(ws, title: "roof repair", area: "Personal") } catch { threw = true }

@@ -623,28 +623,32 @@ struct ProjectDetailView: View {
                 ProgressView(value: Double(done), total: Double(total))
             }
             ForEach(p.goals) { g in
-                Button {
-                    Task { await model.perform { try Ops.setGoal($0, p, index: g.index, done: !g.done) } }
-                } label: {
-                    HStack(alignment: .firstTextBaseline, spacing: 10) {
-                        Image(systemName: g.done ? "checkmark.circle.fill" : "circle")
-                            .foregroundStyle(g.done ? Color.accentColor : .secondary)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(g.text)
-                                .strikethrough(g.done)
-                                .foregroundStyle(g.done ? .secondary : .primary)
-                            if let d = g.doneOn { Text(shortDate(d)).font(.caption).foregroundStyle(.secondary) }
+                HStack(alignment: .firstTextBaseline, spacing: 10) {
+                    if total > 1 { DragHandle() }
+                    Button {
+                        Task { await model.perform { try Ops.setGoal($0, p, index: g.index, done: !g.done) } }
+                    } label: {
+                        HStack(alignment: .firstTextBaseline, spacing: 10) {
+                            Image(systemName: g.done ? "checkmark.circle.fill" : "circle")
+                                .foregroundStyle(g.done ? Color.accentColor : .secondary)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(g.text)
+                                    .strikethrough(g.done)
+                                    .foregroundStyle(g.done ? .secondary : .primary)
+                                if let d = g.doneOn { Text(shortDate(d)).font(.caption).foregroundStyle(.secondary) }
+                            }
                         }
                     }
+                    .buttonStyle(.plain)
+                    .accessibilityAddTraits(g.done ? .isSelected : [])
                 }
-                .buttonStyle(.plain)
-                .accessibilityAddTraits(g.done ? .isSelected : [])
                 .contextMenu {
                     Button {
                         Task { await model.perform { try Ops.setGoal($0, p, index: g.index, done: !g.done) } }
                     } label: {
                         Label(g.done ? "Mark Not Done" : "Mark Done", systemImage: g.done ? "circle" : "checkmark.circle")
                     }
+                    MoveMenu(index: g.index, count: total) { moveGoal(p, g.index, to: $0) }
                     Button(role: .destructive) {
                         Task { await model.perform { try Ops.removeGoal($0, p, index: g.index) } }
                     } label: { Label("Delete Goal", systemImage: "trash") }
@@ -654,6 +658,11 @@ struct ProjectDetailView: View {
                 // delete from the end so earlier indices stay valid
                 let indices = idx.map { p.goals[$0].index }.sorted(by: >)
                 Task { await model.perform { ws in for i in indices { try Ops.removeGoal(ws, p, index: i) } } }
+            }
+            .onMove { source, destination in
+                // SwiftUI gives the destination as an offset in the list *before* removal
+                guard let from = source.first else { return }
+                moveGoal(p, from, to: destination > from ? destination - 1 : destination)
             }
             TextField("Add a goal", text: $newGoal)
                 .focused($goalFieldFocused)
@@ -682,6 +691,7 @@ struct ProjectDetailView: View {
             }
             ForEach(p.tasks) { t in
                 HStack(alignment: .firstTextBaseline, spacing: 10) {
+                    if total > 1 { DragHandle() }
                     Button {
                         Task { await model.perform { try Ops.setTask($0, p, index: t.index, done: !t.done) } }
                     } label: {
@@ -816,18 +826,7 @@ struct ProjectDetailView: View {
                             } label: { Label("Remove Attachment", systemImage: "minus.circle") }
                         }
                     }
-                    if total > 1 {
-                        Section("Move") {
-                            Button { move(p, t.index, to: 0) } label: { Label("Move to Top", systemImage: "arrow.up.to.line") }
-                                .disabled(t.index == 0)
-                            Button { move(p, t.index, to: t.index - 1) } label: { Label("Move Up", systemImage: "arrow.up") }
-                                .disabled(t.index == 0)
-                            Button { move(p, t.index, to: t.index + 1) } label: { Label("Move Down", systemImage: "arrow.down") }
-                                .disabled(t.index == total - 1)
-                            Button { move(p, t.index, to: total - 1) } label: { Label("Move to Bottom", systemImage: "arrow.down.to.line") }
-                                .disabled(t.index == total - 1)
-                        }
-                    }
+                    MoveMenu(index: t.index, count: total) { move(p, t.index, to: $0) }
                     if !isToday {
                         Button { movingTask = t } label: { Label("Move to Project…", systemImage: "arrow.right.doc.on.clipboard") }
                         Button { archive(p, t) } label: { Label("Archive", systemImage: "archivebox") }
@@ -862,6 +861,11 @@ struct ProjectDetailView: View {
     private func move(_ p: Project, _ from: Int, to: Int) {
         guard from != to else { return }
         Task { await model.perform { try Ops.moveTask($0, p, from: from, to: to) } }
+    }
+
+    private func moveGoal(_ p: Project, _ from: Int, to: Int) {
+        guard from != to else { return }
+        Task { await model.perform { try Ops.moveGoal($0, p, from: from, to: to) } }
     }
 
     private func startEditing(_ t: ProjectTask) {

@@ -60,28 +60,25 @@ struct ProjectsView: View {
 
     var body: some View {
         if sizeClass == .regular {
+            #if os(macOS)
+            // The Mac window already has a sidebar (Today, Projects, …). A NavigationSplitView nested
+            // in it insets its detail by that sidebar's width a second time, pushing the project off
+            // the right edge, so the Mac uses a plain resizable split instead.
+            HSplitView {
+                decorated(List(selection: $selected) { listRows })
+                    .frame(minWidth: 260, idealWidth: 300, maxWidth: 420)
+                detailPane
+                    .frame(minWidth: 420, maxWidth: .infinity)
+            }
+            #else
             // iPad (and wide windows): projects in a sidebar, the project or the overview grid beside it
             NavigationSplitView {
                 decorated(List(selection: $selected) { listRows })
                     .navigationSplitViewColumnWidth(min: 260, ideal: 300, max: 420)
             } detail: {
-                NavigationStack {
-                    Group {
-                        if let f = selected {
-                            ProjectDetailView(folder: f)
-                                .id(f)
-                                .toolbar {
-                                    ToolbarItem(placement: .leadingBar) {
-                                        Button { selected = nil } label: { Label("Overview", systemImage: "square.grid.2x2") }
-                                    }
-                                }
-                        } else {
-                            ProjectGridView(groups: grouped, summary: filtered) { selected = $0 }
-                        }
-                    }
-                    .navigationDestination(for: String.self) { ProjectDetailView(folder: $0) }
-                }
+                detailPane
             }
+            #endif
         } else {
             NavigationStack(path: $path) {
                 decorated(List { listRows })
@@ -89,6 +86,34 @@ struct ProjectsView: View {
                         ProjectDetailView(folder: folder)
                     }
             }
+        }
+    }
+
+    /// The Mac shows the open project's name in the window title; elsewhere the list is "Projects".
+    private var windowTitle: String {
+        #if os(macOS)
+        if let f = selected, let p = model.projects.first(where: { $0.folderName == f }) { return p.title }
+        #endif
+        return "Projects"
+    }
+
+    /// The selected project, or the overview grid when none is selected.
+    private var detailPane: some View {
+        NavigationStack {
+            Group {
+                if let f = selected {
+                    ProjectDetailView(folder: f)
+                        .id(f)
+                        .toolbar {
+                            ToolbarItem(placement: .leadingBar) {
+                                Button { selected = nil } label: { Label("Overview", systemImage: "square.grid.2x2") }
+                            }
+                        }
+                } else {
+                    ProjectGridView(groups: grouped, summary: filtered) { selected = $0 }
+                }
+            }
+            .navigationDestination(for: String.self) { ProjectDetailView(folder: $0) }
         }
     }
 
@@ -132,7 +157,7 @@ struct ProjectsView: View {
 
     private func decorated(_ list: some View) -> some View {
         list
-            .navigationTitle("Projects")
+            .navigationTitle(windowTitle)
             .searchable(text: $search, prompt: "Projects, goals, notes")
             .refreshable { await model.reload() }
             .overlay {

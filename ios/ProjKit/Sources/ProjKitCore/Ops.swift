@@ -592,6 +592,15 @@ public enum Ops {
         }
     }
 
+    /// Moves goal `from` so it ends up at position `to` (both 0-based, in the list as it is now).
+    public static func moveGoal(_ ws: Workspace, _ p: Project, from: Int, to: Int) throws {
+        try editList(ws, p, "goals") { goals in
+            guard goals.indices.contains(from) else { throw OpError("no goal #\(from + 1)") }
+            guard goals.indices.contains(to) else { throw OpError("no goal #\(to + 1)") }
+            goals.insert(goals.remove(at: from), at: to)
+        }
+    }
+
     public static func removeGoal(_ ws: Workspace, _ p: Project, index: Int) throws {
         try editList(ws, p, "goals") { goals in
             guard goals.indices.contains(index) else { throw OpError("no goal #\(index + 1)") }
