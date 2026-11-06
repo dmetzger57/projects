@@ -1,4 +1,4 @@
-# Proj for iPhone
+# Proj for iPhone, iPad and Mac
 
 A native SwiftUI app for the same `~/Documents/Projects` folder the `proj` CLI and web UI use.
 It reads and writes the README.md files directly in iCloud Drive, so it works anywhere,
@@ -28,6 +28,27 @@ pull to refresh; reloads when you return to the app.
 or, with none selected, an **Overview** of project tiles by area like the web UI (tap the area name to collapse
 it, long-press a tile to move it; the ⊞ button returns to it). Other screens keep their content in a centered,
 readable column. In narrow Split View or Slide Over it falls back to the iPhone layout.
+
+## Mac app
+
+The same app runs natively on the Mac (macOS 15+): one multiplatform SwiftUI target, not Catalyst. It has a
+sidebar (Today, Projects, Ideas, Archive) instead of tabs, the iPad's wide layout (project list, Overview
+tiles, project details), Settings in the app menu (⌘,) and View › Refresh (⌘R); it also reloads whenever you
+switch back to it. Project Files open in their usual app (Preview, Pages…) instead of Quick Look. There's no
+camera or document scanner; add photos with Choose Photo, and receipts with Choose File.
+
+It's sandboxed, so on first launch choose **Documents › Projects** (then, in Settings, your Documents folder
+for Project Files and Documents › Receipts). It remembers them.
+
+- `make install-mac`: Release build, signed with your Apple Development certificate, copied to
+  /Applications (`MAC_DEST=~/Applications` to change) and opened. `make install` also does this.
+- `make pkg`: an installer package, `dist/Proj-<version>.pkg` (universal: Apple silicon and Intel), that puts
+  Proj in /Applications. Without a Developer ID Installer certificate (paid program) it is unsigned and the
+  app isn't notarized: it installs normally on this Mac; on another Mac, open the package and the app with
+  Control-click › Open (or approve them in System Settings › Privacy & Security). With that certificate in
+  your keychain, the package is signed automatically.
+- `make mac PROJECT="Test project"`: Debug build on a copy of your projects, kept in the app's sandbox
+  container (`~/Library/Containers/com.dmetzger57.proj/Data/tmp/ProjTest`).
 
 ## Install on your iPhone (free Apple ID)
 
@@ -104,8 +125,8 @@ The build appears in App Store Connect → **TestFlight** after processing.
   changed keys are written in the same style as the Python tool.
 - All file access is coordinated with `NSFileCoordinator`, which downloads evicted iCloud files
   and keeps edits from other devices from interleaving. Each edit re-reads the README first.
-- `App/`: the SwiftUI app (iOS 17+). iPhone-only code (the document scanner) is in
-  `App/Platform.swift`.
+- `App/`: the SwiftUI app (iOS 17+, macOS 15+). Platform-specific code (camera, document scanner, colors,
+  toolbar placement) is in `App/Platform.swift`; the Mac entitlements are in `Mac/Proj.entitlements`.
 - A receipt picked with **Choose File** is linked by its path, never copied (pick it from iCloud Drive › Documents).
   Only scanned receipts become new files, saved as `Receipts/<year>/<date> <description>.pdf`. iOS can't set Finder tags,
   so run `proj lint --fix` on the Mac to add the `receipt` tag (lint reports it as L013).

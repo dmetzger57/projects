@@ -17,6 +17,9 @@ DEV_DD    := $(BUILD)/dev
 SIM_DD    := $(BUILD)/sim
 DEV_APP   := $(DEV_DD)/Build/Products/Debug-iphoneos/Proj.app
 SIM_APP   := $(SIM_DD)/Build/Products/Debug-iphonesimulator/Proj.app
+MAC_DD    := $(BUILD)/mac
+MAC_APP   := $(MAC_DD)/Build/Products/Release/Proj.app
+MAC_DEST  ?= /Applications
 
 IPHONE    ?= 00008160-00064D8426E00036
 IPAD      ?= 00008027-000971262178402E
@@ -34,7 +37,7 @@ AGENT     := gui/$(shell id -u)/com.dmetzger57.proj-serve
 WEB_URL   := http://127.0.0.1:8765/
 
 .PHONY: help version setup test checks crosscheck check lint serve restart-web web-log xcodeproj \
-        build-sim sim screenshot install install-iphone install-ipad signing-probe release clean
+        build-sim sim screenshot install install-iphone install-ipad install-mac build-mac mac pkg signing-probe release clean
 
 help: ## List the targets
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z_-]+:.*## / {printf "  \033[1m%-16s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -153,13 +156,37 @@ install-iphone: signing-probe ## Build, install and launch on the iPhone
 install-ipad: signing-probe ## Build, install and launch on the iPad
 	$(call install-device,$(IPAD),iPad)
 
-install: ## Install on every connected device (iPhone, iPad)
-	@ok=0; for t in install-iphone install-ipad; do $(MAKE) --no-print-directory $$t && ok=1; done; [ $$ok = 1 ]
+install: ## Install everywhere: the Mac app, and every connected device (iPhone, iPad)
+	@ok=0; for t in install-mac install-iphone install-ipad; do $(MAKE) --no-print-directory $$t && ok=1; done; [ $$ok = 1 ]
+
+# ---- Mac app -----------------------------------------------------------------
+
+build-mac: signing-probe ## Build the Mac app (Release)
+	xcodebuild -project $(XCPROJ) -scheme Proj -configuration Release -destination 'platform=macOS' \
+	  -derivedDataPath $(MAC_DD) -allowProvisioningUpdates CURRENT_PROJECT_VERSION=$(BUILD_NO) \
+	  ARCHS='arm64 x86_64' ONLY_ACTIVE_ARCH=NO -quiet build
+	codesign -v $(MAC_APP)
+
+install-mac: build-mac ## Build the Mac app, put it in /Applications (MAC_DEST=…) and open it
+	@pkill -x Proj 2>/dev/null; sleep 0.5; \
+	rm -rf "$(MAC_DEST)/Proj.app" && ditto $(MAC_APP) "$(MAC_DEST)/Proj.app" && open "$(MAC_DEST)/Proj.app" && \
+	echo "Mac: installed in $(MAC_DEST) and opened"
+
+pkg: build-mac ## Build an installer package for the Mac app: dist/Proj-<version>.pkg
+	sh $(IOS)/Mac/make_pkg.sh $(MAC_APP)
+
+mac: ## Run the Mac app (Debug) on a COPY of your projects (PROJECT="name" optional)
+	xcodebuild -project $(XCPROJ) -scheme Proj -configuration Debug -destination 'platform=macOS' \
+	  -derivedDataPath $(MAC_DD) CURRENT_PROJECT_VERSION=$(BUILD_NO) -quiet build
+	@data=$$HOME/Library/Containers/$(BUNDLE_ID)/Data/tmp/ProjTest; \
+	pkill -x Proj 2>/dev/null; rm -rf $$data && mkdir -p $$data && ditto "$${PROJ_ROOT:-$$HOME/Documents/Projects}" $$data/Projects; \
+	PROJ_DEBUG_ROOT=$$data/Projects PROJ_DEBUG_OPEN="$(PROJECT)" $(MAC_DD)/Build/Products/Debug/Proj.app/Contents/MacOS/Proj >/dev/null 2>&1 & \
+	echo "running the Mac app with a copy of your projects (in its sandbox container)"
 
 release: ## Checks, archive and upload to TestFlight (paid team only; see ios/README.md)
 	sh $(IOS)/release.sh
 
 # ---- housekeeping ------------------------------------------------------------
 
-clean: ## Remove iOS build output and the simulator data copy
-	rm -rf $(BUILD) $(IOS)/ProjKit/.build
+clean: ## Remove build output (iOS, Mac, packages) and the simulator data copy
+	rm -rf $(BUILD) $(IOS)/ProjKit/.build dist

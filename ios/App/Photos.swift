@@ -31,7 +31,16 @@ enum PhotoPrep {
         guard let image = UIImage(data: data) else { return nil }
         return jpeg(from: image)
         #else
-        return data
+        // ImageIO: decode (HEIC, PNG…), apply the orientation, scale down, encode as JPEG.
+        guard let src = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
+        let opts: [CFString: Any] = [kCGImageSourceCreateThumbnailFromImageAlways: true,
+                                     kCGImageSourceCreateThumbnailWithTransform: true,
+                                     kCGImageSourceThumbnailMaxPixelSize: Int(maxDimension)]
+        guard let image = CGImageSourceCreateThumbnailAtIndex(src, 0, opts as CFDictionary) else { return nil }
+        let out = NSMutableData()
+        guard let dest = CGImageDestinationCreateWithData(out, "public.jpeg" as CFString, 1, nil) else { return nil }
+        CGImageDestinationAddImage(dest, image, [kCGImageDestinationLossyCompressionQuality: 0.82] as CFDictionary)
+        return CGImageDestinationFinalize(dest) ? out as Data : nil
         #endif
     }
 
@@ -120,8 +129,12 @@ struct PhotoNoteSheet: View {
             Form {
                 Section {
                     #if os(iOS)
-                    if let image = UIImage(data: jpeg) {
-                        Image(uiImage: image)
+                    let decoded = UIImage(data: jpeg).map { Image(uiImage: $0) }
+                    #else
+                    let decoded = NSImage(data: jpeg).map { Image(nsImage: $0) }
+                    #endif
+                    if let image = decoded {
+                        image
                             .resizable()
                             .scaledToFit()
                             .frame(maxHeight: 360)
@@ -129,7 +142,6 @@ struct PhotoNoteSheet: View {
                             .clipShape(RoundedRectangle(cornerRadius: 10))
                             .accessibilityLabel("The new photo")
                     }
-                    #endif
                 }
                 .listRowBackground(Color.clear)
                 Section {
@@ -153,6 +165,7 @@ struct PhotoNoteSheet: View {
                 }
             }
         }
+        .sheetSize(width: 480, height: 560)
         .onAppear { focused = true }
     }
 }

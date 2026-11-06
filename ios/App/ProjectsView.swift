@@ -14,7 +14,11 @@ struct ProjectsView: View {
     @State private var showNewArea = false
     @State private var newAreaName = ""
     @State private var showReorderAreas = false
+    #if os(iOS)
     @Environment(\.horizontalSizeClass) private var sizeClass
+    #else
+    private let sizeClass: UserInterfaceSizeClass? = .regular     // the Mac always gets the wide layout
+    #endif
     @State private var path: [String] = Self.debugOpen.map { [$0] } ?? []
     /// Selected project in the iPad sidebar (nil: the overview grid).
     @State private var selected: String? = Self.debugOpen
@@ -59,6 +63,7 @@ struct ProjectsView: View {
             // iPad (and wide windows): projects in a sidebar, the project or the overview grid beside it
             NavigationSplitView {
                 decorated(List(selection: $selected) { listRows })
+                    .navigationSplitViewColumnWidth(min: 260, ideal: 300, max: 420)
             } detail: {
                 NavigationStack {
                     Group {
@@ -66,7 +71,7 @@ struct ProjectsView: View {
                             ProjectDetailView(folder: f)
                                 .id(f)
                                 .toolbar {
-                                    ToolbarItem(placement: .topBarLeading) {
+                                    ToolbarItem(placement: .leadingBar) {
                                         Button { selected = nil } label: { Label("Overview", systemImage: "square.grid.2x2") }
                                     }
                                 }
@@ -237,6 +242,11 @@ struct ProjectsView: View {
                 Image(systemName: "ellipsis.circle")
                     .accessibilityLabel("\(area) options")
             }
+            #if os(macOS)
+            .buttonStyle(.borderless)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            #endif
         }
         .textCase(nil)
     }
@@ -283,9 +293,9 @@ struct ReorderAreasSheet: View {
                         Task { await model.perform { try Ops.moveArea($0, area, to: to) } }
                     }
             }
-            .environment(\.editMode, .constant(.active))
+            .alwaysEditing()
             .navigationTitle("Reorder Areas")
-            .navigationBarTitleDisplayMode(.inline)
+            .inlineTitle()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     if !model.overview.areas.isEmpty {
@@ -295,6 +305,7 @@ struct ReorderAreasSheet: View {
                 ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
             }
         }
+        .sheetSize(width: 380, height: 460)
     }
 }
 

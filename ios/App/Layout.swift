@@ -8,14 +8,18 @@ import ProjKitCore
 /// (The list itself is narrowed; content margins on the scroll view hid the Today large title.)
 struct ReadableWidth: ViewModifier {
     var maxWidth: CGFloat = 720
+    #if os(iOS)
     @Environment(\.horizontalSizeClass) private var sizeClass
+    #else
+    private let sizeClass: UserInterfaceSizeClass? = .regular     // the Mac always gets the wide layout
+    #endif
 
     func body(content: Content) -> some View {
         if sizeClass == .regular {
             content
                 .frame(maxWidth: maxWidth)
                 .frame(maxWidth: .infinity)
-                .background(Color(.systemGroupedBackground))
+                .background(Color.groupedBackground)
         } else {
             content
         }
@@ -51,7 +55,7 @@ struct ProjectGridView: View {
             .frame(maxWidth: 1400)
             .frame(maxWidth: .infinity)
         }
-        .background(Color(.systemGroupedBackground))
+        .background(Color.groupedBackground)
         .navigationTitle("Overview")
         .refreshable { await model.reload() }
     }
@@ -92,11 +96,11 @@ struct ProjectGridView: View {
             ProjectRow(project: p)
                 .padding(14)
                 .frame(maxWidth: .infinity, minHeight: 96, alignment: .topLeading)
-                .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 14))
+                .background(Color.secondaryGroupedBackground, in: RoundedRectangle(cornerRadius: 14))
                 .contentShape(RoundedRectangle(cornerRadius: 14))
         }
         .buttonStyle(.plain)
-        .hoverEffect(.lift)
+        .liftOnHover()
         .contextMenu {
             if items.count > 1 {
                 Button { move(p, before: items[0]) } label: { Label("Move to Top", systemImage: "arrow.up.to.line") }

@@ -15,7 +15,30 @@ struct ProjApp: App {
                     // pick up edits made on the Mac (or other devices) when returning to the app
                     if phase == .active { Task { await model.reload() } }
                 }
+                #if os(macOS)
+                .frame(minWidth: 760, minHeight: 480)
+                .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+                    Task { await model.reload() }      // back from Terminal, Finder or the web UI
+                }
+                #endif
         }
+        #if os(macOS)
+        .defaultSize(width: 1180, height: 800)
+        .commands {
+            CommandGroup(after: .toolbar) {
+                Button("Refresh") { Task { await model.reload() } }
+                    .keyboardShortcut("r")
+            }
+        }
+        #endif
+
+        #if os(macOS)
+        Settings {
+            SettingsView()
+                .environment(model)
+                .frame(width: 560, height: 520)
+        }
+        #endif
     }
 }
 
@@ -51,10 +74,15 @@ struct RootView: View {
                     ArchiveView()
                         .tabItem { Label("Archive", systemImage: "archivebox") }
                         .tag("archive")
+                    #if os(iOS)
                     SettingsView()
                         .tabItem { Label("Settings", systemImage: "gearshape") }
                         .tag("settings")
+                    #endif
                 }
+                #if os(macOS)
+                .tabViewStyle(.sidebarAdaptable)      // a sidebar on the Mac; Settings is in the app menu (⌘,)
+                #endif
             } else {
                 OnboardingView()
             }
@@ -72,6 +100,14 @@ struct OnboardingView: View {
     @Environment(AppModel.self) private var model
     @State private var picking = false
 
+    #if os(macOS)
+    static let intro: LocalizedStringKey = "Choose your Projects folder to get started.\nIn the panel, select **Documents › Projects** and click **Open**.\nNew to Proj? Create an empty folder (e.g. “Projects”) in the panel and choose it — Proj sets it up for you."
+    static let footnote: LocalizedStringKey = "Proj edits the README.md files in place, so changes show up in `proj` and the web UI too."
+    #else
+    static let intro: LocalizedStringKey = "Choose your Projects folder to get started.\nIn the picker, open **iCloud Drive › Documents › Projects** and tap **Open**.\nNew to Proj? Create an empty folder (e.g. “Projects”) in the picker and choose it — Proj sets it up for you."
+    static let footnote: LocalizedStringKey = "Proj edits the README.md files in place, so changes show up in `proj` on your Mac."
+    #endif
+
     var body: some View {
         VStack(spacing: 20) {
             Spacer()
@@ -79,7 +115,7 @@ struct OnboardingView: View {
                 .font(.system(size: 64))
                 .foregroundStyle(.tint)
             Text("Proj").font(.largeTitle.bold())
-            Text("Choose your Projects folder to get started.\nIn the picker, open **iCloud Drive › Documents › Projects** and tap **Open**.\nNew to Proj? Create an empty folder (e.g. “Projects”) in the picker and choose it — Proj sets it up for you.")
+            Text(Self.intro)
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
             Button {
@@ -90,7 +126,7 @@ struct OnboardingView: View {
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
             Spacer()
-            Text("Proj edits the README.md files in place, so changes show up in `proj` on your Mac.")
+            Text(Self.footnote)
                 .font(.footnote)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)

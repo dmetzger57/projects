@@ -3,6 +3,11 @@ import ProjKitCore
 
 struct SettingsView: View {
     enum Target { case projects, receipts, documents }
+    #if os(macOS)
+    static let foldersFooter: LocalizedStringKey = "Choose Documents › Projects and › Receipts, and your Documents folder itself so Project Files links can be opened. Proj edits the files in place; changes appear in `proj` and the web UI too."
+    #else
+    static let foldersFooter: LocalizedStringKey = "Pick iCloud Drive › Documents › Projects and › Receipts, and iCloud Drive › Documents itself so Project Files links can be opened. Proj edits the files in place; changes appear in `proj` on the Mac. To share projects with family, share the Projects folder in iCloud Drive and have them choose it here."
+    #endif
     @Environment(AppModel.self) private var model
     /// Which folder the picker is choosing. Kept apart from `showPicker`: the picker clears its
     /// presentation binding before calling back, so the target must survive that.
@@ -29,7 +34,7 @@ struct SettingsView: View {
                 } header: {
                     Text("Folders")
                 } footer: {
-                    Text("Pick iCloud Drive › Documents › Projects and › Receipts, and iCloud Drive › Documents itself so Project Files links can be opened. Proj edits the files in place; changes appear in `proj` on the Mac. To share projects with family, share the Projects folder in iCloud Drive and have them choose it here.")
+                    Text(Self.foldersFooter)
                 }
                 Section("Status") {
                     LabeledContent("Projects", value: "\(model.projects.count)")
@@ -44,7 +49,7 @@ struct SettingsView: View {
                     LabeledContent("Build", value: Self.build)
                 }
                 Section {
-                    Text("Receipts saved from the iPhone can't get the Finder tag “receipt”. Run `proj lint --fix` on the Mac to add it.")
+                    Text("Receipts saved by the app don't get the Finder tag “receipt”. Run `proj lint --fix` on the Mac to add it.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 } header: { Text("Note") }

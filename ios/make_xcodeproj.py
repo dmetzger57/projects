@@ -22,7 +22,9 @@ def settings(d: dict) -> str:
             return "(\n" + "".join(f'\t\t\t\t\t"{x}",\n' for x in v) + "\t\t\t\t)"
         s = str(v)
         return s if s.replace("_", "").replace(".", "").isalnum() and s else f'"{s}"'
-    return "".join(f"\t\t\t\t{k} = {val(v)};\n" for k, v in sorted(d.items()))
+    def key(k):
+        return f'"{k}"' if "[" in k else k
+    return "".join(f"\t\t\t\t{key(k)} = {val(v)};\n" for k, v in sorted(d.items()))
 
 
 def main() -> None:
@@ -47,7 +49,8 @@ def main() -> None:
         "GCC_NO_COMMON_BLOCKS": "YES",
         "IPHONEOS_DEPLOYMENT_TARGET": "17.0",
         "LOCALIZATION_PREFERS_STRING_CATALOGS": "YES",
-        "SDKROOT": "iphoneos",
+        "MACOSX_DEPLOYMENT_TARGET": "15.0",
+        "SDKROOT": "auto",
     }
     proj_debug = {**common, "DEBUG_INFORMATION_FORMAT": "dwarf", "ENABLE_TESTABILITY": "YES",
                   "GCC_OPTIMIZATION_LEVEL": "0", "ONLY_ACTIVE_ARCH": "YES",
@@ -59,6 +62,10 @@ def main() -> None:
         "ASSETCATALOG_COMPILER_APPICON_NAME": "AppIcon",
         "ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME": "AccentColor",
         "CODE_SIGN_STYLE": "Automatic",
+        # the Mac app is sandboxed: it reaches the projects folder through folders the user picks
+        "CODE_SIGN_ENTITLEMENTS[sdk=macosx*]": "Mac/Proj.entitlements",
+        "ENABLE_HARDENED_RUNTIME[sdk=macosx*]": "YES",
+        "INFOPLIST_KEY_NSHumanReadableCopyright": "",
         "CURRENT_PROJECT_VERSION": "1",
         "DEVELOPMENT_TEAM": args.team,
         "ENABLE_PREVIEWS": "YES",
@@ -73,11 +80,13 @@ def main() -> None:
         "INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad": "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight",
         "INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone": "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight",
         "LD_RUNPATH_SEARCH_PATHS": ["$(inherited)", "@executable_path/Frameworks"],
+        "LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]": ["$(inherited)", "@executable_path/../Frameworks"],
         "MARKETING_VERSION": (Path(__file__).resolve().parent.parent / "VERSION").read_text().strip(),
         "PRODUCT_BUNDLE_IDENTIFIER": args.bundle_id,
         "PRODUCT_NAME": "$(TARGET_NAME)",
-        "SUPPORTED_PLATFORMS": "iphoneos iphonesimulator",
+        "SUPPORTED_PLATFORMS": "iphoneos iphonesimulator macosx",
         "SUPPORTS_MACCATALYST": "NO",
+        "SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD": "NO",
         "SWIFT_EMIT_LOC_STRINGS": "YES",
         "SWIFT_VERSION": "6.0",
         "TARGETED_DEVICE_FAMILY": "1,2",

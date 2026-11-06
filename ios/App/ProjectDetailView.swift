@@ -63,7 +63,11 @@ struct ProjectDetailView: View {
     @State private var edit: TextEdit?
     @State private var newGoal = ""
     @State private var newTask = ""
+    #if os(iOS)
     @Environment(\.horizontalSizeClass) private var sizeClass
+    #else
+    private let sizeClass: UserInterfaceSizeClass? = .regular     // the Mac always gets the wide layout
+    #endif
     @State private var editingTask: ProjectTask?
     @State private var photoRequest: PhotoRequest?
     @State private var editTaskText = ""
@@ -964,6 +968,13 @@ struct ProjectDetailView: View {
             }
             return
         }
+        #if os(macOS)
+        // On the Mac, files open in their usual app (Preview, Pages…) rather than Quick Look.
+        if !NSWorkspace.shared.open(url) {
+            model.errorMessage = "Couldn't open “\(f.name)”. Check that \(displayPath(f)) exists."
+        }
+        return
+        #endif
         Task {
             if let ready = await model.prepareForViewing(url) {
                 preview = ready
@@ -975,7 +986,11 @@ struct ProjectDetailView: View {
 
     /// Full location as the user sees it in the Files app.
     private func displayPath(_ f: ProjectFile) -> String {
+        #if os(macOS)
+        f.isURL ? f.target : "~/" + f.target
+        #else
         f.isURL ? f.target : "iCloud Drive › " + f.target.split(separator: "/").joined(separator: " › ")
+        #endif
     }
 
     private func textSection(_ p: Project, _ name: String) -> some View {

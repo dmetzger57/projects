@@ -33,6 +33,7 @@ struct TextEditSheet: View {
                         .font(.caption).foregroundStyle(.secondary).padding(8)
                 }
         }
+        .sheetSize(width: 560, height: 420)
         .onAppear { text = initial; focused = true }
     }
 }
@@ -114,6 +115,7 @@ struct FileEntrySheet: View {
                 }
             }
         }
+        .sheetSize(width: 560, height: 520)
         .onAppear {
             isLink = sheet.isLink
             name = sheet.name
@@ -166,6 +168,7 @@ struct AddLinkSheet: View {
                 }
             }
         }
+        .sheetSize(width: 480, height: 260)
         .presentationDetents([.medium])
     }
 }
@@ -218,6 +221,7 @@ struct ReceiptDetailsSheet: View {
                 }
             }
         }
+        .sheetSize(width: 480, height: 420)
         .onAppear { desc = pending.suggestedName }
     }
 }
@@ -259,6 +263,7 @@ struct NewProjectSheet: View {
                 }
             }
         }
+        .sheetSize(width: 480, height: 380)
         .onAppear { if area.isEmpty { area = model.areas.first ?? "" } }
     }
 }

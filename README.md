@@ -1,6 +1,6 @@
 # projkit — `proj`
 
-CLI, local web UI and iPhone app ([ios/](ios/README.md)) for the project folders in `~/Documents/Projects`.
+CLI, local web UI, and iPhone/iPad/Mac app ([ios/](ios/README.md)) for the project folders in `~/Documents/Projects`.
 The file format is defined in [SPEC.md](SPEC.md); the files are the source of truth.
 
 ## Setup
@@ -11,7 +11,7 @@ ln -s "$PWD/.venv/bin/proj" ~/bin/proj   # or add .venv/bin to PATH
 ```
 
 Common tasks are in the [Makefile](Makefile) (`make` lists them): `make check` (Python tests, Swift checks,
-cross-check), `make restart-web`, `make install` (iPhone and iPad), `make sim TAB=projects` / `make screenshot`
+cross-check), `make restart-web`, `make install` (Mac, iPhone and iPad; `make install-mac` for just the Mac), `make sim TAB=projects` / `make screenshot`
 (simulator on a copy of your projects), `make release`.
 
 Environment: `PROJ_ROOT` (default `~/Documents/Projects`), `PROJ_RECEIPTS` (default `~/Documents/Receipts`).

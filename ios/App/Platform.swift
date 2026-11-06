@@ -61,6 +61,55 @@ extension View {
     }
 }
 
+extension ToolbarItemPlacement {
+    /// Leading end of the toolbar (top-left on iPhone/iPad, navigation area on the Mac).
+    static var leadingBar: ToolbarItemPlacement {
+        #if os(iOS)
+        .topBarLeading
+        #else
+        .navigation
+        #endif
+    }
+}
+
+extension Color {
+    #if os(iOS)
+    static var groupedBackground: Color { Color(.systemGroupedBackground) }
+    static var secondaryGroupedBackground: Color { Color(.secondarySystemGroupedBackground) }
+    #else
+    static var groupedBackground: Color { Color(nsColor: .windowBackgroundColor) }
+    static var secondaryGroupedBackground: Color { Color(nsColor: .controlBackgroundColor) }
+    #endif
+}
+
+extension View {
+    /// Lists that are always reorderable (iOS needs edit mode for drag handles; the Mac drags anyway).
+    func alwaysEditing() -> some View {
+        #if os(iOS)
+        environment(\.editMode, .constant(.active))
+        #else
+        self
+        #endif
+    }
+
+    /// Mac sheets size themselves to their content, and a List or Form has none: give them a real size.
+    func sheetSize(width: CGFloat, height: CGFloat) -> some View {
+        #if os(macOS)
+        frame(minWidth: width, idealWidth: width, minHeight: height, idealHeight: height)
+        #else
+        self
+        #endif
+    }
+
+    func liftOnHover() -> some View {
+        #if os(iOS)
+        hoverEffect(.lift)
+        #else
+        self
+        #endif
+    }
+}
+
 func copyToClipboard(_ s: String) {
     #if os(iOS)
     UIPasteboard.general.string = s
