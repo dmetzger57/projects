@@ -70,6 +70,31 @@ def parse_file_line(line: str) -> dict | None:
             "kind": "url" if URL_SCHEME_RE.match(target) else "file"}
 
 
+# Photos: Markdown images of files in the project's own Photos/ folder, with the note as caption:
+# "- ![note](<Photos/2026-11-06 101230-k3x9.jpg>)" under "## Photos", or indented under a task.
+PHOTO_RE = re.compile(r"^- !\[([^\]]*)\]\((<[^<>]*>|[^\s()<>]+)\)\s*$")
+PHOTO_DIR = "Photos"
+
+
+def parse_photo_line(line: str) -> dict | None:
+    """{note, path} of a photo line ("Photos/<file>" only; other images are left alone)."""
+    m = PHOTO_RE.match(line)
+    if not m:
+        return None
+    path = m.group(2)
+    if path.startswith("<"):
+        path = path[1:-1]
+    name = path[len(PHOTO_DIR) + 1:]
+    if not path.startswith(PHOTO_DIR + "/") or not name or "/" in name or name.startswith("."):
+        return None
+    return {"note": m.group(1).strip(), "path": path}
+
+
+def photo_line_indices(lines: list[str]) -> list[int]:
+    b = section_bounds(lines, "Photos")
+    return [i for i in range(b[0] + 1, b[1]) if parse_photo_line(lines[i])] if b else []
+
+
 def task_line_indices(lines: list[str]) -> list[int]:
     b = section_bounds(lines, "Tasks")
     return [i for i in range(b[0] + 1, b[1]) if TASK_RE.match(lines[i])] if b else []
@@ -92,9 +117,15 @@ def task_file_indices(lines: list[str], block: tuple[int, int]) -> list[int]:
     return [j for j in range(block[0] + 1, block[1]) if FILE_RE.match(lines[j].lstrip(" \t"))]
 
 
+def task_photo_indices(lines: list[str], block: tuple[int, int]) -> list[int]:
+    """Photo lines of a task: indented photo lines among its detail lines."""
+    return [j for j in range(block[0] + 1, block[1]) if parse_photo_line(lines[j].lstrip(" \t"))]
+
+
 def task_note_indices(lines: list[str], block: tuple[int, int]) -> list[int]:
-    """Note lines of a task: every detail line that isn't an attachment."""
-    return [j for j in range(block[0] + 1, block[1]) if not FILE_RE.match(lines[j].lstrip(" \t"))]
+    """Note lines of a task: every detail line that isn't an attachment or a photo."""
+    return [j for j in range(block[0] + 1, block[1])
+            if not FILE_RE.match(lines[j].lstrip(" \t")) and not parse_photo_line(lines[j].lstrip(" \t"))]
 
 
 def parse_task_note(line: str) -> str:
@@ -284,11 +315,18 @@ class Project:
             m = TASK_RE.match(lines[start])
             files = [parse_file_line(lines[j].lstrip(" \t")) for j in task_file_indices(lines, (start, end))]
             notes = [parse_task_note(lines[j]) for j in task_note_indices(lines, (start, end))]
+            photos = [parse_photo_line(lines[j].lstrip(" \t")) for j in task_photo_indices(lines, (start, end))]
             text, tid = split_task_text(m.group(2))
             text, archived, source = split_archived(text)
-            out.append({"text": text, "done": m.group(1) != " ", "files": files, "notes": notes, "id": tid,
+            out.append({"text": text, "done": m.group(1) != " ", "files": files, "notes": notes, "photos": photos, "id": tid,
                         "archived": archived, "from": source})
         return out
+
+    @property
+    def photos(self) -> list[dict]:
+        """Photo entries in `## Photos`: {note, path} (path relative to the project folder)."""
+        lines = self.body.splitlines()
+        return [parse_photo_line(lines[i]) for i in photo_line_indices(lines)]
 
     @property
     def files(self) -> list[dict]:

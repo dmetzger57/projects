@@ -44,6 +44,8 @@ proj task ls photo --archived           # …and list the project's archived tas
 proj archive                            # all archived tasks with their project and date (web/iPhone: Archive)
 proj archive -p photo --since 30d --sort name   # filter by project / date (YYYY-MM-DD or Nd); sort newest|oldest|name|project
 proj archive restore|rm <#n>            # move one back into its project, or delete it for good
+proj photo add roof ~/Desktop/leak.jpg -n "Leak over the garage"   # copied into Roof/Photos/; -t <task> for a task
+proj photo ls|note|rm|open roof <photo> [-t <task>]                 # web: Photos section, 📷 on a task
 proj link add web https://… -t "Docs"
 proj file add photo "Documents/Manuals/scanner.pdf" -n "Scanner manual"   # Project Files link
 proj file add photo https://docs.google.com/… -n "Plan"                    # …or a URL

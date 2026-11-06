@@ -14,7 +14,7 @@ from ruamel.yaml.comments import CommentedMap, CommentedSeq
 
 from .project import (FILE_RE, split_task_text, split_archived, FORMAT_VERSION, ProjectError, README, STATUSES, URL_SCHEME_RE, Project, file_line_indices,
                       parse_file_line, section_bounds, task_blocks, task_file_indices, task_line_indices,
-                      task_note_indices)
+                      task_note_indices, PHOTO_DIR, parse_photo_line, photo_line_indices, task_photo_indices)
 from .workspace import BACKLOG_STEM, OVERVIEW_STEM, Workspace
 
 RECEIPT_TAG = "receipt"
@@ -442,10 +442,12 @@ def move_task(p: Project, ref: str, position: int) -> dict:
 
 
 def remove_task(p: Project, ref: str) -> dict:
+    """Deletes a task with its notes and attachment links; its photo files are deleted too."""
     i = _task_index(p, ref)
     t = p.tasks[i]
     p.body = body_remove_task(p.body, i)
     p.save()
+    _delete_unreferenced_photos(p, [ph["path"] for ph in t["photos"]])
     return t
 
 
@@ -681,6 +683,217 @@ def remove_task_file(p: Project, task: str, ref: str) -> dict:
     return f
 
 
+# ---- photos ("- ![note](<Photos/file.jpg>)": under "## Photos", or indented under a task) ----
+# Files live in the project's own Photos/ folder (they move with it); Proj creates them, so removing a
+# photo deletes its file. body_*_photo functions are byte-identical with ios/ProjKit ReadmeBody.
+PHOTO_EXTS = {".jpg", ".jpeg", ".png", ".heic", ".heif", ".gif", ".webp"}
+
+
+def _clean_photo_note(note: str | None) -> str:
+    t = " ".join((note or "").replace("\r", "\n").split("\n")).strip()
+    return t.replace("[", "(").replace("]", ")")
+
+
+def format_photo_line(note: str | None, path: str) -> str:
+    if not parse_photo_line(f"- ![](<{path}>)"):
+        raise OpError(f"not a photo path: {path}")
+    return f"- ![{_clean_photo_note(note)}](<{path}>)"
+
+
+def new_photo_name(ext: str = ".jpg", now: dt.datetime | None = None) -> str:
+    """"2026-11-06 101230-k3x9.jpg": sortable, and unique enough to move between projects and the Archive."""
+    import secrets
+    alphabet = "abcdefghijkmnpqrstuvwxyz23456789"
+    ext = ext.lower() if ext.startswith(".") else "." + ext.lower()
+    stamp = (now or dt.datetime.now()).strftime("%Y-%m-%d %H%M%S")
+    return f"{stamp}-{''.join(secrets.choice(alphabet) for _ in range(4))}{ext}"
+
+
+def _photo_line(body: str, index: int) -> tuple[list[str], int]:
+    lines = body.rstrip("\n").split("\n")
+    idx = photo_line_indices(lines)
+    if not 0 <= index < len(idx):
+        raise OpError(f"no photo #{index + 1}")
+    return lines, idx[index]
+
+
+def body_add_photo(body: str, note: str | None, path: str) -> str:
+    """Adds a photo after the last one in ## Photos (creating the section just before ## Notes, or at the end)."""
+    line = format_photo_line(note, path)
+    lines = body.rstrip("\n").split("\n")
+    b = section_bounds(lines, "Photos")
+    if b is None:
+        notes = next((i for i, l in enumerate(lines) if l.strip().lower() == "## notes"), len(lines))
+        new = ["## Photos", line] + ([""] if notes < len(lines) else [])
+        if notes > 0 and lines[notes - 1].strip():
+            new.insert(0, "")
+        lines[notes:notes] = new
+    else:
+        idx = photo_line_indices(lines)
+        if idx:
+            pos = idx[-1] + 1
+        else:
+            pos = b[1]
+            while pos > b[0] + 1 and not lines[pos - 1].strip():
+                pos -= 1
+        lines.insert(pos, line)
+    return "\n".join(lines) + "\n"
+
+
+def body_edit_photo(body: str, index: int, note: str | None) -> str:
+    lines, i = _photo_line(body, index)
+    lines[i] = format_photo_line(note, parse_photo_line(lines[i])["path"])
+    return "\n".join(lines) + "\n"
+
+
+def body_remove_photo(body: str, index: int) -> str:
+    lines, i = _photo_line(body, index)
+    del lines[i]
+    return "\n".join(lines) + "\n"
+
+
+def _task_photo_line(body: str, task: int, index: int) -> tuple[list[str], int]:
+    lines = body.rstrip("\n").split("\n")
+    blocks = task_blocks(lines)
+    if not 0 <= task < len(blocks):
+        raise OpError(f"no task #{task + 1}")
+    idx = task_photo_indices(lines, blocks[task])
+    if not 0 <= index < len(idx):
+        raise OpError(f"task #{task + 1} has no photo #{index + 1}")
+    return lines, idx[index]
+
+
+def body_add_task_photo(body: str, task: int, note: str | None, path: str) -> str:
+    """Adds a photo after the task's last photo (or at the end of its detail lines)."""
+    line = TASK_FILE_INDENT + format_photo_line(note, path)
+    lines = body.rstrip("\n").split("\n")
+    blocks = task_blocks(lines)
+    if not 0 <= task < len(blocks):
+        raise OpError(f"no task #{task + 1}")
+    idx = task_photo_indices(lines, blocks[task])
+    lines.insert(idx[-1] + 1 if idx else blocks[task][1], line)
+    return "\n".join(lines) + "\n"
+
+
+def body_edit_task_photo(body: str, task: int, index: int, note: str | None) -> str:
+    lines, i = _task_photo_line(body, task, index)
+    stripped = lines[i].lstrip(" \t")
+    lines[i] = lines[i][:len(lines[i]) - len(stripped)] + format_photo_line(note, parse_photo_line(stripped)["path"])
+    return "\n".join(lines) + "\n"
+
+
+def body_remove_task_photo(body: str, task: int, index: int) -> str:
+    lines, i = _task_photo_line(body, task, index)
+    del lines[i]
+    return "\n".join(lines) + "\n"
+
+
+def photo_path(p: Project, path: str) -> Path:
+    """The file of a photo entry (paths are relative to the project folder)."""
+    if not parse_photo_line(f"- ![](<{path}>)"):
+        raise OpError(f"not a photo path: {path}")
+    return p.dir / path
+
+
+def _referenced_photos(p: Project) -> set[str]:
+    lines = p.body.splitlines()
+    return {ph["path"] for ln in lines if (ph := parse_photo_line(ln.lstrip(" \t")))}
+
+
+def _delete_unreferenced_photos(p: Project, paths: list[str]) -> None:
+    keep = _referenced_photos(p)
+    for path in paths:
+        if path not in keep:
+            (p.dir / path).unlink(missing_ok=True)
+
+
+def _check_photo_move(photos: list[dict], src: Path, dst: Path) -> None:
+    for ph in photos:
+        if (dst / ph["path"]).exists() and (src / ph["path"]).exists():
+            raise OpError(f"{dst.name}/{ph['path']} already exists")
+
+
+def _move_photos(photos: list[dict], src: Path, dst: Path) -> None:
+    """Moves a task's photo files along with the task (to or from the Archive)."""
+    for ph in photos:
+        s, d = src / ph["path"], dst / ph["path"]
+        if s.exists():
+            d.parent.mkdir(exist_ok=True)
+            s.rename(d)
+
+
+def _photo_index(photos: list[dict], ref: str) -> int:
+    if ref.isdigit():
+        i = int(ref) - 1
+        if 0 <= i < len(photos):
+            return i
+        raise OpError(f"no photo #{ref} (there are {len(photos)})")
+    hits = [i for i, ph in enumerate(photos) if ref.lower() in ph["note"].lower() or ref.lower() in ph["path"].lower()]
+    if len(hits) != 1:
+        raise OpError(f"photo reference '{ref}' matches {len(hits)} photos")
+    return hits[0]
+
+
+def add_photo(p: Project, data: bytes, ext: str, note: str | None = None, task: str | None = None,
+              now: dt.datetime | None = None) -> dict:
+    """Saves an image into the project's Photos/ folder and adds it to the project (or to a task)."""
+    ext = ext.lower() if ext.startswith(".") else "." + ext.lower()
+    if ext not in PHOTO_EXTS:
+        raise OpError(f"not a photo type Proj knows: {ext} ({', '.join(sorted(PHOTO_EXTS))})")
+    if not data:
+        raise OpError("the photo is empty")
+    i = _task_index(p, task) if task is not None else None
+    name = new_photo_name(ext, now)
+    path = f"{PHOTO_DIR}/{name}"
+    folder = p.dir / PHOTO_DIR
+    folder.mkdir(exist_ok=True)
+    (folder / name).write_bytes(data)
+    try:
+        p.body = body_add_photo(p.body, note, path) if i is None else body_add_task_photo(p.body, i, note, path)
+        p.save()
+    except BaseException:
+        (folder / name).unlink(missing_ok=True)
+        raise
+    return p.photos[-1] if i is None else p.tasks[i]["photos"][-1]
+
+
+def add_photo_file(p: Project, src: Path, note: str | None = None, task: str | None = None) -> dict:
+    """Copies an image file into the project's Photos/ folder (photos belong to the project)."""
+    src = Path(src).expanduser()
+    if not src.is_file():
+        raise OpError(f"no such file: {src}")
+    return add_photo(p, src.read_bytes(), src.suffix, note, task)
+
+
+def edit_photo_note(p: Project, ref: str, note: str | None, task: str | None = None) -> dict:
+    if task is None:
+        j = _photo_index(p.photos, ref)
+        p.body = body_edit_photo(p.body, j, note)
+        p.save()
+        return p.photos[j]
+    i = _task_index(p, task)
+    j = _photo_index(p.tasks[i]["photos"], ref)
+    p.body = body_edit_task_photo(p.body, i, j, note)
+    p.save()
+    return p.tasks[i]["photos"][j]
+
+
+def remove_photo(p: Project, ref: str, task: str | None = None) -> dict:
+    """Removes a photo and deletes its file (unless another entry still shows it)."""
+    if task is None:
+        j = _photo_index(p.photos, ref)
+        ph = p.photos[j]
+        p.body = body_remove_photo(p.body, j)
+    else:
+        i = _task_index(p, task)
+        j = _photo_index(p.tasks[i]["photos"], ref)
+        ph = p.tasks[i]["photos"][j]
+        p.body = body_remove_task_photo(p.body, i, j)
+    p.save()
+    _delete_unreferenced_photos(p, [ph["path"]])
+    return ph
+
+
 # ---- task notes (indented "  - text" lines under a task, shown below it) ----
 # body_*_task_note functions are byte-identical with ios/ProjKit ReadmeBody task note functions.
 def _clean_task_note(text: str) -> str:
@@ -689,6 +902,8 @@ def _clean_task_note(text: str) -> str:
         raise OpError("note text is empty")
     if FILE_RE.match("- " + t):
         raise OpError("a note can't be just a link; attach it to the task instead")
+    if parse_photo_line("- " + t):
+        raise OpError("a note can't be just a photo; add the photo to the task instead")
     return t
 
 
@@ -1291,7 +1506,9 @@ def archive_task(ws: Workspace, p: Project, ref: str, date: dt.date | None = Non
     body = body_add_task_block(a.body, body_task_block(p.body, i))
     a.body = body_set_task_archived(body, len(task_blocks(body.split("\n"))) - 1,
                                     (date or _today()).isoformat(), p.folder_name)
+    _check_photo_move(p.tasks[i]["photos"], p.dir, a.dir)
     a.save()                                 # written before the original is removed: never lost
+    _move_photos(p.tasks[i]["photos"], p.dir, a.dir)
     p.body = body_remove_task(p.body, i)
     p.save()
     return a.tasks[-1]
@@ -1349,7 +1566,9 @@ def restore_task(ws: Workspace, ref: str) -> tuple[dict, Project]:
         raise OpError(f"'{p.folder_name}' can't be edited right now")
     body = body_add_task_block(p.body, body_task_block(a.body, i))
     p.body = body_set_task_archived(body, len(task_blocks(body.split("\n"))) - 1, None, None)
+    _check_photo_move(t["photos"], a.dir, p.dir)
     p.save()
+    _move_photos(t["photos"], a.dir, p.dir)
     a.body = body_remove_task(a.body, i)
     a.save()
     return p.tasks[-1], p

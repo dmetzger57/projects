@@ -321,10 +321,13 @@ public enum Ops {
         let q = try fresh(ws, p)
         let block = try ReadmeBody.taskBlock(q.document!.body, index: index)
         let a = try ensureArchive(ws)
+        let photos = q.tasks.indices.contains(index) ? q.tasks[index].photos : []
+        try checkPhotoMove(ws, photos, from: q.url, to: a.url)
         try editBody(ws, a) { body in
             let b = ReadmeBody.addTaskBlock(body, block)
             return try ReadmeBody.setTaskArchived(b, index: ReadmeBody.tasks(b).count - 1, date: date, from: p.folderName)
         }                                    // written before the original is removed: never lost
+        try movePhotos(ws, photos, from: q.url, to: a.url)
         try editBody(ws, q) { try ReadmeBody.removeTask($0, index: index) }
     }
 
@@ -372,10 +375,13 @@ public enum Ops {
             throw OpError("project '\(from)' no longer exists")
         }
         let block = try ReadmeBody.taskBlock(try fresh(ws, a).document!.body, index: index)
+        let photos = tasks[index].photos
+        try checkPhotoMove(ws, photos, from: a.url, to: p.url)
         try editBody(ws, p) { body in
             let b = ReadmeBody.addTaskBlock(body, block)
             return try ReadmeBody.setTaskArchived(b, index: ReadmeBody.tasks(b).count - 1, date: nil, from: nil)
         }
+        try movePhotos(ws, photos, from: a.url, to: p.url)
         try editBody(ws, a) { try ReadmeBody.removeTask($0, index: index) }
         return ws.load(p.url)
     }
@@ -398,8 +404,104 @@ public enum Ops {
         try editBody(ws, p) { try ReadmeBody.moveTask($0, index: from, to: to) }
     }
 
+    /// Deletes a task with its notes and attachment links; its photo files are deleted too.
     public static func removeTask(_ ws: Workspace, _ p: Project, index: Int) throws {
-        try editBody(ws, p) { try ReadmeBody.removeTask($0, index: index) }
+        let q = try fresh(ws, p)
+        let photos = q.tasks.indices.contains(index) ? q.tasks[index].photos.map(\.path) : []
+        try editBody(ws, q) { try ReadmeBody.removeTask($0, index: index) }
+        try deleteUnreferencedPhotos(ws, q, photos)
+    }
+
+    // MARK: photos (files in the project's Photos/ folder; Proj creates them, so removing deletes the file)
+
+    public static let photoExtensions: Set<String> = ["jpg", "jpeg", "png", "heic", "heif", "gif", "webp"]
+
+    /// "2026-11-06 101230-k3x9.jpg": sortable, and unique enough to move between projects and the Archive.
+    public static func newPhotoName(ext: String = "jpg", date: Date = Date()) -> String {
+        let f = DateFormatter()
+        f.calendar = Calendar(identifier: .gregorian)
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "yyyy-MM-dd HHmmss"
+        let alphabet = Array("abcdefghijkmnpqrstuvwxyz23456789")
+        let suffix = String((0..<4).map { _ in alphabet.randomElement()! })
+        return "\(f.string(from: date))-\(suffix).\(ext.lowercased())"
+    }
+
+    /// Where a photo's file is (paths are relative to the project folder).
+    public static func photoURL(_ p: Project, _ photo: ProjectPhoto) -> URL {
+        p.url.appendingPathComponent(photoDirName).appendingPathComponent(photo.fileName)
+    }
+
+    /// Saves image data into the project's Photos/ folder and adds it to the project, or to task `task`.
+    @discardableResult
+    public static func addPhoto(_ ws: Workspace, _ p: Project, data: Data, ext: String = "jpg", note: String?,
+                                task: Int? = nil) throws -> ProjectPhoto {
+        let e = ext.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "."))
+        guard photoExtensions.contains(e) else { throw OpError("not a photo type Proj knows: \(ext)") }
+        guard !data.isEmpty else { throw OpError("the photo is empty") }
+        let q = try fresh(ws, p)
+        if let task, !q.tasks.indices.contains(task) { throw OpError("no task #\(task + 1)") }
+        let dir = q.url.appendingPathComponent(photoDirName)
+        if !ws.fs.isDirectory(dir) { try ws.fs.createDirectory(dir) }
+        let name = newPhotoName(ext: e)
+        let path = "\(photoDirName)/\(name)"
+        try ws.fs.writeData(data, to: dir.appendingPathComponent(name))
+        do {
+            try editBody(ws, q) { body in
+                if let task { return try ReadmeBody.addTaskPhoto(body, task: task, note: note, path: path) }
+                return try ReadmeBody.addPhoto(body, note: note, path: path)
+            }
+        } catch {
+            try? ws.fs.removeItem(dir.appendingPathComponent(name))
+            throw error
+        }
+        let r = ws.load(q.url)
+        return (task.map { r.tasks[$0].photos } ?? r.photos).last!
+    }
+
+    public static func editPhotoNote(_ ws: Workspace, _ p: Project, index: Int, note: String?, task: Int? = nil) throws {
+        try editBody(ws, p) { body in
+            if let task { return try ReadmeBody.editTaskPhoto(body, task: task, index: index, note: note) }
+            return try ReadmeBody.editPhoto(body, index: index, note: note)
+        }
+    }
+
+    /// Removes a photo and deletes its file (unless another entry still shows it).
+    public static func removePhoto(_ ws: Workspace, _ p: Project, index: Int, task: Int? = nil) throws {
+        let q = try fresh(ws, p)
+        let list = task.map { q.tasks.indices.contains($0) ? q.tasks[$0].photos : [] } ?? q.photos
+        guard list.indices.contains(index) else { throw OpError("no photo #\(index + 1)") }
+        try editBody(ws, q) { body in
+            if let task { return try ReadmeBody.removeTaskPhoto(body, task: task, index: index) }
+            return try ReadmeBody.removePhoto(body, index: index)
+        }
+        try deleteUnreferencedPhotos(ws, q, [list[index].path])
+    }
+
+    static func deleteUnreferencedPhotos(_ ws: Workspace, _ p: Project, _ paths: [String]) throws {
+        guard !paths.isEmpty else { return }
+        let keep = ReadmeBody.referencedPhotos(try fresh(ws, p).document!.body)
+        for path in paths where !keep.contains(path) {
+            let f = p.url.appendingPathComponent(path)
+            if ws.fs.exists(f) { try ws.fs.removeItem(f) }
+        }
+    }
+
+    static func checkPhotoMove(_ ws: Workspace, _ photos: [ProjectPhoto], from src: URL, to dst: URL) throws {
+        for ph in photos where ws.fs.exists(dst.appendingPathComponent(ph.path)) && ws.fs.exists(src.appendingPathComponent(ph.path)) {
+            throw OpError("\(dst.lastPathComponent)/\(ph.path) already exists")
+        }
+    }
+
+    /// Moves a task's photo files along with the task (to or from the Archive).
+    static func movePhotos(_ ws: Workspace, _ photos: [ProjectPhoto], from src: URL, to dst: URL) throws {
+        guard !photos.isEmpty else { return }
+        let dir = dst.appendingPathComponent(photoDirName)
+        if !ws.fs.isDirectory(dir) { try ws.fs.createDirectory(dir) }
+        for ph in photos {
+            let s = src.appendingPathComponent(ph.path)
+            if ws.fs.exists(s) { try ws.fs.move(s, to: dst.appendingPathComponent(ph.path)) }
+        }
     }
 
     // MARK: project files

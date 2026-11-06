@@ -5,6 +5,7 @@ import Foundation
 /// downloads of evicted files and keeps other devices' writes from interleaving.
 public protocol FileSystem: Sendable {
     func readText(_ url: URL) throws -> String
+    func readData(_ url: URL) throws -> Data
     func writeText(_ text: String, to url: URL) throws
     func writeData(_ data: Data, to url: URL) throws
     /// Visible (non-hidden) children, iCloud placeholders reported under their real names.
@@ -50,6 +51,10 @@ public struct CoordinatedFileSystem: FileSystem {
 
     public func readText(_ url: URL) throws -> String {
         try coordinate(read: url) { try String(contentsOf: $0, encoding: .utf8) }
+    }
+
+    public func readData(_ url: URL) throws -> Data {
+        try coordinate(read: url) { try Data(contentsOf: $0) }
     }
 
     public func writeText(_ text: String, to url: URL) throws {

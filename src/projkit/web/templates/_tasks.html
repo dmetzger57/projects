@@ -89,6 +89,39 @@
           {% endfor %}
         </ul>
         {% endif %}
+        {% if t.photos %}
+        <ul class="task-photos">
+          {% for ph in t.photos %}
+          <li class="photo small-photo">
+            <a href="{{ photo_url(ph.path) }}" target="_blank" rel="noopener" title="{{ ph.note or 'Open photo' }}">
+              <img src="{{ photo_url(ph.path) }}" alt="{{ ph.note or 'Photo' }}" loading="lazy">
+            </a>
+            <div class="photo-caption">
+              <span class="{{ 'muted' if not ph.note }}">{{ ph.note or 'No note' }}</span>
+              <span class="photo-actions">
+                <button class="x edit" title="Edit note" aria-label="Edit note of photo {{ loop.index }}"
+                        data-photo-note="{{ ph.note }}" data-url="{{ url }}/tasks/{{ n }}/photos/{{ loop.index }}/note"
+                        data-target="#tasks">✎</button>
+                <button class="x" title="Delete photo" aria-label="Delete photo {{ loop.index }}"
+                        hx-post="{{ url }}/tasks/{{ n }}/photos/{{ loop.index }}/delete" hx-target="#tasks" hx-swap="outerHTML"
+                        hx-confirm="Delete this photo? Its file is deleted too.">×</button>
+              </span>
+            </div>
+          </li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+        {% if task_photo_add == n %}
+        <form class="stack task-photo-add editing" hx-post="{{ url }}/tasks/{{ n }}/photos" hx-encoding="multipart/form-data"
+              hx-target="#tasks" hx-swap="outerHTML">
+          <input type="file" name="image" accept="image/*" required autofocus aria-label="Photo for “{{ t.text }}”">
+          <input name="note" placeholder="Note (optional)" aria-label="Note for the photo">
+          <div class="row-end">
+            <button type="button" class="btn small" hx-get="{{ url }}/tasks" hx-target="#tasks" hx-swap="outerHTML">Cancel</button>
+            <button class="btn small primary">Add photo</button>
+          </div>
+        </form>
+        {% endif %}
         {% if task_attach == n %}
         <form class="stack file-form task-attach" hx-post="{{ url }}/tasks/{{ n }}/files" hx-target="#tasks" hx-swap="outerHTML">
           <div class="add-row">
@@ -115,6 +148,10 @@
       {% endif %}
       <button class="x edit" title="Add a note" aria-label="Add a note to “{{ t.text }}”"
               hx-get="{{ url }}/tasks?note={{ n }}" hx-target="#tasks" hx-swap="outerHTML">📝</button>
+      {% if not is_today %}
+      <button class="x edit" title="Add a photo" aria-label="Add a photo to “{{ t.text }}”"
+              hx-get="{{ url }}/tasks?photo={{ n }}" hx-target="#tasks" hx-swap="outerHTML">📷</button>
+      {% endif %}
       <button class="x edit" title="Attach a file or link" aria-label="Attach a file or link to “{{ t.text }}”"
               hx-get="{{ url }}/tasks?attach={{ n }}" hx-target="#tasks" hx-swap="outerHTML">📎</button>
       <button class="x edit" title="Edit task" aria-label="Edit task"

@@ -42,6 +42,8 @@ public struct ProjectTask: Identifiable, Hashable, Sendable {
     public var files: [ProjectFile] = []
     /// Notes: the task's other indented detail lines ("  - text"); index is per task.
     public var notes: [TaskNote] = []
+    /// Photos: indented "  - ![note](<Photos/file.jpg>)" lines; index is per task.
+    public var photos: [ProjectPhoto] = []
     /// Hidden link shared with its copy in Today ("<!-- task:k3x9q2ab -->" at the end of the line).
     public var linkID: String? = nil
     /// Set on tasks in the Archive: when it was archived ("YYYY-MM-DD") and the project folder it came from.
@@ -49,6 +51,22 @@ public struct ProjectTask: Identifiable, Hashable, Sendable {
     public var archivedFrom: String? = nil
     public var id: Int { index }
 }
+
+/// A photo: a Markdown image of a file in the project's own Photos/ folder, with the note as caption.
+public struct ProjectPhoto: Identifiable, Hashable, Sendable {
+    public let index: Int          // 0-based position among the project's (or the task's) photos
+    public let note: String
+    public let path: String        // "Photos/<file>", relative to the project folder
+    public var id: Int { index }
+    public var fileName: String { String(path.dropFirst(photoDirName.count + 1)) }
+
+    public init(index: Int, note: String, path: String) {
+        self.index = index; self.note = note; self.path = path
+    }
+}
+
+/// Folder inside each project (and the Archive) that holds its photos.
+public let photoDirName = "Photos"
 
 public struct TaskNote: Identifiable, Hashable, Sendable {
     public let index: Int          // 0-based position among the task's notes
@@ -152,6 +170,8 @@ public struct Project: Identifiable, Hashable, Sendable {
     public var tasks: [ProjectTask] { document.map { ReadmeBody.tasks($0.body) } ?? [] }
 
     public var files: [ProjectFile] { document.map { ReadmeBody.files($0.body) } ?? [] }
+
+    public var photos: [ProjectPhoto] { document.map { ReadmeBody.photos($0.body) } ?? [] }
 
     /// Project Files content that isn't a link entry.
     public var filesOtherText: String { document.map { ReadmeBody.filesOtherText($0.body) } ?? "" }
@@ -272,8 +292,12 @@ public enum ReadmeBody {
                 return ProjectFile(index: k, name: f.name, target: f.target)
             }
             let notes = taskNoteIndices(lines, b).enumerated().map { k, j in TaskNote(index: k, text: parseTaskNote(lines[j])) }
-            return ProjectTask(index: n, text: t.text, done: t.done, files: files, notes: notes, linkID: linkID,
-                               archived: archived, archivedFrom: from)
+            let photos = taskPhotoIndices(lines, b).enumerated().map { k, j in
+                let ph = parsePhotoLine(stripIndent(lines[j]))!
+                return ProjectPhoto(index: k, note: ph.note, path: ph.path)
+            }
+            return ProjectTask(index: n, text: t.text, done: t.done, files: files, notes: notes, photos: photos,
+                               linkID: linkID, archived: archived, archivedFrom: from)
         }
     }
 
@@ -480,9 +504,11 @@ public enum ReadmeBody {
 
     // MARK: task notes — byte-identical with projkit/ops.py body_*_task_note
 
-    /// Note lines of a task: every detail line that isn't an attachment.
+    /// Note lines of a task: every detail line that isn't an attachment or a photo.
     static func taskNoteIndices(_ lines: [String], _ b: (start: Int, end: Int)) -> [Int] {
-        (b.start + 1..<b.end).filter { parseFileLine(stripIndent(lines[$0])) == nil }
+        (b.start + 1..<b.end).filter {
+            parseFileLine(stripIndent(lines[$0])) == nil && parsePhotoLine(stripIndent(lines[$0])) == nil
+        }
     }
 
     /// Text of a note line ("  - text"; a hand-written line without the bullet also counts).
@@ -497,6 +523,7 @@ public enum ReadmeBody {
             .joined(separator: " ").trimmingCharacters(in: .whitespaces)
         guard !t.isEmpty else { throw OpError("note text is empty") }
         guard parseFileLine("- " + t) == nil else { throw OpError("a note can't be just a link; attach it to the task instead") }
+        guard parsePhotoLine("- " + t) == nil else { throw OpError("a note can't be just a photo; add the photo to the task instead") }
         return t
     }
 
@@ -529,6 +556,132 @@ public enum ReadmeBody {
 
     public static func removeTaskNote(_ body: String, task: Int, index: Int) throws -> String {
         var (lines, i) = try taskNoteLine(body, task: task, index: index)
+        lines.remove(at: i)
+        return lines.joined(separator: "\n") + "\n"
+    }
+
+    // MARK: photos — byte-identical with projkit (PHOTO_RE, parse_photo_line, body_*_photo)
+
+    static let photoRegex = try! NSRegularExpression(pattern: #"^- !\[([^\]]*)\]\((<[^<>]*>|[^\s()<>]+)\)\s*$"#)
+
+    /// (note, path) of a photo line ("Photos/<file>" only; other images are left alone).
+    public static func parsePhotoLine(_ line: String) -> (note: String, path: String)? {
+        let ns = line as NSString
+        guard let m = photoRegex.firstMatch(in: line, range: NSRange(location: 0, length: ns.length)) else { return nil }
+        var path = ns.substring(with: m.range(at: 2))
+        if path.hasPrefix("<") { path = String(path.dropFirst().dropLast()) }
+        let prefix = photoDirName + "/"
+        guard path.hasPrefix(prefix) else { return nil }
+        let name = path.dropFirst(prefix.count)
+        guard !name.isEmpty, !name.contains("/"), !name.hasPrefix(".") else { return nil }
+        return (ns.substring(with: m.range(at: 1)).trimmingCharacters(in: .whitespaces), path)
+    }
+
+    static func photoLineIndices(_ lines: [String]) -> [Int] {
+        guard let b = sectionBounds(lines, "Photos") else { return [] }
+        return (b.start + 1..<b.end).filter { parsePhotoLine(lines[$0]) != nil }
+    }
+
+    /// Photo lines of a task: indented photo lines among its detail lines.
+    static func taskPhotoIndices(_ lines: [String], _ b: (start: Int, end: Int)) -> [Int] {
+        (b.start + 1..<b.end).filter { parsePhotoLine(stripIndent(lines[$0])) != nil }
+    }
+
+    public static func photos(_ body: String) -> [ProjectPhoto] {
+        let lines = body.components(separatedBy: "\n")
+        return photoLineIndices(lines).enumerated().map { k, i in
+            let ph = parsePhotoLine(lines[i])!
+            return ProjectPhoto(index: k, note: ph.note, path: ph.path)
+        }
+    }
+
+    /// Every photo path the body refers to (project and task photos).
+    static func referencedPhotos(_ body: String) -> Set<String> {
+        Set(body.components(separatedBy: "\n").compactMap { parsePhotoLine(stripIndent($0))?.path })
+    }
+
+    static func cleanPhotoNote(_ note: String?) -> String {
+        (note ?? "").replacingOccurrences(of: "\r", with: "\n").components(separatedBy: "\n")
+            .joined(separator: " ").trimmingCharacters(in: .whitespaces)
+            .replacingOccurrences(of: "[", with: "(").replacingOccurrences(of: "]", with: ")")
+    }
+
+    public static func formatPhotoLine(note: String?, path: String) throws -> String {
+        guard parsePhotoLine("- ![](<\(path)>)") != nil else { throw OpError("not a photo path: \(path)") }
+        return "- ![\(cleanPhotoNote(note))](<\(path)>)"
+    }
+
+    static func photoLine(_ body: String, index: Int) throws -> ([String], Int) {
+        let lines = splitBody(body)
+        let idx = photoLineIndices(lines)
+        guard idx.indices.contains(index) else { throw OpError("no photo #\(index + 1)") }
+        return (lines, idx[index])
+    }
+
+    /// Adds a photo after the last one in ## Photos (creating the section just before ## Notes, or at the end).
+    public static func addPhoto(_ body: String, note: String?, path: String) throws -> String {
+        let line = try formatPhotoLine(note: note, path: path)
+        var lines = splitBody(body)
+        if let b = sectionBounds(lines, "Photos") {
+            var pos: Int
+            if let last = photoLineIndices(lines).last {
+                pos = last + 1
+            } else {
+                pos = b.end
+                while pos > b.start + 1, lines[pos - 1].trimmingCharacters(in: .whitespaces).isEmpty { pos -= 1 }
+            }
+            lines.insert(line, at: pos)
+        } else {
+            let notes = lines.firstIndex { $0.trimmingCharacters(in: .whitespaces).lowercased() == "## notes" } ?? lines.count
+            var new = ["## Photos", line] + (notes < lines.count ? [""] : [])
+            if notes > 0, !lines[notes - 1].trimmingCharacters(in: .whitespaces).isEmpty { new.insert("", at: 0) }
+            lines.insert(contentsOf: new, at: notes)
+        }
+        return lines.joined(separator: "\n") + "\n"
+    }
+
+    public static func editPhoto(_ body: String, index: Int, note: String?) throws -> String {
+        var (lines, i) = try photoLine(body, index: index)
+        lines[i] = try formatPhotoLine(note: note, path: parsePhotoLine(lines[i])!.path)
+        return lines.joined(separator: "\n") + "\n"
+    }
+
+    public static func removePhoto(_ body: String, index: Int) throws -> String {
+        var (lines, i) = try photoLine(body, index: index)
+        lines.remove(at: i)
+        return lines.joined(separator: "\n") + "\n"
+    }
+
+    static func taskPhotoLine(_ body: String, task: Int, index: Int) throws -> ([String], Int) {
+        let lines = splitBody(body)
+        let blocks = taskBlocks(lines)
+        guard blocks.indices.contains(task) else { throw OpError("no task #\(task + 1)") }
+        let idx = taskPhotoIndices(lines, blocks[task])
+        guard idx.indices.contains(index) else { throw OpError("task #\(task + 1) has no photo #\(index + 1)") }
+        return (lines, idx[index])
+    }
+
+    /// Adds a photo after the task's last photo (or at the end of its detail lines).
+    public static func addTaskPhoto(_ body: String, task: Int, note: String?, path: String) throws -> String {
+        let line = taskFileIndent + (try formatPhotoLine(note: note, path: path))
+        var lines = splitBody(body)
+        let blocks = taskBlocks(lines)
+        guard blocks.indices.contains(task) else { throw OpError("no task #\(task + 1)") }
+        let idx = taskPhotoIndices(lines, blocks[task])
+        lines.insert(line, at: idx.last.map { $0 + 1 } ?? blocks[task].end)
+        return lines.joined(separator: "\n") + "\n"
+    }
+
+    public static func editTaskPhoto(_ body: String, task: Int, index: Int, note: String?) throws -> String {
+        var (lines, i) = try taskPhotoLine(body, task: task, index: index)
+        let stripped = stripIndent(lines[i])
+        lines[i] = String(lines[i].prefix(lines[i].count - stripped.count))
+            + (try formatPhotoLine(note: note, path: parsePhotoLine(stripped)!.path))
+        return lines.joined(separator: "\n") + "\n"
+    }
+
+    public static func removeTaskPhoto(_ body: String, task: Int, index: Int) throws -> String {
+        var (lines, i) = try taskPhotoLine(body, task: task, index: index)
         lines.remove(at: i)
         return lines.joined(separator: "\n") + "\n"
     }

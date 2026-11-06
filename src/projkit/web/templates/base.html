@@ -194,6 +194,14 @@
           ?.querySelector("[data-tile-handle]")?.focus();
       }
     } catch {}
+    // ---- photos: edit a photo's note (prompt prefilled with the current note) ----
+    document.addEventListener("click", e => {
+      const btn = e.target.closest?.("[data-photo-note]");
+      if (!btn) return;
+      const note = prompt("Note for this photo", btn.dataset.photoNote);
+      if (note === null) return;
+      htmx.ajax("POST", btn.dataset.url, {values: {note}, target: btn.dataset.target, swap: "outerHTML"});
+    });
     // ---- Project Files: browse ~/Documents, pick a path, show/hide actual paths ----
     function loadBrowser(box, path) {
       htmx.ajax("GET", "/browse?path=" + encodeURIComponent(path), {target: box, swap: "innerHTML"});

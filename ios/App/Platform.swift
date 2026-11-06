@@ -44,6 +44,23 @@ extension View {
     }
 }
 
+extension View {
+    /// Presents the camera for a photo; delivers it as JPEG data (upright, scaled down).
+    func cameraPicker(isPresented: Binding<Bool>, onPhoto: @escaping (Data) -> Void) -> some View {
+        #if os(iOS)
+        fullScreenCover(isPresented: isPresented) {
+            CameraPickerView(onImage: { image in
+                isPresented.wrappedValue = false
+                if let jpeg = PhotoPrep.jpeg(from: image) { onPhoto(jpeg) }
+            }, onCancel: { isPresented.wrappedValue = false })
+            .ignoresSafeArea()
+        }
+        #else
+        self
+        #endif
+    }
+}
+
 func copyToClipboard(_ s: String) {
     #if os(iOS)
     UIPasteboard.general.string = s
@@ -111,8 +128,49 @@ struct DocumentScannerView: UIViewControllerRepresentable {
         }
     }
 }
+
+@MainActor
+enum Camera {
+    static var isAvailable: Bool { UIImagePickerController.isSourceTypeAvailable(.camera) }
+}
+
+struct CameraPickerView: UIViewControllerRepresentable {
+    let onImage: (UIImage) -> Void
+    let onCancel: () -> Void
+
+    func makeCoordinator() -> Coordinator { Coordinator(onImage: onImage, onCancel: onCancel) }
+
+    func makeUIViewController(context: Context) -> UIImagePickerController {
+        let vc = UIImagePickerController()
+        vc.sourceType = .camera
+        vc.delegate = context.coordinator
+        return vc
+    }
+
+    func updateUIViewController(_ vc: UIImagePickerController, context: Context) {}
+
+    final class Coordinator: NSObject, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
+        let onImage: (UIImage) -> Void
+        let onCancel: () -> Void
+        init(onImage: @escaping (UIImage) -> Void, onCancel: @escaping () -> Void) {
+            self.onImage = onImage
+            self.onCancel = onCancel
+        }
+
+        func imagePickerController(_ picker: UIImagePickerController,
+                                   didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
+            if let image = info[.originalImage] as? UIImage { onImage(image) } else { onCancel() }
+        }
+
+        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) { onCancel() }
+    }
+}
 #else
 enum DocumentScanner {
+    static var isAvailable: Bool { false }
+}
+
+enum Camera {
     static var isAvailable: Bool { false }
 }
 #endif

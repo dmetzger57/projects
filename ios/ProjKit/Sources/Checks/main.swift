@@ -95,6 +95,9 @@ if args.count == 4, args[1] == "--mutate" {
         try Ops.addGoal(ws, p, "true")      // must stay a string, not a bool
         try Ops.close(ws, p)
         try Ops.addIdea(ws, "Idea from iPhone")
+        photo = ws.load(photo.url)
+        try Ops.addPhoto(ws, photo, data: Data([0xff, 0xd8, 0xff]), ext: "jpg", note: "Shelf [old] scanner")
+        try Ops.addPhoto(ws, ws.load(photo.url), data: Data([0xff, 0xd8, 0xff]), ext: "jpg", note: "Quote", task: 1)
         print("mutations applied")
     } catch {
         print("error: \(error)")
@@ -662,6 +665,54 @@ test("overview: project order, area order, collapsed areas, format") {
     eq(ws.overviewAreas(), ["House", "Personal"])
     try Ops.resetOrder(ws, area: "House")
     eq(names(), ["Attic", "Barn", "Fence Repair", "Roof"])
+}
+
+test("photos: body format matches projkit") {
+    let body = "## Description\nx\n\n## Notes\n### 2026-11-06\n- hi\n"
+    var b = try ReadmeBody.addPhoto(body, note: "Before [1]\nfront", path: "Photos/a.jpg")
+    eq(b, "## Description\nx\n\n## Photos\n- ![Before (1) front](<Photos/a.jpg>)\n\n## Notes\n### 2026-11-06\n- hi\n")
+    b = try ReadmeBody.addPhoto(b, note: "", path: "Photos/b.jpg")
+    check(b.contains("- ![Before (1) front](<Photos/a.jpg>)\n- ![](<Photos/b.jpg>)\n\n## Notes"), "second photo after first")
+    eq(try ReadmeBody.editPhoto(b, index: 1, note: "After"),
+       b.replacingOccurrences(of: "![](<Photos/b.jpg>)", with: "![After](<Photos/b.jpg>)"))
+    eq(try ReadmeBody.removePhoto(b, index: 0), b.replacingOccurrences(of: "- ![Before (1) front](<Photos/a.jpg>)\n", with: ""))
+    let t = try ReadmeBody.addTaskPhoto("## Tasks\n- [ ] One\n  - note\n  - [F](<Documents/f.pdf>)\n- [ ] Two\n", task: 0,
+                                        note: "Leak", path: "Photos/c.jpg")
+    eq(t, "## Tasks\n- [ ] One\n  - note\n  - [F](<Documents/f.pdf>)\n  - ![Leak](<Photos/c.jpg>)\n- [ ] Two\n")
+    let task = ReadmeBody.tasks(t)[0]
+    eq(task.notes.map(\.text), ["note"], "photos aren't notes")
+    eq(task.photos.map(\.path), ["Photos/c.jpg"])
+    eq(try ReadmeBody.removeTaskPhoto(t, task: 0, index: 0), "## Tasks\n- [ ] One\n  - note\n  - [F](<Documents/f.pdf>)\n- [ ] Two\n")
+    for line in ["- ![x](<Documents/a.jpg>)", "- ![x](<Photos/sub/a.jpg>)", "- [x](<Photos/a.jpg>)", "- ![x](<Photos/>)"] {
+        check(ReadmeBody.parsePhotoLine(line) == nil, "not a photo: \(line)")
+    }
+}
+
+test("photos: files, archive and restore, delete") {
+    let ws = try tempWorkspace()
+    var p = try Ops.newProject(ws, title: "Roof", area: "House")
+    try Ops.addTask(ws, p, "Patch the leak")
+    let jpeg = Data([0xff, 0xd8, 0xff, 0xe0])
+    let ph = try Ops.addPhoto(ws, p, data: jpeg, ext: "JPG", note: "Front")
+    p = ws.load(p.url)
+    eq(p.photos.map(\.note), ["Front"])
+    eq(try Data(contentsOf: Ops.photoURL(p, ph)), jpeg)
+    let tph = try Ops.addPhoto(ws, p, data: jpeg, ext: "png", note: "Leak", task: 0)
+    try Ops.editPhotoNote(ws, p, index: 0, note: "Leak (fixed)", task: 0)
+    eq(ws.load(p.url).tasks[0].photos.map(\.note), ["Leak (fixed)"])
+    try Ops.archiveTask(ws, ws.load(p.url), index: 0, date: "2026-11-06")
+    let a = ws.archive()!
+    check(FileManager.default.fileExists(atPath: a.url.appendingPathComponent(tph.path).path), "photo moved to Archive")
+    check(!FileManager.default.fileExists(atPath: p.url.appendingPathComponent(tph.path).path), "photo left the project")
+    p = try Ops.restoreTask(ws, index: 0)
+    check(FileManager.default.fileExists(atPath: p.url.appendingPathComponent(tph.path).path), "photo restored")
+    try Ops.removePhoto(ws, p, index: 0)
+    check(!FileManager.default.fileExists(atPath: Ops.photoURL(p, ph).path), "removing a photo deletes its file")
+    try Ops.removeTask(ws, ws.load(p.url), index: 0)
+    check(!FileManager.default.fileExists(atPath: p.url.appendingPathComponent(tph.path).path), "task photos go with the task")
+    var threw = false
+    do { try Ops.addPhoto(ws, p, data: jpeg, ext: "pdf", note: nil) } catch { threw = true }
+    check(threw, "non-image refused")
 }
 
 print("\n\(passed) checks passed, \(failures) failed")

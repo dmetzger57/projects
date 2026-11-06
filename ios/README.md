@@ -17,7 +17,8 @@ dragging or long-press › Move (the same layout as the web overview) ·
 **Project:** status, goals (tap to tick off, swipe to delete), a **Tasks** checklist (tap the box
 to tick, tap the text to edit, swipe or long-press to edit, move or delete; drag to reorder; long-press ›
 Attach File/Link to add files from iCloud Drive › Documents or URLs, tap one to open it; long-press › Add Note
-for notes shown under the task, tap a note to edit it, long-press it to delete), notes, editing
+for notes shown under the task, tap a note to edit it, long-press it to delete), notes, **Photos** (Take Photo with the camera or Choose from Photos, with a note; tap to view, touch and hold
+to edit the note or delete; long-press a task › Take Photo / Choose Photo for the task's own photos), editing
 Description, **Project Files** links to files in iCloud Drive › Documents or to URLs (browse or
 type a path, friendly names, Show Paths, tap to open), links, and receipts (scan with the camera or pick a file,
 preview, detach), rename, close and reopen · **Ideas:** add, delete, make into a project ·

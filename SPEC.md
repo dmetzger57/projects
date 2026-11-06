@@ -18,6 +18,7 @@ $PROJ_ROOT (default ~/Documents/Projects)
 └── <Area>/<Project>/
     ├── README.md                required
     ├── Documents/               required
+    ├── Photos/                  optional: photos added to the project or its tasks (created on first use)
     └── Receipts/                required (may stay empty; receipts are referenced, see below)
 ```
 
@@ -95,6 +96,18 @@ Rules:
   `- ` or `* `. Writers store a note as one line `  - text` (newlines folded to spaces), add new ones after
   the task's last note (else directly under the task line), and refuse a note that would read as an attachment. Goals (front matter) are longer-term outcomes;
   tasks are the to-do checklist.
+- **Photos:** a photo is a file in the project's own `Photos/` folder, shown with a Markdown image line whose
+  alt text is its note: `- ![Hinges on the left doors](<Photos/2026-11-06 101230-k3x9.jpg>)`. Project photos
+  are lines in an optional `## Photos` section (writers create it just before `## Notes`, or at the end, and add
+  new photos after the last one); a task's photos are such lines indented two spaces among its detail lines
+  (added after its last photo, else at the end of its detail lines), and are neither attachments nor notes.
+  The path is always written in angle brackets, relative to the folder of the README, and must be
+  `Photos/<file name>` (no subfolders, no leading dot); other images are ordinary text. Notes are one line, may
+  be empty, and `[`/`]` are written as `(`/`)`. File names are `YYYY-MM-DD HHMMSS-xxxx.<ext>` (4 chars of
+  `a-z2-9`); the iPhone app saves JPEGs at most 2560 px on the long side. Proj creates these files (photos from
+  the camera or Photos, uploads, `proj photo add` copies), so removing a photo, or a task with photos, deletes
+  the file unless another line still shows it. Archiving a task moves its photo files to `0 - Archive/Photos/`
+  and restoring moves them back, so paths stay the same. `proj lint` reports photos whose file is missing as L015.
 - **Today list:** `0 - Today/README.md` at the projects root is a project outside the areas (front matter
   `title: Today`, `area: Today`), created on first use. Its `## Tasks` are the tasks to do today. A task copied
   in from a project gets a link id, written at the end of both task lines as `<!-- task:k3x9q2ab -->` (8 chars

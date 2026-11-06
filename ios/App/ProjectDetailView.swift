@@ -4,7 +4,7 @@ import UniformTypeIdentifiers
 import ProjKitCore
 
 struct TextEdit: Identifiable {
-    enum Kind { case section(String), note, task(Int), taskNote(task: Int, index: Int?) }   // index nil = new task note
+    enum Kind { case section(String), note, task(Int), taskNote(task: Int, index: Int?), photoNote(task: Int?, index: Int) }   // index nil = new task note
     let kind: Kind
     let initial: String
     var id: String {
@@ -12,6 +12,7 @@ struct TextEdit: Identifiable {
         case let .section(s): "section-\(s)"
         case .note: "note"
         case let .task(t): "task-\(t)"
+        case let .photoNote(t, i): "photo-\(t.map(String.init) ?? "project")-\(i)"
         case let .taskNote(t, i): "task-\(t)-note-\(i.map(String.init) ?? "new")"
         }
     }
@@ -20,12 +21,14 @@ struct TextEdit: Identifiable {
         case let .section(s): s
         case .note: "New Note"
         case .task: "Edit Task"
+        case .photoNote: "Photo Note"
         case let .taskNote(_, i): i == nil ? "Add Task Note" : "Edit Task Note"
         }
     }
     var hint: String {
         switch kind {
         case .task: "One line (line breaks become spaces). Markdown: **bold**, *italic*."
+        case .photoNote: "Shown with the photo. One line; leave it empty for no note."
         case let .taskNote(_, i): "One line, shown under the task. Markdown: **bold**, *italic*."
                                   + (i == nil ? "" : " Clear it to delete the note.")
         default: "Markdown: **bold**, *italic*, `- item` for lists."
@@ -62,6 +65,7 @@ struct ProjectDetailView: View {
     @State private var newTask = ""
     @Environment(\.horizontalSizeClass) private var sizeClass
     @State private var editingTask: ProjectTask?
+    @State private var photoRequest: PhotoRequest?
     @State private var editTaskText = ""
     @State private var showAddLink = false
     @State private var importing = false
@@ -172,6 +176,7 @@ struct ProjectDetailView: View {
                 textSection(p, "Description")
                 goals(p)
                 tasks(p)
+                photos(p)
                 archivedSection(p)
                 notes(p)
                 ForEach(ReadmeBody.editableSections.filter { $0 != "Description" }, id: \.self) { name in
@@ -190,6 +195,9 @@ struct ProjectDetailView: View {
         }
         .sheet(item: $edit) { e in
             TextEditSheet(title: e.title, initial: e.initial, hint: e.hint) { text in await saveTextEdit(e, p, text) }
+        }
+        .photoAdding($photoRequest) { jpeg, note, task in
+            await model.perform { try Ops.addPhoto($0, p, data: jpeg, ext: "jpg", note: note, task: task) }
         }
         .sheet(isPresented: $showAddLink) {
             AddLinkSheet { url, title in await model.perform { try Ops.addLink($0, p, url: url, title: title) } }
@@ -271,6 +279,7 @@ struct ProjectDetailView: View {
         case let .section(name): await model.perform { try Ops.setSection($0, p, name, text) }
         case .note: await model.perform { try Ops.addNote($0, p, text) }
         case let .task(index): await model.perform { try Ops.editTask($0, p, index: index, text: text) }
+        case let .photoNote(task, index): await model.perform { try Ops.editPhotoNote($0, p, index: index, note: text, task: task) }
         case let .taskNote(task, nil): await model.perform { try Ops.addTaskNote($0, p, task: task, text: text) }
         case let .taskNote(task, index?):
             if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {   // emptied = delete
@@ -382,6 +391,17 @@ struct ProjectDetailView: View {
                             .font(.callout).foregroundStyle(Color.accentColor)
                     }
                     .buttonStyle(.borderless)
+                }
+                if !t.photos.isEmpty, let a = model.archive {     // view only; restore the task to edit them
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(t.photos) { ph in
+                                Button { openPhoto(a, ph) } label: { PhotoThumbnail(url: Ops.photoURL(a, ph), size: 56) }
+                                    .buttonStyle(.borderless)
+                                    .accessibilityLabel(ph.note.isEmpty ? "Photo" : "Photo: \(ph.note)")
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -696,6 +716,9 @@ struct ProjectDetailView: View {
                             .accessibilityLabel("Note: \(n.text)")
                             .accessibilityHint("Double-tap to edit")
                         }
+                        if !t.photos.isEmpty {
+                            taskPhotos(p, t)
+                        }
                         ForEach(t.files) { f in
                             Button { open(f) } label: {
                                 Label(f.name, systemImage: f.isURL ? "link" : "paperclip")
@@ -745,6 +768,18 @@ struct ProjectDetailView: View {
                                     } label: { Text(n.text) }
                                 }
                             } label: { Label("Delete Note", systemImage: "minus.circle") }
+                        }
+                    }
+                    if !isToday {
+                        Section("Photos") {
+                            if Camera.isAvailable {
+                                Button { photoRequest = PhotoRequest(task: t.index, source: .camera) } label: {
+                                    Label("Take Photo…", systemImage: "camera")
+                                }
+                            }
+                            Button { photoRequest = PhotoRequest(task: t.index, source: .library) } label: {
+                                Label("Choose Photo…", systemImage: "photo.on.rectangle")
+                            }
                         }
                     }
                     Section("Attachments") {
@@ -967,6 +1002,76 @@ struct ProjectDetailView: View {
                 Task { await model.perform { ws in for i in indices { try Ops.removeLink(ws, p, index: i) } } }
             }
             Button { showAddLink = true } label: { Label("Add Link", systemImage: "link.badge.plus") }
+        }
+    }
+
+    // MARK: photos
+
+    private func openPhoto(_ p: Project, _ ph: ProjectPhoto) {
+        Task { preview = await model.prepareForViewing(Ops.photoURL(p, ph)) }
+    }
+
+    @ViewBuilder
+    private func photoMenu(_ p: Project, _ ph: ProjectPhoto, task: Int?) -> some View {
+        Button { edit = TextEdit(kind: .photoNote(task: task, index: ph.index), initial: ph.note) } label: {
+            Label(ph.note.isEmpty ? "Add Note" : "Edit Note", systemImage: "pencil")
+        }
+        Button(role: .destructive) {
+            Task { await model.perform { try Ops.removePhoto($0, p, index: ph.index, task: task) } }
+        } label: { Label("Delete Photo", systemImage: "trash") }
+    }
+
+    /// A task's photos: a row of small thumbnails under it (tap to view, long-press to edit the note or delete).
+    private func taskPhotos(_ p: Project, _ t: ProjectTask) -> some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(t.photos) { ph in
+                    Button { openPhoto(p, ph) } label: {
+                        VStack(alignment: .leading, spacing: 2) {
+                            PhotoThumbnail(url: Ops.photoURL(p, ph), size: 64)
+                            if !ph.note.isEmpty {
+                                Text(ph.note).font(.caption2).foregroundStyle(.secondary).lineLimit(1).frame(width: 64, alignment: .leading)
+                            }
+                        }
+                    }
+                    .buttonStyle(.borderless)
+                    .contextMenu { photoMenu(p, ph, task: t.index) }
+                    .accessibilityLabel(ph.note.isEmpty ? "Photo" : "Photo: \(ph.note)")
+                }
+            }
+            .padding(.leading, 8)
+        }
+    }
+
+    /// The project's own photos (## Photos): a grid of thumbnails with notes.
+    private func photos(_ p: Project) -> some View {
+        Section {
+            if !p.photos.isEmpty {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 104), spacing: 12, alignment: .top)], alignment: .leading, spacing: 12) {
+                    ForEach(p.photos) { ph in
+                        Button { openPhoto(p, ph) } label: { PhotoTile(url: Ops.photoURL(p, ph), note: ph.note) }
+                            .buttonStyle(.borderless)
+                            .contextMenu { photoMenu(p, ph, task: nil) }
+                    }
+                }
+                .padding(.vertical, 4)
+            }
+            if Camera.isAvailable {
+                Button { photoRequest = PhotoRequest(task: nil, source: .camera) } label: {
+                    Label("Take Photo", systemImage: "camera")
+                }
+            }
+            Button { photoRequest = PhotoRequest(task: nil, source: .library) } label: {
+                Label("Choose from Photos", systemImage: "photo.on.rectangle")
+            }
+        } header: {
+            HStack {
+                Text("Photos")
+                Spacer()
+                if !p.photos.isEmpty { Text("\(p.photos.count)") }
+            }
+        } footer: {
+            if !p.photos.isEmpty { Text("Tap a photo to view it; touch and hold to edit its note or delete it.") }
         }
     }
 

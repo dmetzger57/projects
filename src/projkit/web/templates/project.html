@@ -44,7 +44,7 @@
     {% for name in EDITABLE %}
       {% set text = p.section(name) or '' %}{% set edit = False %}
       {% if name == "Project Files" %}{% include "_files.html" %}{% else %}{% include "_section.html" %}{% endif %}
-      {% if loop.first %}{% set task_edit = None %}{% include "_tasks.html" %}{% endif %}
+      {% if loop.first %}{% set task_edit = None %}{% include "_tasks.html" %}{% include "_photos.html" %}{% endif %}
     {% endfor %}
     {% include "_notes.html" %}
   </div>

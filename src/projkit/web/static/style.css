@@ -303,3 +303,16 @@ li.done .archived-text { color: var(--muted); text-decoration: line-through; }
 
 /* footer */
 .site-footer { max-width: 1180px; margin: 0 auto; padding: 8px 24px 28px; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+
+/* photos */
+.photo-grid { list-style: none; margin: 10px 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+.photo { display: grid; gap: 4px; min-width: 0; }
+.photo img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 8px; background: var(--surface-2); border: 1px solid var(--border); }
+.photo-caption { display: flex; align-items: start; gap: 4px; font-size: 12.5px; line-height: 1.35; }
+.photo-caption > span:first-child { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.photo-actions { display: flex; flex: none; }
+.photo-actions .x { font-size: 14px; padding: 0 4px; }
+.photo-add { display: grid; gap: 8px; margin-top: 12px; }
+.task-photos { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 10px; }
+.small-photo { width: 120px; }
+.task-photo-add { margin-top: 8px; }

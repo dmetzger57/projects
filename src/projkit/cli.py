@@ -669,6 +669,67 @@ def archive_rm(task: str, root: Optional[Path] = RootOpt, receipts: Optional[Pat
     console.print(f"deleted from the Archive: {t['text']}", highlight=False)
 
 
+photo_app = typer.Typer(no_args_is_help=True,
+                        help="Photos of a project or of a task, each with a note (files in the project's Photos/ folder).")
+app.add_typer(photo_app, name="photo")
+TaskOpt = typer.Option(None, "--task", "-t", help="The task (number or text) instead of the project")
+
+
+@photo_app.command("add")
+def photo_add(project: str, image: Path, note: str = typer.Option("", "--note", "-n"), task: Optional[str] = TaskOpt,
+              root: Optional[Path] = RootOpt, receipts: Optional[Path] = ReceiptsOpt):
+    """Copy an image into the project's Photos/ folder and add it (with a note) to the project or a task."""
+    p = _pick(_ws(root, receipts), project)
+    ph = _run(ops.add_photo_file, p, image, note, task)
+    console.print(f"[green]added[/] {ph['path']}" + (f" — {ph['note']}" if ph["note"] else ""), highlight=False)
+
+
+@photo_app.command("ls")
+def photo_ls(project: str, root: Optional[Path] = RootOpt, receipts: Optional[Path] = ReceiptsOpt):
+    """List the project's photos and its tasks' photos."""
+    p = _pick(_ws(root, receipts), project)
+    for i, ph in enumerate(p.photos, 1):
+        console.print(f"{i:3}. {ph['note'] or '[dim](no note)[/]'}  [dim]{ph['path']}[/]", highlight=False)
+    for n, t in enumerate(p.tasks, 1):
+        if t["photos"]:
+            console.print(f"[bold]task {n}: {t['text']}[/]", highlight=False)
+            for i, ph in enumerate(t["photos"], 1):
+                console.print(f"  {i:3}. {ph['note'] or '[dim](no note)[/]'}  [dim]{ph['path']}[/]", highlight=False)
+    if not p.photos and not any(t["photos"] for t in p.tasks):
+        console.print("[dim]No photos yet.[/]")
+
+
+@photo_app.command("note")
+def photo_note(project: str, photo: str, note: str, task: Optional[str] = TaskOpt,
+               root: Optional[Path] = RootOpt, receipts: Optional[Path] = ReceiptsOpt):
+    """Change a photo's note (photo by number or note text)."""
+    p = _pick(_ws(root, receipts), project)
+    ph = _run(ops.edit_photo_note, p, photo, note, task)
+    console.print(f"{ph['path']}: {ph['note']}", highlight=False)
+
+
+@photo_app.command("rm")
+def photo_rm(project: str, photo: str, task: Optional[str] = TaskOpt,
+             root: Optional[Path] = RootOpt, receipts: Optional[Path] = ReceiptsOpt):
+    """Remove a photo and delete its file."""
+    p = _pick(_ws(root, receipts), project)
+    ph = _run(ops.remove_photo, p, photo, task)
+    console.print(f"removed {ph['path']}", highlight=False)
+
+
+@photo_app.command("open")
+def photo_open(project: str, photo: str = typer.Argument("1"), task: Optional[str] = TaskOpt,
+               root: Optional[Path] = RootOpt, receipts: Optional[Path] = ReceiptsOpt):
+    """Open a photo in Preview."""
+    p = _pick(_ws(root, receipts), project)
+    photos = p.photos if task is None else p.tasks[_run(ops._task_index, p, task)]["photos"]
+    f = ops.photo_path(p, photos[_run(ops._photo_index, photos, photo)]["path"])
+    if not f.exists():
+        console.print(f"[red]file not found: {f}[/]")
+        raise typer.Exit(1)
+    subprocess.run(["open", str(f)])
+
+
 file_app = typer.Typer(no_args_is_help=True,
                        help="Manage Project Files links (files under ~/Documents or URLs; refer by number or name).")
 app.add_typer(file_app, name="file")

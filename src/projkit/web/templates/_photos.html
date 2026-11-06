@@ -1,0 +1,34 @@
+{# Project photos (## Photos): thumbnails with their notes; files live in the project's Photos/ folder. #}
+<section class="panel" id="photos">
+  <h3>Photos{% if p.photos %} <span class="muted">{{ p.photos|length }}</span>{% endif %}</h3>
+  {% if p.photos %}
+  <ul class="photo-grid">
+    {% for ph in p.photos %}
+    <li class="photo">
+      <a href="{{ photo_url(ph.path) }}" target="_blank" rel="noopener" title="Open full size">
+        <img src="{{ photo_url(ph.path) }}" alt="{{ ph.note or 'Photo' }}" loading="lazy">
+      </a>
+      <div class="photo-caption">
+        <span class="{{ 'muted' if not ph.note }}">{{ ph.note or 'No note' }}</span>
+        <span class="photo-actions">
+          <button class="x edit" title="Edit note" aria-label="Edit note of photo {{ loop.index }}"
+                  data-photo-note="{{ ph.note }}" data-url="{{ url }}/photos/{{ loop.index }}/note" data-target="#photos">✎</button>
+          <button class="x" title="Delete photo" aria-label="Delete photo {{ loop.index }}"
+                  hx-post="{{ url }}/photos/{{ loop.index }}/delete" hx-target="#photos" hx-swap="outerHTML"
+                  hx-confirm="Delete this photo? Its file is deleted too.">×</button>
+        </span>
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="empty">No photos yet.</p>
+  {% endif %}
+  <form class="photo-add" hx-post="{{ url }}/photos" hx-encoding="multipart/form-data" hx-target="#photos" hx-swap="outerHTML">
+    <input type="file" name="image" accept="image/*" required aria-label="Photo">
+    <div class="add-row">
+      <input name="note" placeholder="Note (optional)" aria-label="Note for the photo">
+      <button class="btn">Add photo</button>
+    </div>
+  </form>
+</section>

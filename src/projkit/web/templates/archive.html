@@ -46,6 +46,18 @@
         {% if t.notes %}
         <ul class="plain task-notes">{% for note in t.notes %}<li><span class="note-text">{{ note }}</span></li>{% endfor %}</ul>
         {% endif %}
+        {% if t.photos %}
+        <ul class="task-photos">
+          {% for ph in t.photos %}
+          <li class="photo small-photo">
+            <a href="{{ aurl }}/photo/{{ ph.path.split('/', 1)[1]|q }}" target="_blank" rel="noopener" title="{{ ph.note or 'Open photo' }}">
+              <img src="{{ aurl }}/photo/{{ ph.path.split('/', 1)[1]|q }}" alt="{{ ph.note or 'Photo' }}" loading="lazy">
+            </a>
+            {% if ph.note %}<div class="photo-caption"><span>{{ ph.note }}</span></div>{% endif %}
+          </li>
+          {% endfor %}
+        </ul>
+        {% endif %}
         {% if r.files %}
         <ul class="plain task-files">
           {% for f in r.files %}

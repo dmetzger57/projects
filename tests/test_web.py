@@ -153,12 +153,12 @@ def test_tasks_add_toggle_edit_delete(client, ws):
     assert r.status_code == 200 and "Buy shingles" in r.text and 'id="tasks"' in r.text
     client.post(f"{url}/tasks", data={"text": "Hire roofer"}, headers=HX)
     client.post(f"{url}/tasks/2/toggle", headers=HX)
-    assert proj(ws).tasks == [{"text": "Buy shingles", "done": False, "files": [], "notes": [], "id": None, "archived": None, "from": None}, {"text": "Hire roofer", "done": True, "files": [], "notes": [], "id": None, "archived": None, "from": None}]
+    assert proj(ws).tasks == [{"text": "Buy shingles", "done": False, "files": [], "notes": [], "photos": [], "id": None, "archived": None, "from": None}, {"text": "Hire roofer", "done": True, "files": [], "notes": [], "photos": [], "id": None, "archived": None, "from": None}]
     r = client.get(f"{url}/tasks?edit=1")
     assert 'value="Buy shingles"' in r.text and "/tasks/1/edit" in r.text
     client.post(f"{url}/tasks/1/edit", data={"text": "Buy cedar shingles"}, headers=HX)
     client.post(f"{url}/tasks/2/delete", headers=HX)
-    assert proj(ws).tasks == [{"text": "Buy cedar shingles", "done": False, "files": [], "notes": [], "id": None, "archived": None, "from": None}]
+    assert proj(ws).tasks == [{"text": "Buy cedar shingles", "done": False, "files": [], "notes": [], "photos": [], "id": None, "archived": None, "from": None}]
     assert client.post(f"{url}/tasks/1/edit", data={"text": "  "}, headers=HX).status_code == 400
     page = client.get(url).text
     assert "Buy cedar shingles" in page and page.index('id="tasks"') < page.index("Project Files")
@@ -311,3 +311,26 @@ def test_tile_manual_order(client, ws):
     client.post("/area/order/reset", data={"area": "House"}, headers=HX)
     page = client.get("/").text
     assert "Reset order" not in page
+
+
+def test_photos_upload_view_note_delete(client, ws):
+    files = {"image": ("leak.JPG", b"\xff\xd8fake", "image/jpeg")}
+    r = client.post("/p/Roof%20Repair/photos", files=files, data={"note": "Front"}, headers=HX)
+    assert r.status_code == 200 and 'id="photos"' in r.text and "Front" in r.text
+    ph = proj(ws).photos[0]
+    name = ph["path"].split("/", 1)[1]
+    img = client.get(f"/p/Roof%20Repair/photo/{name}")
+    assert img.status_code == 200 and img.content == b"\xff\xd8fake"
+    assert client.get("/p/Roof%20Repair/photo/..%2FREADME.md").status_code == 404
+    client.post("/p/Roof%20Repair/photos/1/note", data={"note": "Back"}, headers=HX)
+    assert proj(ws).photos[0]["note"] == "Back"
+    client.post("/p/Roof%20Repair/tasks", data={"text": "Patch"}, headers=HX)
+    r = client.post("/p/Roof%20Repair/tasks/1/photos", files=files, data={"note": "Leak"}, headers=HX)
+    assert 'class="task-photos"' in r.text and proj(ws).tasks[0]["photos"][0]["note"] == "Leak"
+    assert "📷" in client.get("/p/Roof%20Repair").text
+    client.post("/p/Roof%20Repair/tasks/1/photos/1/delete", headers=HX)
+    client.post("/p/Roof%20Repair/photos/1/delete", headers=HX)
+    assert proj(ws).photos == [] and proj(ws).tasks[0]["photos"] == []
+    assert not (proj(ws).dir / ph["path"]).exists()
+    bad = {"image": ("x.pdf", b"%PDF", "application/pdf")}
+    assert client.post("/p/Roof%20Repair/photos", files=bad, headers=HX).status_code == 400

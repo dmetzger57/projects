@@ -39,6 +39,9 @@ assert [(f["name"], f["target"], f["kind"]) for f in p.tasks[1]["files"]] == [
     ("Product page", "https://epson.com/ff-680w", "url")], p.tasks[1]
 assert ops.add_task_file(p, "Order", "https://b-h.example/epson")["name"] == "b-h.example"
 assert p.tasks[1]["notes"] == ["Ask about the 3-year warranty", "Check B&H and Adorama prices"], p.tasks[1]
+assert [ph["note"] for ph in p.photos] == ["Shelf (old) scanner"], p.photos     # photos written by Swift
+assert [ph["note"] for ph in p.tasks[1]["photos"]] == ["Quote"], p.tasks[1]
+assert all((p.dir / ph["path"]).is_file() for ph in p.photos + p.tasks[1]["photos"])
 today = ws.today()                                       # Today written by Swift (after any real tasks)
 k = len(today.tasks) - 3
 mine = today.tasks[k:]

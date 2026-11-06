@@ -152,6 +152,11 @@ def _check_meta(ws: Workspace, p: Project, template_goals: set[str]) -> list[Iss
                 continue
             if missing:
                 add("L014", "warn", f"task #{n} attachment '{entry['name']}' points to a missing file: {entry['target']}")
+    photos = [("photo", ph) for ph in p.photos] + [(f"task #{n} photo", ph) for n, t in enumerate(p.tasks, 1)
+                                                   for ph in t["photos"]]
+    for label, ph in photos:
+        if not (p.dir / ph["path"]).exists():
+            add("L015", "warn", f"{label} '{ph['note'] or ph['path']}' is missing its file: {ph['path']}")
 
     for r in p.receipts:
         rel = str(r.get("path", ""))

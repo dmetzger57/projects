@@ -7,7 +7,7 @@ import subprocess
 from pathlib import Path
 from urllib.parse import quote
 
-from fastapi import FastAPI, Form, HTTPException, Request
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -184,7 +184,9 @@ def create_app(ws: Workspace) -> FastAPI:
                     notes=list(reversed(p.notes)), today=dt.date.today().isoformat(),
                     files=files_info(p.files), file_edit=None,
                     task_files=[files_info(t["files"]) for t in p.tasks], task_attach=None,
-                    task_note_add=None, task_note_edit=None, **_today_ctx(p))
+                    task_note_add=None, task_note_edit=None, task_photo_add=None,
+                    photo_url=lambda path: f"{purl(p)}/photo/{quote(path.split('/', 1)[1], safe='')}",
+                    **_today_ctx(p))
 
     def _today_ctx(p: Project) -> dict:
         """Today links: on Today, each task's source project; elsewhere, which tasks are in Today,
@@ -281,22 +283,82 @@ def create_app(ws: Workspace) -> FastAPI:
     # ---- tasks (## Tasks checklist in the README body) ---------------------
     def tasks_partial(request: Request, p: Project, editing: int | None = None, attach: int | None = None,
                       note: int | None = None, note_edit: tuple[int, int] | None = None,
-                      archived_open: bool = False):
+                      archived_open: bool = False, photo: int | None = None):
         return partial(request, "_tasks.html", **{**_project_ctx(Project.load(p.dir)),
                                                   "task_edit": editing, "task_attach": attach,
                                                   "task_note_add": note, "task_note_edit": note_edit,
-                                                  "archived_open": archived_open})
+                                                  "archived_open": archived_open, "task_photo_add": photo})
+
+    # ---- photos (project "## Photos" and task photos; files in the project's Photos/ folder) ----
+    MAX_PHOTO = 60 * 1024 * 1024
+
+    async def _upload(image: UploadFile) -> tuple[bytes, str]:
+        data = await image.read(MAX_PHOTO + 1)
+        if len(data) > MAX_PHOTO:
+            raise HTTPException(413, "That photo is larger than 60 MB.")
+        return data, Path(image.filename or "photo.jpg").suffix or ".jpg"
+
+    def photos_partial(request: Request, p: Project):
+        return partial(request, "_photos.html", **_project_ctx(Project.load(p.dir)))
+
+    @app.get("/p/{key}/photo/{name}")
+    def photo_file(key: str, name: str):
+        p = get_project(key)
+        if "/" in name or "\\" in name or name.startswith("."):
+            raise HTTPException(404)
+        f = ops.photo_path(p, f"{ops.PHOTO_DIR}/{name}")
+        if not f.is_file():
+            raise HTTPException(404, "photo file not found")
+        return FileResponse(f, headers={"Cache-Control": "private, max-age=86400"})
+
+    @app.post("/p/{key}/photos", response_class=HTMLResponse)
+    async def photo_add(request: Request, key: str, image: UploadFile = File(...), note: str = Form("")):
+        p = get_project(key)
+        data, ext = await _upload(image)
+        ops.add_photo(p, data, ext, note)
+        return photos_partial(request, p)
+
+    @app.post("/p/{key}/photos/{n}/note", response_class=HTMLResponse)
+    def photo_note(request: Request, key: str, n: int, note: str = Form("")):
+        p = get_project(key)
+        ops.edit_photo_note(p, str(n), note)
+        return photos_partial(request, p)
+
+    @app.post("/p/{key}/photos/{n}/delete", response_class=HTMLResponse)
+    def photo_delete(request: Request, key: str, n: int):
+        p = get_project(key)
+        ops.remove_photo(p, str(n))
+        return photos_partial(request, p)
+
+    @app.post("/p/{key}/tasks/{t}/photos", response_class=HTMLResponse)
+    async def task_photo_add(request: Request, key: str, t: int, image: UploadFile = File(...), note: str = Form("")):
+        p = get_project(key)
+        data, ext = await _upload(image)
+        ops.add_photo(p, data, ext, note, task=str(t))
+        return tasks_partial(request, p)
+
+    @app.post("/p/{key}/tasks/{t}/photos/{n}/note", response_class=HTMLResponse)
+    def task_photo_note(request: Request, key: str, t: int, n: int, note: str = Form("")):
+        p = get_project(key)
+        ops.edit_photo_note(p, str(n), note, task=str(t))
+        return tasks_partial(request, p)
+
+    @app.post("/p/{key}/tasks/{t}/photos/{n}/delete", response_class=HTMLResponse)
+    def task_photo_delete(request: Request, key: str, t: int, n: int):
+        p = get_project(key)
+        ops.remove_photo(p, str(n), task=str(t))
+        return tasks_partial(request, p)
 
     @app.get("/p/{key}/tasks", response_class=HTMLResponse)
     def tasks_view(request: Request, key: str, edit: int | None = None, attach: int | None = None,
-                   note: int | None = None, note_edit: str | None = None):
+                   note: int | None = None, note_edit: str | None = None, photo: int | None = None):
         ne = None
         if note_edit:                      # "task.note", both 1-based
             try:
                 ne = tuple(int(x) for x in note_edit.split(".", 1))
             except ValueError:
                 raise HTTPException(400, "note_edit must look like 2.1")
-        return tasks_partial(request, get_project(key), edit, attach, note, ne)
+        return tasks_partial(request, get_project(key), edit, attach, note, ne, photo=photo)
 
     # task notes: indented "  - text" lines under a task
     @app.post("/p/{key}/tasks/{n}/notes")
