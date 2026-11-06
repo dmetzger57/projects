@@ -25,14 +25,44 @@ SIM_DATA  := $(BUILD)/simdata
 TAB       ?=
 PROJECT   ?=
 
+VERSION   := $(shell cat VERSION)
+# app build number: the number of commits, so every installed build is distinct and maps to a commit
+BUILD_NO  := $(shell git rev-list --count HEAD 2>/dev/null || echo 1)
+V         ?=
+
 AGENT     := gui/$(shell id -u)/com.dmetzger57.proj-serve
 WEB_URL   := http://127.0.0.1:8765/
 
-.PHONY: help setup test checks crosscheck check lint serve restart-web web-log xcodeproj \
+.PHONY: help version setup test checks crosscheck check lint serve restart-web web-log xcodeproj \
         build-sim sim screenshot install install-iphone install-ipad signing-probe release clean
 
 help: ## List the targets
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z_-]+:.*## / {printf "  \033[1m%-16s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+
+# ---- version ------------------------------------------------------------------
+
+version: ## Show the version; `make version V=1.2.0` sets it on main: commit, tag v1.2.0, push
+ifeq ($(strip $(V)),)
+	@echo "version $(VERSION) · $$(git describe --tags --always --dirty 2>/dev/null) · build $(BUILD_NO)"
+	@python3 scripts/version.py check
+else
+	@set -e; \
+	echo "$(V)" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$$' || { echo "V must look like 1.2.3" >&2; exit 1; }; \
+	[ "$$(git branch --show-current)" = main ] || { echo "Switch to main first (versions are set on main)." >&2; exit 1; }; \
+	[ -z "$$(git status --porcelain)" ] || { echo "Commit or stash your changes first." >&2; exit 1; }; \
+	git fetch -q origin main; \
+	[ "$$(git rev-parse HEAD)" = "$$(git rev-parse origin/main)" ] || { echo "main differs from origin/main: pull or push first." >&2; exit 1; }; \
+	! git rev-parse -q --verify "refs/tags/v$(V)" >/dev/null || { echo "Tag v$(V) already exists." >&2; exit 1; }; \
+	[ "$$(printf '%s\n%s\n' "$(VERSION)" "$(V)" | sort -V | tail -1)" = "$(V)" ] && [ "$(V)" != "$(VERSION)" ] \
+	  || { echo "$(V) is not newer than $(VERSION)." >&2; exit 1; }; \
+	python3 scripts/version.py set $(V); \
+	python3 scripts/version.py check; \
+	git add VERSION pyproject.toml src/projkit/__init__.py $(XCPROJ)/project.pbxproj; \
+	git commit -q -m "Version $(V)"; \
+	git tag -a "v$(V)" -m "Version $(V)"; \
+	git push -q origin main "v$(V)"; \
+	echo "main is now version $(V) (tag v$(V), pushed). Run 'make restart-web' and 'make install' to pick it up."
+endif
 
 # ---- Python (CLI and web UI) -------------------------------------------------
 
@@ -77,7 +107,7 @@ xcodeproj: ## Regenerate Proj.xcodeproj (only needed to change build settings)
 build-sim: ## Build the app for the simulator
 	xcodebuild -project $(XCPROJ) -scheme Proj -configuration Debug \
 	  -destination 'platform=iOS Simulator,name=$(SIM)' -derivedDataPath $(SIM_DD) \
-	  CODE_SIGNING_ALLOWED=NO -quiet build
+	  CURRENT_PROJECT_VERSION=$(BUILD_NO) CODE_SIGNING_ALLOWED=NO -quiet build
 
 sim: build-sim ## Run in the simulator on a COPY of your projects (TAB=projects PROJECT="name" optional)
 	@udid=$$(xcrun simctl list devices available | grep -F "$(SIM) (" | head -1 | grep -oE '[0-9A-F-]{36}'); \
@@ -109,7 +139,7 @@ define install-device
 	  { echo "$(2) is not available: connect it, unlock it, and turn on Developer Mode." >&2; exit 1; }
 	rm -rf $(DEV_APP)
 	xcodebuild -project $(XCPROJ) -scheme Proj -configuration Debug -destination 'id=$(1)' \
-	  -derivedDataPath $(DEV_DD) -allowProvisioningUpdates -quiet build
+	  -derivedDataPath $(DEV_DD) -allowProvisioningUpdates CURRENT_PROJECT_VERSION=$(BUILD_NO) -quiet build
 	codesign -v $(DEV_APP)
 	xcrun devicectl device install app --device $(1) $(DEV_APP) | grep -E 'installed|rror' || true
 	@xcrun devicectl device process launch --terminate-existing --device $(1) $(BUNDLE_ID) 2>&1 \

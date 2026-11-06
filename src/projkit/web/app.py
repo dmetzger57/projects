@@ -14,6 +14,7 @@ from fastapi.templating import Jinja2Templates
 from markdown_it import MarkdownIt
 
 from .. import ops
+from ..about import version_string
 from ..lint import lint_workspace
 from ..project import STATUSES, Project, ProjectError
 from ..workspace import ARCHIVE_DIR, TODAY_DIR
@@ -46,7 +47,7 @@ def create_app(ws: Workspace) -> FastAPI:
     tpl.env.filters.update(md=render_md, safe_url=safe_url, money=_fmt_money,
                            q=lambda s: quote(str(s), safe=""),
                            tilde=lambda p: str(p).replace(str(Path.home()), "~", 1))
-    tpl.env.globals.update(STATUSES=STATUSES, EDITABLE=ops.EDITABLE_SECTIONS)
+    tpl.env.globals.update(STATUSES=STATUSES, EDITABLE=ops.EDITABLE_SECTIONS, VERSION=version_string())
 
     # ---- local-only guards -------------------------------------------------
     @app.middleware("http")

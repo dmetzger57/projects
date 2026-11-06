@@ -24,6 +24,19 @@ app = typer.Typer(no_args_is_help=True, help="Manage projects in ~/Documents/Pro
 console = Console()
 
 
+def _show_version(value: bool) -> None:
+    if value:
+        from .about import version_string
+        console.print(f"proj {version_string()}", highlight=False)
+        raise typer.Exit()
+
+
+@app.callback()
+def _main(version: bool = typer.Option(False, "--version", "-V", callback=_show_version, is_eager=True,
+                                       help="Show the version and exit.")):
+    """Manage projects in ~/Documents/Projects."""
+
+
 def _ws(root: Optional[Path], receipts: Optional[Path]) -> Workspace:
     ws = Workspace.default()
     if root:

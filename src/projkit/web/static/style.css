@@ -300,3 +300,6 @@ li.done .archived-text { color: var(--muted); text-decoration: line-through; }
 .archived-tasks ul { margin: 6px 0; }
 .archived-tasks li { display: flex; align-items: center; gap: 8px; padding: 3px 0; }
 .archived-tasks li .archived-text { flex: 1; color: var(--muted); }
+
+/* footer */
+.site-footer { max-width: 1180px; margin: 0 auto; padding: 8px 24px 28px; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }

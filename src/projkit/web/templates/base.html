@@ -20,6 +20,7 @@
     <a class="btn primary" href="/new">New<span class="long">&nbsp;project</span></a>
   </header>
   <main>{% block body %}{% endblock %}</main>
+  <footer class="site-footer">Projects · version {{ VERSION }}</footer>
   <div id="toast" role="status" aria-live="polite"></div>
   <div hx-get="/api/fingerprint" hx-trigger="every 4s" hx-swap="none" id="fp"></div>
   <script>

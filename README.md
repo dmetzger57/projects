@@ -67,6 +67,18 @@ proj migrate [--dry-run]   # one-time Readme.pages → README.md (drives Pages)
 proj serve [-p 8765] [--no-open]   # web UI
 ```
 
+## Versions
+
+`VERSION` holds the version (`1.2.3`), shown by `proj --version`, in the web UI footer, and in the iPhone/iPad
+app under Settings › About (with the build number: the commit count for `make install`, date-based for TestFlight).
+`scripts/version.py` copies it into `pyproject.toml`, `src/projkit/__init__.py` and the Xcode project, and a test
+fails if they ever disagree.
+
+```sh
+make version              # current version, git describe, build number
+make version V=1.2.0      # on an up-to-date, clean main: bump, commit "Version 1.2.0", tag v1.2.0, push both
+```
+
 ## Web UI
 
 `proj serve` opens http://127.0.0.1:8765/ — overview by area (filters, search, goal progress, spend; click an

@@ -39,6 +39,10 @@ struct SettingsView: View {
                     }
                     Button("Refresh Now") { Task { await model.reload() } }
                 }
+                Section("About") {
+                    LabeledContent("Version", value: Self.version)
+                    LabeledContent("Build", value: Self.build)
+                }
                 Section {
                     Text("Receipts saved from the iPhone can't get the Finder tag “receipt”. Run `proj lint --fix` on the Mac to add it.")
                         .font(.footnote)
@@ -68,6 +72,11 @@ struct SettingsView: View {
             }
         }
     }
+
+    /// Marketing version (VERSION in the repo) and build number (the commit count for `make install`,
+    /// date-based for TestFlight).
+    static var version: String { Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?" }
+    static var build: String { Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?" }
 
     private func folderRow(_ label: String, _ url: URL?, target: Target) -> some View {
         Button { pick(target) } label: { folderLabel(label, url.map(displayPath)) }
