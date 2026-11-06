@@ -93,6 +93,9 @@ if args.count == 4, args[1] == "--mutate" {
         photo = try Ops.rename(ws, photo, to: "Photo Archive")
         let p = try Ops.newProject(ws, title: "Swift Made", area: "Digital Infrastructure")
         try Ops.addGoal(ws, p, "true")      // must stay a string, not a bool
+        try Ops.addTask(ws, photo, "Move me across")           // moved to another project, with its note
+        try Ops.addTaskNote(ws, photo, task: 3, text: "came along")
+        try Ops.moveTaskTo(ws, ws.load(photo.url), index: 3, to: p)
         try Ops.close(ws, p)
         try Ops.addIdea(ws, "Idea from iPhone")
         photo = ws.load(photo.url)
@@ -713,6 +716,39 @@ test("photos: files, archive and restore, delete") {
     var threw = false
     do { try Ops.addPhoto(ws, p, data: jpeg, ext: "pdf", note: nil) } catch { threw = true }
     check(threw, "non-image refused")
+}
+
+test("move a task to another project") {
+    let ws = try tempWorkspace()
+    var roof = try Ops.newProject(ws, title: "Roof", area: "House")
+    var shed = try Ops.newProject(ws, title: "Shed", area: "Personal")
+    try Ops.addTask(ws, roof, "Patch the leak")
+    try Ops.addTask(ws, roof, "Buy shingles")
+    try Ops.addTaskNote(ws, roof, task: 1, text: "30-year ones")
+    try Ops.addTaskFile(ws, roof, task: 1, target: "https://example.com/q", name: "Quote")
+    let ph = try Ops.addPhoto(ws, ws.load(roof.url), data: Data([0xff, 0xd8]), ext: "jpg", note: "Old", task: 1)
+    try Ops.addTask(ws, shed, "Paint it")
+    try Ops.copyToToday(ws, ws.load(roof.url), index: 1)
+    let before = ws.load(roof.url).document!.body
+    try Ops.moveTaskTo(ws, ws.load(roof.url), index: 1, to: ws.load(shed.url))
+    roof = ws.load(roof.url); shed = ws.load(shed.url)
+    eq(roof.tasks.map(\.text), ["Patch the leak"])
+    eq(shed.tasks.map(\.text), ["Paint it", "Buy shingles"])
+    eq(shed.tasks[1].notes.map(\.text), ["30-year ones"])
+    eq(shed.tasks[1].files.map(\.name), ["Quote"])
+    check(FileManager.default.fileExists(atPath: shed.url.appendingPathComponent(ph.path).path), "photo moved along")
+    check(!FileManager.default.fileExists(atPath: roof.url.appendingPathComponent(ph.path).path), "photo left the source")
+    let block = try ReadmeBody.taskBlock(before, index: 1).joined(separator: "\n")
+    check(shed.document!.body.contains("- [ ] Paint it\n" + block + "\n"), "block moved verbatim, after the last task")
+    try Ops.setTask(ws, ws.today()!, index: 0, done: true)       // Today copy still linked
+    check(ws.load(shed.url).tasks[1].done, "Today tick reaches the moved task")
+    var threw = 0
+    do { try Ops.moveTaskTo(ws, shed, index: 0, to: shed) } catch { threw += 1 }
+    do { try Ops.moveTaskTo(ws, shed, index: 0, to: ws.today()!) } catch { threw += 1 }
+    do { try Ops.moveTaskTo(ws, ws.today()!, index: 0, to: shed) } catch { threw += 1 }
+    do { try Ops.moveTaskTo(ws, shed, index: 9, to: roof) } catch { threw += 1 }
+    eq(threw, 4, "refusals")
+    eq(ws.load(shed.url).tasks.count, 2, "refusals change nothing")
 }
 
 print("\n\(passed) checks passed, \(failures) failed")

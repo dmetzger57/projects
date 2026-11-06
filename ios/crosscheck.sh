@@ -76,6 +76,10 @@ assert s.status == "closed" and s.area == "Digital Infrastructure" and s.goals[0
 assert ops.ideas(ws)[-1] == "Idea from iPhone"
 ops.add_note(p, "Back on the Mac")
 assert Project.load(p.dir).notes[-1].text.endswith("Back on the Mac")
+s = ws.find("Swift Made")[0]                             # task moved by Swift, with its note
+assert [(t["text"], t["notes"]) for t in s.tasks] == [("Move me across", ["came along"])], s.tasks
+m = ops.move_task_to(ws, s, "Move me", Project.load(p.dir))   # and Python moves it back
+assert m["notes"] == ["came along"] and not ws.find("Swift Made")[0].tasks
 errors = [i for i in lint_workspace(ws) if i.severity == "error"]
 assert not errors, errors
 assert any(i.code == "L013" for i in lint_workspace(ws)), "iPhone receipt should be flagged for tagging"

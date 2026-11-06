@@ -40,6 +40,7 @@ proj today add "Call the bank"          # …or add one directly
 proj today done|undo|rm <task>          # ticking a copy ticks its original too (and vice versa)
 proj today clear                        # remove done tasks from Today; originals stay ticked
 proj task archive photo <task>          # move a task (notes, attachments) to the Archive (web: 🗄; iPhone: swipe left)
+proj task move-to photo <task> roof     # move a task (notes, attachments, photos) to the end of another project (web: ↪; iPhone: swipe right › Move, or long-press › Move to Project…)
 proj task ls photo --archived           # …and list the project's archived tasks below its own
 proj archive                            # all archived tasks with their project and date (web/iPhone: Archive)
 proj archive -p photo --since 30d --sort name   # filter by project / date (YYYY-MM-DD or Nd); sort newest|oldest|name|project

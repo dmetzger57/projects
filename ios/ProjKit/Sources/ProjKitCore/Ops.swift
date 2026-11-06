@@ -386,6 +386,25 @@ public enum Ops {
         return ws.load(p.url)
     }
 
+    /// Moves a task (with its notes, attachments and photo files) to the end of another project's task
+    /// list. Its Today link id is kept, so a copy in Today keeps syncing. Mirrors projkit `move_task_to`.
+    public static func moveTaskTo(_ ws: Workspace, _ p: Project, index: Int, to dest: Project) throws {
+        guard ![p, dest].contains(where: { ws.isToday($0) || ws.isArchive($0) }) else {
+            throw OpError("tasks can only be moved between projects")
+        }
+        guard p.url.standardizedFileURL != dest.url.standardizedFileURL else {
+            throw OpError("the task is already in that project")
+        }
+        let q = try fresh(ws, p)
+        let d = try fresh(ws, dest)
+        let block = try ReadmeBody.taskBlock(q.document!.body, index: index)
+        let photos = q.tasks.indices.contains(index) ? q.tasks[index].photos : []
+        try checkPhotoMove(ws, photos, from: q.url, to: d.url)
+        try editBody(ws, d) { ReadmeBody.addTaskBlock($0, block) }     // written before the original is removed
+        try movePhotos(ws, photos, from: q.url, to: d.url)
+        try editBody(ws, q) { try ReadmeBody.removeTask($0, index: index) }
+    }
+
     /// After a project rename, points its archived tasks at the new name.
     static func retargetArchived(_ ws: Workspace, from old: String, to new: String) throws {
         guard let a = ws.archive(), a.document != nil else { return }

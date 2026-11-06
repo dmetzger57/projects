@@ -113,7 +113,7 @@ The build appears in App Store Connect → **TestFlight** after processing.
 ## Checks (no Xcode needed)
 
 Simulator testing (Debug builds): `PROJ_DEBUG_ROOT=<folder>` uses that projects folder, `PROJ_DEBUG_TAB=projects|ideas|archive|settings`
-picks the starting tab, and `PROJ_DEBUG_OPEN=<project>` opens a project (pass them to `simctl launch` with a `SIMCTL_CHILD_` prefix).
+picks the starting tab, and `PROJ_DEBUG_OPEN=<project>` opens a project (add `PROJ_DEBUG_MOVE=<task number>` to open its Move to Project sheet) (pass them to `simctl launch` with a `SIMCTL_CHILD_` prefix).
 
 ```sh
 cd ios/ProjKit && swift run Checks   # core tests, including byte-identical round-trip of real READMEs

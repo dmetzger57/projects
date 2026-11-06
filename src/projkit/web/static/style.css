@@ -316,3 +316,8 @@ li.done .archived-text { color: var(--muted); text-decoration: line-through; }
 .task-photos { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 10px; }
 .small-photo { width: 120px; }
 .task-photo-add { margin-top: 8px; }
+
+/* move a task to another project */
+.task-move { margin: 6px 0 2px 28px; flex-wrap: wrap; }
+.task-move select { flex: 1; min-width: 12em; }
+.task-moved { margin: 0 0 8px; padding: 6px 10px; border-radius: 8px; background: var(--accent-soft, rgba(80, 140, 255, .12)); }

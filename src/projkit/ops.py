@@ -1574,6 +1574,26 @@ def restore_task(ws: Workspace, ref: str) -> tuple[dict, Project]:
     return p.tasks[-1], p
 
 
+def move_task_to(ws: Workspace, p: Project, ref: str, dest: Project) -> dict:
+    """Moves a task (with its notes, attachments and photo files) to the end of another project's
+    task list. Its Today link id is kept, so a copy in Today keeps syncing. Returns the moved task."""
+    if any(ws.is_today(q) or ws.is_archive(q) for q in (p, dest)):
+        raise OpError("tasks can only be moved between projects")
+    if p.dir.resolve() == dest.dir.resolve():
+        raise OpError("the task is already in that project")
+    if dest.legacy or dest.parse_error:
+        raise OpError(f"'{dest.folder_name}' can't be edited right now")
+    i = _task_index(p, ref)
+    photos = p.tasks[i]["photos"]
+    _check_photo_move(photos, p.dir, dest.dir)
+    dest.body = body_add_task_block(dest.body, body_task_block(p.body, i))
+    dest.save()                              # written before the original is removed: never lost
+    _move_photos(photos, p.dir, dest.dir)
+    p.body = body_remove_task(p.body, i)
+    p.save()
+    return dest.tasks[-1]
+
+
 def retarget_archived(ws: Workspace, old: str, new: str) -> int:
     """After a project rename, points its archived tasks at the new name. Returns how many."""
     a = ws.archive()

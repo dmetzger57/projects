@@ -86,6 +86,7 @@ struct ProjectDetailView: View {
     @State private var archiveSinceDays: Int?             // nil = any time
     @State private var archiveSort: Ops.ArchiveSort = .newest
     @State private var deletingArchived: ProjectTask?
+    @State private var movingTask: ProjectTask?           // "Move to Project…"
     @FocusState private var goalFieldFocused: Bool
 
     var body: some View {
@@ -199,6 +200,14 @@ struct ProjectDetailView: View {
         .photoAdding($photoRequest) { jpeg, note, task in
             await model.perform { try Ops.addPhoto($0, p, data: jpeg, ext: "jpg", note: note, task: task) }
         }
+        .sheet(item: $movingTask) { t in MoveTaskSheet(task: t, from: p) }
+        #if DEBUG
+        .onAppear {   // simulator testing: PROJ_DEBUG_MOVE=<task number> opens "Move to Project…" for it
+            if let n = ProcessInfo.processInfo.environment["PROJ_DEBUG_MOVE"].flatMap(Int.init), p.tasks.indices.contains(n - 1) {
+                movingTask = p.tasks[n - 1]
+            }
+        }
+        #endif
         .sheet(isPresented: $showAddLink) {
             AddLinkSheet { url, title in await model.perform { try Ops.addLink($0, p, url: url, title: title) } }
         }
@@ -735,6 +744,10 @@ struct ProjectDetailView: View {
                         Button { copyToToday(p, t) } label: { Label("Today", systemImage: "sun.max") }
                             .tint(.orange)
                     }
+                    if !isToday {
+                        Button { movingTask = t } label: { Label("Move", systemImage: "arrow.right.doc.on.clipboard") }
+                            .tint(.teal)
+                    }
                 }
                 .swipeActions(edge: .trailing) {
                     Button(role: .destructive) {
@@ -812,6 +825,7 @@ struct ProjectDetailView: View {
                         }
                     }
                     if !isToday {
+                        Button { movingTask = t } label: { Label("Move to Project…", systemImage: "arrow.right.doc.on.clipboard") }
                         Button { archive(p, t) } label: { Label("Archive", systemImage: "archivebox") }
                     }
                     Button(role: .destructive) {

@@ -417,6 +417,16 @@ def task_archive(project: str, task: str, root: Optional[Path] = RootOpt, receip
     console.print(f"[green]archived[/] {t['text']}  [dim]from {t['from']}[/]", highlight=False)
 
 
+@task_app.command("move-to")
+def task_move_to(project: str, task: str, to_project: str = typer.Argument(..., metavar="TO_PROJECT"),
+                 root: Optional[Path] = RootOpt, receipts: Optional[Path] = ReceiptsOpt):
+    """Move a task (with its notes, attachments and photos) to the end of another project's tasks."""
+    ws = _ws(root, receipts)
+    p, dest = _pick(ws, project), _pick(ws, to_project)
+    t = _run(ops.move_task_to, ws, p, task, dest)
+    console.print(f"[green]moved to {dest.title}:[/] {t['text']}", highlight=False)
+
+
 @task_app.command("attach")
 def task_attach(project: str, task: str, target: str,
                 name: Optional[str] = typer.Option(None, "--name", "-n", help="Friendly name (default: file name or website)"),

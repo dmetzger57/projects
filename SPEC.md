@@ -124,6 +124,11 @@ Rules:
   recorded. Renaming a project rewrites its archived tasks' `from:`. Restoring moves the task back to the
   end of that project's tasks (closed projects included) without the marker; the link id stays, so a copy
   still in Today keeps syncing either way. Today and Archive tasks can't be archived.
+- **Moving a task to another project:** the task line with all its detail lines (notes, attachments, photos)
+  goes unchanged to the end of the other project's tasks (closed projects included), written there before
+  it is removed from the first project. Its photo files move to the other project's `Photos/` (same paths);
+  if a file of that name is already there, the move is refused. The link id stays, so a copy in Today keeps
+  syncing. Today and Archive tasks can't be moved this way.
 - Unknown front-matter keys must be preserved (forward compatibility).
 
 - Project Files entries are Markdown links on their own line: `- [Friendly name](<target>)`. The target is

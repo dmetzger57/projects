@@ -283,11 +283,31 @@ def create_app(ws: Workspace) -> FastAPI:
     # ---- tasks (## Tasks checklist in the README body) ---------------------
     def tasks_partial(request: Request, p: Project, editing: int | None = None, attach: int | None = None,
                       note: int | None = None, note_edit: tuple[int, int] | None = None,
-                      archived_open: bool = False, photo: int | None = None):
+                      archived_open: bool = False, photo: int | None = None, move: int | None = None,
+                      moved: dict | None = None):
         return partial(request, "_tasks.html", **{**_project_ctx(Project.load(p.dir)),
                                                   "task_edit": editing, "task_attach": attach,
                                                   "task_note_add": note, "task_note_edit": note_edit,
-                                                  "archived_open": archived_open, "task_photo_add": photo})
+                                                  "archived_open": archived_open, "task_photo_add": photo,
+                                                  "task_move": move, "move_targets": move_targets(p) if move else [],
+                                                  "task_moved": moved})
+
+    def move_targets(p: Project) -> list[dict]:
+        """Projects a task of `p` can move to, by area in overview order; closed ones last."""
+        ov = ops.overview(ws)
+        groups, closed = [], []
+        for area in ops.overview_areas(ws, ov):
+            open_, shut = [], []
+            for q in ops.area_projects(ws, area, ov):
+                if q.dir == p.dir or q.legacy or q.parse_error:
+                    continue
+                (shut if q.status == "closed" else open_).append(q)
+            if open_:
+                groups.append(dict(label=area, projects=open_))
+            closed += shut
+        if closed:
+            groups.append(dict(label="Closed", projects=sorted(closed, key=lambda q: q.title.casefold())))
+        return groups
 
     # ---- photos (project "## Photos" and task photos; files in the project's Photos/ folder) ----
     MAX_PHOTO = 60 * 1024 * 1024
@@ -351,14 +371,15 @@ def create_app(ws: Workspace) -> FastAPI:
 
     @app.get("/p/{key}/tasks", response_class=HTMLResponse)
     def tasks_view(request: Request, key: str, edit: int | None = None, attach: int | None = None,
-                   note: int | None = None, note_edit: str | None = None, photo: int | None = None):
+                   note: int | None = None, note_edit: str | None = None, photo: int | None = None,
+                   move: int | None = None):
         ne = None
         if note_edit:                      # "task.note", both 1-based
             try:
                 ne = tuple(int(x) for x in note_edit.split(".", 1))
             except ValueError:
                 raise HTTPException(400, "note_edit must look like 2.1")
-        return tasks_partial(request, get_project(key), edit, attach, note, ne, photo=photo)
+        return tasks_partial(request, get_project(key), edit, attach, note, ne, photo=photo, move=move)
 
     # task notes: indented "  - text" lines under a task
     @app.post("/p/{key}/tasks/{n}/notes")
@@ -426,6 +447,13 @@ def create_app(ws: Workspace) -> FastAPI:
         p = get_project(key)
         ops.archive_task(ws, p, str(n))
         return tasks_partial(request, p)
+
+    @app.post("/p/{key}/tasks/{n}/move-to")
+    def task_move_to(request: Request, key: str, n: int, to: str = Form(...)):
+        p = get_project(key)
+        dest = get_project(to)
+        t = ops.move_task_to(ws, p, str(n), dest)
+        return tasks_partial(request, p, moved=dict(text=t["text"], title=dest.title, url=purl(dest)))
 
     @app.post("/p/{key}/archived/{n}/restore")
     def task_restore(request: Request, key: str, n: int):

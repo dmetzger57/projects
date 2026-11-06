@@ -10,6 +10,9 @@
     {% endif %}
   </div>
   {% if tasks %}<div class="bar tasks-bar" role="img" aria-label="{{ done }} of {{ tasks|length }} tasks done"><i style="width: {{ (100 * done / tasks|length)|int }}%"></i></div>{% endif %}
+  {% if task_moved %}
+  <p class="task-moved small" role="status">Moved “{{ task_moved.text }}” to <a href="{{ task_moved.url }}">{{ task_moved.title }}</a>.</p>
+  {% endif %}
   <ul class="goals tasks" data-move-url="{{ url }}/tasks">
     {% for t in tasks %}
     <li class="{{ 'done' if t.done }}" data-task="{{ loop.index }}">
@@ -122,6 +125,25 @@
           </div>
         </form>
         {% endif %}
+        {% if task_move == n %}
+        <form class="task-edit editing task-move" hx-post="{{ url }}/tasks/{{ n }}/move-to" hx-target="#tasks" hx-swap="outerHTML">
+          {% if move_targets %}
+          <select name="to" required autofocus aria-label="Project to move “{{ t.text }}” to"
+                  onkeydown="if(event.key==='Escape'){htmx.ajax('GET','{{ url }}/tasks',{target:'#tasks',swap:'outerHTML'})}">
+            <option value="" disabled selected>Move to project…</option>
+            {% for g in move_targets %}
+            <optgroup label="{{ g.label }}">
+              {% for q in g.projects %}<option value="{{ q.folder_name }}">{{ q.title }}</option>{% endfor %}
+            </optgroup>
+            {% endfor %}
+          </select>
+          <button class="btn small primary">Move</button>
+          {% else %}
+          <span class="muted small">There’s no other project to move it to.</span>
+          {% endif %}
+          <button type="button" class="btn small" hx-get="{{ url }}/tasks" hx-target="#tasks" hx-swap="outerHTML">Cancel</button>
+        </form>
+        {% endif %}
         {% if task_attach == n %}
         <form class="stack file-form task-attach" hx-post="{{ url }}/tasks/{{ n }}/files" hx-target="#tasks" hx-swap="outerHTML">
           <div class="add-row">
@@ -141,6 +163,10 @@
       {% if not is_today and t.id not in in_today %}
       <button class="x edit" title="Copy to Today" aria-label="Copy “{{ t.text }}” to Today"
               hx-post="{{ url }}/tasks/{{ n }}/today" hx-target="#tasks" hx-swap="outerHTML">☀</button>
+      {% endif %}
+      {% if not is_today %}
+      <button class="x edit" title="Move to another project" aria-label="Move “{{ t.text }}” to another project"
+              hx-get="{{ url }}/tasks?move={{ n }}" hx-target="#tasks" hx-swap="outerHTML">↪</button>
       {% endif %}
       {% if not is_today %}
       <button class="x edit" title="Archive task" aria-label="Archive “{{ t.text }}”"
