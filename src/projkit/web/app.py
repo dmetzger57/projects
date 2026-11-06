@@ -49,6 +49,14 @@ def create_app(ws: Workspace) -> FastAPI:
                            tilde=lambda p: str(p).replace(str(Path.home()), "~", 1))
     tpl.env.globals.update(STATUSES=STATUSES, EDITABLE=ops.EDITABLE_SECTIONS, VERSION=version_string())
 
+    def asset(name: str) -> str:
+        """/static/<name>?v=<mtime>: a changed file gets a new URL, so browsers never keep a stale copy."""
+        try:
+            return f"/static/{name}?v={int((HERE / 'static' / name).stat().st_mtime)}"
+        except OSError:
+            return f"/static/{name}"
+    tpl.env.globals.update(asset=asset)
+
     # ---- local-only guards -------------------------------------------------
     @app.middleware("http")
     async def guard(request: Request, call_next):
