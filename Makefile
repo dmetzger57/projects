@@ -20,6 +20,7 @@ SIM_APP   := $(SIM_DD)/Build/Products/Debug-iphonesimulator/Proj.app
 MAC_DD    := $(BUILD)/mac
 MAC_APP   := $(MAC_DD)/Build/Products/Release/Proj.app
 MAC_DEST  ?= /Applications
+LSREGISTER := /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
 
 IPHONE    ?= 00008160-00064D8426E00036
 IPAD      ?= 00008027-000971262178402E
@@ -172,7 +173,10 @@ install-mac: build-mac ## Build the Mac app, put it in /Applications (MAC_DEST=â
 	  echo "$(MAC_DEST)/Proj.app was installed by the .pkg (owned by root). Remove it once, then re-run:" >&2; \
 	  echo "  sudo rm -rf $(MAC_DEST)/Proj.app        (or install with: make pkg, then open dist/*.pkg)" >&2; exit 1; fi
 	@pkill -x Proj 2>/dev/null; sleep 0.5; \
-	rm -rf "$(MAC_DEST)/Proj.app" && ditto $(MAC_APP) "$(MAC_DEST)/Proj.app" && open "$(MAC_DEST)/Proj.app" && \
+	rm -rf "$(MAC_DEST)/Proj.app" && ditto $(MAC_APP) "$(MAC_DEST)/Proj.app" && \
+	touch "$(MAC_DEST)/Proj.app" && $(LSREGISTER) -f "$(MAC_DEST)/Proj.app" && \
+	{ killall iconservicesagent Dock 2>/dev/null; true; } && \
+	open "$(MAC_DEST)/Proj.app" && \
 	echo "Mac: installed in $(MAC_DEST) and opened"
 
 pkg: build-mac ## Build an installer package for the Mac app: dist/Proj-<version>.pkg
