@@ -10,6 +10,10 @@ python3 -m venv .venv && .venv/bin/pip install -e '.[dev]'
 ln -s "$PWD/.venv/bin/proj" ~/bin/proj   # or add .venv/bin to PATH
 ```
 
+Common tasks are in the [Makefile](Makefile) (`make` lists them): `make check` (Python tests, Swift checks,
+cross-check), `make restart-web`, `make install` (iPhone and iPad), `make sim TAB=projects` / `make screenshot`
+(simulator on a copy of your projects), `make release`.
+
 Environment: `PROJ_ROOT` (default `~/Documents/Projects`), `PROJ_RECEIPTS` (default `~/Documents/Receipts`).
 
 ## Commands

@@ -26,8 +26,8 @@ struct RootView: View {
         // Simulator testing: PROJ_DEBUG_TAB=projects|ideas|archive|settings picks the starting tab;
         // PROJ_DEBUG_OPEN (open a project) implies the Projects tab.
         let env = ProcessInfo.processInfo.environment
-        if let t = env["PROJ_DEBUG_TAB"] { return t }
-        if env["PROJ_DEBUG_OPEN"] != nil { return "projects" }
+        if let t = env["PROJ_DEBUG_TAB"], !t.isEmpty { return t }
+        if let f = env["PROJ_DEBUG_OPEN"], !f.isEmpty { return "projects" }
         #endif
         return "today"
     }()

@@ -22,7 +22,7 @@ struct ProjectsView: View {
     private static var debugOpen: String? {
         #if DEBUG
         // Simulator testing: PROJ_DEBUG_OPEN=<project folder name> opens that project at launch.
-        return ProcessInfo.processInfo.environment["PROJ_DEBUG_OPEN"]
+        return ProcessInfo.processInfo.environment["PROJ_DEBUG_OPEN"].flatMap { $0.isEmpty ? nil : $0 }
         #else
         return nil
         #endif
