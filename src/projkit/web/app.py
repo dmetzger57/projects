@@ -631,8 +631,9 @@ def create_app(ws: Workspace) -> FastAPI:
         return redirect(purl(ops.close(ws, get_project(key))))
 
     @app.post("/p/{key}/reopen")
-    def reopen(key: str, area: str = Form("")):
-        return redirect(purl(ops.reopen(ws, get_project(key), area or None)))
+    def reopen(key: str, area: str = Form(""), stay: int = Form(0)):
+        p = ops.reopen(ws, get_project(key), area or None)
+        return _refresh() if stay else redirect(purl(p))      # stay: reopened from a tile on the overview
 
     @app.post("/p/{key}/rename")
     def rename(key: str, title: str = Form(...)):

@@ -122,6 +122,17 @@ def test_status_close_reopen_rename(client, ws):
     assert r.headers["HX-Redirect"] == "/p/Roof"
 
 
+def test_reopen_from_closed_tile(client, ws):
+    client.post("/p/Roof%20Repair/close", headers=HX)
+    assert "Reopen in House" not in client.get("/").text                     # Open filter: closed tiles hidden
+    home = client.get("/?status=closed").text
+    assert 'hx-post="/p/Roof%20Repair/reopen"' in home and "Reopen in House" in home
+    r = client.post("/p/Roof%20Repair/reopen", data={"stay": "1"}, headers=HX)
+    assert r.headers.get("HX-Refresh") == "true"                              # stays on the overview
+    assert proj(ws).dir.parent.name == "House" and proj(ws).status == "active"
+    assert "Reopen in" not in client.get("/?status=all").text                 # open tiles: no button
+
+
 def test_new_and_ideas(client, ws):
     r = client.post("/new", data={"title": "Garden Beds", "area": "House"}, headers=HX)
     assert r.headers["HX-Redirect"] == "/p/Garden%20Beds"

@@ -211,6 +211,9 @@ struct ProjectsView: View {
             }
         }
             .contextMenu {
+                if model.isClosed(p) {
+                    Section { ReopenMenu(project: p) }
+                }
                 if items.count > 1 {
                     Section("Move") {
                         Button { move(p, before: items[0]) } label: { Label("Move to Top", systemImage: "arrow.up.to.line") }
@@ -302,6 +305,33 @@ struct ProjectsView: View {
 }
 
 /// Drag areas into order (the same order as the web overview).
+/// Menu items for a closed project: one tap back into its own area, or pick another one.
+/// Used in the Projects list, the overview tiles and the project's Actions menu.
+struct ReopenMenu: View {
+    @Environment(AppModel.self) private var model
+    let project: Project
+
+    var body: some View {
+        let home = model.areas.first { $0 == project.area }
+        let others = model.areas.filter { $0 != home }
+        if let home {
+            Button { reopen(home) } label: { Label("Reopen in \(home)", systemImage: "arrow.uturn.backward") }
+        }
+        if !others.isEmpty {
+            Menu {
+                ForEach(others, id: \.self) { a in Button(a) { reopen(a) } }
+            } label: {
+                Label(home == nil ? "Reopen in…" : "Reopen in Another Area", systemImage: "arrow.uturn.backward.circle")
+            }
+        }
+    }
+
+    private func reopen(_ area: String) {
+        let p = project
+        Task { await model.perform { try Ops.reopen($0, p, area: area) } }
+    }
+}
+
 struct ReorderAreasSheet: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss

@@ -102,6 +102,9 @@ struct ProjectGridView: View {
         .buttonStyle(.plain)
         .liftOnHover()
         .contextMenu {
+            if model.isClosed(p) {
+                Section { ReopenMenu(project: p) }
+            }
             if items.count > 1 {
                 Button { move(p, before: items[0]) } label: { Label("Move to Top", systemImage: "arrow.up.to.line") }
                     .disabled(i == 0)

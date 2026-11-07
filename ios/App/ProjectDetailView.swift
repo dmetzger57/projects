@@ -583,11 +583,7 @@ struct ProjectDetailView: View {
             Button { renameText = p.title; renaming = true } label: { Label("Rename", systemImage: "pencil") }
                 .disabled(p.isLegacy)
             if closed {
-                Menu {
-                    ForEach(model.areas, id: \.self) { area in
-                        Button(area) { Task { await model.perform { try Ops.reopen($0, p, area: area) } } }
-                    }
-                } label: { Label("Reopen in…", systemImage: "arrow.uturn.backward") }
+                ReopenMenu(project: p)
             } else {
                 Button(role: .destructive) { confirmClose = true } label: { Label("Close Project", systemImage: "archivebox") }
                     .disabled(p.isLegacy)

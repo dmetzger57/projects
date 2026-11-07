@@ -21,5 +21,9 @@
     {% if not c.total and not c.ttotal %}<span>No goals or tasks</span>{% endif %}
     {% if c.p.receipts %}<span>{{ c.p.total_cost|money }}</span>{% endif %}
     {% if c.last_note %}<span>{{ c.last_note.strftime('%b %-d') }}</span>{% endif %}
+    {% if c.status == 'closed' %}
+    <button type="button" class="link-quiet card-reopen" hx-post="{{ c.url }}/reopen" hx-vals='{"stay": 1}'
+            title="Move it back out of “2 - Closed” and make it active again">↩ Reopen in {{ c.area }}</button>
+    {% endif %}
   </div>
 </div>
