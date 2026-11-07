@@ -76,9 +76,21 @@ if args.count == 4, args[1] == "--mutate" {
         // Today: copy two tasks, tick one in Today and untick it from the project (ends unchanged)
         try Ops.copyToToday(ws, ws.load(photo.url), index: 0)
         try Ops.copyToToday(ws, ws.load(photo.url), index: 2)       // already done: copied done
-        try Ops.setTask(ws, ws.today()!, index: 0, done: true)
-        try Ops.setTask(ws, ws.load(photo.url), index: 2, done: false)   // ticked: it had settled last
-        try Ops.moveTask(ws, ws.load(photo.url), from: 1, to: 0)          // unticked lands above the done
+        // Today may hold real tasks (this runs on a copy of the real tree) and copies settle among
+        // them, so find the task by its text rather than by position.
+        func at(_ q: Project, _ text: String) throws -> Int {
+            guard let i = q.tasks.firstIndex(where: { $0.text == text }) else { throw OpError("no task '\(text)'") }
+            return i
+        }
+        try Ops.setTask(ws, ws.today()!, index: try at(ws.today()!, "Move me to the top"), done: true)
+        guard ws.load(photo.url).tasks.last?.text == "Move me to the top" else {
+            throw OpError("ticked from Today, but not settled last: \(ws.load(photo.url).tasks.map(\.text))")
+        }
+        try Ops.setTask(ws, ws.load(photo.url), index: try at(ws.load(photo.url), "Move me to the top"), done: false)
+        guard ws.load(photo.url).tasks.map(\.text) == ["Order Epson FF-680W", "Move me to the top", "Pick storage"] else {
+            throw OpError("unticked, but not above the done: \(ws.load(photo.url).tasks.map(\.text))")
+        }
+        try Ops.moveTask(ws, ws.load(photo.url), from: 1, to: 0)
         try Ops.addTask(ws, ws.today()!, "Call the bank")
         // Archive: a task with a note moves out (the rename below must follow it into the Archive)
         try Ops.addTask(ws, photo, "Archive me")                // above the done task
