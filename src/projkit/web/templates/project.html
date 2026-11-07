@@ -14,7 +14,7 @@
   </div>
   <div class="actions">
     {% if p.legacy %}
-      <span class="pill s-legacy">legacy</span>
+      <span class="pill s-legacy">{{ status_label("legacy") }}</span>
     {% elif closed %}
       <form hx-post="{{ url }}/reopen" class="inline">
         <select name="area" aria-label="Reopen into area">
@@ -24,7 +24,7 @@
       </form>
     {% else %}
       <select name="status" hx-post="{{ url }}/status" hx-trigger="change" aria-label="Status">
-        {% for s in STATUSES if s != 'closed' %}<option value="{{ s }}" {{ 'selected' if s == p.status }}>{{ s }}</option>{% endfor %}
+        {% for s in STATUSES if s != 'closed' %}<option value="{{ s }}" {{ 'selected' if s == p.status }}>{{ status_label(s) }}</option>{% endfor %}
       </select>
       <button class="btn" hx-post="{{ url }}/close" hx-confirm="Close '{{ p.title }}'? It moves to '2 - Closed'.">Close</button>
     {% endif %}

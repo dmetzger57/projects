@@ -17,7 +17,7 @@ from rich.table import Table
 
 from . import ops
 from .lint import lint_workspace
-from .project import Project
+from .project import Project, status_label
 from .workspace import Workspace
 
 app = typer.Typer(no_args_is_help=True, help="Manage projects in ~/Documents/Projects.")
@@ -87,7 +87,7 @@ def ls(area: Optional[str] = typer.Option(None, "--area", "-a"),
                 continue
             done, total = p.goal_progress
             tdone, ttotal = p.task_progress
-            t.add_row(a, p.title, st, f"{done}/{total}" if total else "", f"{tdone}/{ttotal}" if ttotal else "",
+            t.add_row(a, p.title, status_label(st), f"{done}/{total}" if total else "", f"{tdone}/{ttotal}" if ttotal else "",
                       f"${p.total_cost:,.2f}" if p.receipts else "")
     console.print(t)
 
@@ -100,7 +100,7 @@ def show(project: str, root: Optional[Path] = RootOpt, receipts: Optional[Path] 
     if p.legacy:
         console.print("[yellow]No README.md yet — run `proj migrate`.[/]")
         return
-    console.print(f"area: {p.area}   status: {p.status}   created: {p.created or '—'}")
+    console.print(f"area: {p.area}   status: {status_label(p.status)}   created: {p.created or '—'}")
     if p.goals:
         console.print("\n[bold]Goals[/]")
         for g in p.goals:
@@ -241,7 +241,7 @@ def note(project: str, text: str, root: Optional[Path] = RootOpt, receipts: Opti
 
 @app.command()
 def status(project: str, value: str, root: Optional[Path] = RootOpt, receipts: Optional[Path] = ReceiptsOpt):
-    """Set status: idea | backlog | active | blocked | on-hold (use close/reopen for closed)."""
+    """Set status: idea | backlog | active | blocked | on-hold | completed-on-hold (use close/reopen for closed)."""
     p = _pick(_ws(root, receipts), project)
     _run(ops.set_status, p, value)
     console.print(f"{p.title}: {value}")
@@ -346,8 +346,12 @@ def task_add(project: str, text: str, root: Optional[Path] = RootOpt, receipts: 
 @task_app.command("done")
 def task_done(project: str, task: str, root: Optional[Path] = RootOpt, receipts: Optional[Path] = ReceiptsOpt):
     ws = _ws(root, receipts)
-    t = _run(ops.set_task, _pick(ws, project), task, True, ws)
+    p = _pick(ws, project)
+    before = p.status
+    t = _run(ops.set_task, p, task, True, ws)
     console.print(f"[green]✔[/] {t['text']}", highlight=False)
+    if p.status != before:
+        console.print(f"All tasks done: {p.title} is now {status_label(p.status)}", highlight=False)
 
 
 @task_app.command("undo")

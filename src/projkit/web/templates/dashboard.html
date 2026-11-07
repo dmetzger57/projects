@@ -2,8 +2,8 @@
 {% block body %}
 <div class="toolbar">
   <div class="chips" role="tablist">
-    {% for s, label in [("open","Open"),("active","Active"),("blocked","Blocked"),("on-hold","On hold"),("backlog","Backlog"),("idea","Idea"),("closed","Closed"),("all","All")] %}
-      <a class="chip {{ 'on' if status == s }}" href="/?status={{ s }}{% if q %}&q={{ q|q }}{% endif %}">{{ label }}</a>
+    {% for s in ["open","active","blocked","on-hold","completed-on-hold","backlog","idea","closed","all"] %}
+      <a class="chip {{ 'on' if status == s }}" href="/?status={{ s }}{% if q %}&q={{ q|q }}{% endif %}">{{ {"open": "Open", "all": "All"}.get(s) or status_label(s) }}</a>
     {% endfor %}
   </div>
   <form class="search" method="get" action="/">

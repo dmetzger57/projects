@@ -168,6 +168,20 @@ def test_tasks_add_toggle_edit_delete(client, ws):
     assert "0 of 1 tasks done" in client.get("/p/Roof%20Repair/tasks").text
 
 
+def test_last_task_ticked_completes_project(client, ws):
+    url = "/p/Roof%20Repair"
+    client.post(f"{url}/tasks", data={"text": "Buy shingles"}, headers=HX)
+    r = client.post(f"{url}/tasks/1/toggle", headers=HX)
+    assert r.headers.get("HX-Refresh") == "true"                  # page reloads to show the new status
+    assert proj(ws).status == "completed-on-hold"
+    page = client.get(url).text
+    assert '<option value="completed-on-hold" selected>Completed – On Hold</option>' in page
+    home = client.get("/?status=completed-on-hold").text
+    assert "Roof Repair" in home and '<span class="pill s-completed-on-hold">Completed – On Hold</span>' in home
+    client.post(f"{url}/tasks/1/toggle", headers=HX)               # untick: back to the partial, status kept
+    assert proj(ws).status == "completed-on-hold"
+
+
 def test_task_move_route(client, ws):
     url = "/p/Roof%20Repair"
     for t in ("one", "two", "three"):
@@ -258,8 +272,8 @@ def test_today_web(client, ws):
     today = client.get("/today").text
     assert "Buy shingles" in today and 'from Roof Repair' in today and f'href="{url}"' in today
     client.post("/p/0%20-%20Today/tasks/1/toggle", headers=HX)          # tick in Today
-    assert proj(ws).tasks[0]["done"] is True
-    client.post(f"{url}/tasks/1/toggle", headers=HX)                     # untick in project
+    assert [(t["text"], t["done"]) for t in proj(ws).tasks] == [("Hire roofer", False), ("Buy shingles", True)]
+    client.post(f"{url}/tasks/2/toggle", headers=HX)                     # untick in project
     assert ws.today().tasks[0]["done"] is False
     client.post("/p/0%20-%20Today/tasks", data={"text": "Call bank"}, headers=HX)
     client.post("/p/0%20-%20Today/tasks/2/toggle", headers=HX)

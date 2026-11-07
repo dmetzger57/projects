@@ -242,7 +242,7 @@ struct NewProjectSheet: View {
                     ForEach(model.areas, id: \.self) { Text($0).tag($0) }
                 }
                 Picker("Status", selection: $status) {
-                    ForEach(projectStatuses.filter { $0 != "closed" }, id: \.self) { Text($0).tag($0) }
+                    ForEach(projectStatuses.filter { $0 != "closed" }, id: \.self) { Text(statusLabel($0)).tag($0) }
                 }
             }
             .navigationTitle("New Project")

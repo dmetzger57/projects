@@ -16,7 +16,7 @@ from markdown_it import MarkdownIt
 from .. import ops
 from ..about import version_string
 from ..lint import lint_workspace
-from ..project import STATUSES, Project, ProjectError
+from ..project import STATUSES, Project, ProjectError, status_label
 from ..workspace import ARCHIVE_DIR, TODAY_DIR
 from ..workspace import Workspace
 
@@ -47,7 +47,7 @@ def create_app(ws: Workspace) -> FastAPI:
     tpl.env.filters.update(md=render_md, safe_url=safe_url, money=_fmt_money,
                            q=lambda s: quote(str(s), safe=""),
                            tilde=lambda p: str(p).replace(str(Path.home()), "~", 1))
-    tpl.env.globals.update(STATUSES=STATUSES, EDITABLE=ops.EDITABLE_SECTIONS, VERSION=version_string())
+    tpl.env.globals.update(STATUSES=STATUSES, status_label=status_label, EDITABLE=ops.EDITABLE_SECTIONS, VERSION=version_string())
 
     def asset(name: str) -> str:
         """/static/<name>?v=<mtime>: a changed file gets a new URL, so browsers never keep a stale copy."""
@@ -440,8 +440,10 @@ def create_app(ws: Workspace) -> FastAPI:
     @app.post("/p/{key}/tasks/{n}/toggle")
     def task_toggle(request: Request, key: str, n: int):
         p = get_project(key)
-        tasks = p.tasks
+        tasks, before = p.tasks, p.status
         ops.set_task(p, str(n), not tasks[n - 1]["done"] if 0 < n <= len(tasks) else True, ws)
+        if p.status != before:           # last task ticked: now Completed – On Hold; reload to show it
+            return Response(status_code=204, headers={"HX-Refresh": "true"})
         return tasks_partial(request, p)
 
     @app.post("/p/{key}/tasks/{n}/today")

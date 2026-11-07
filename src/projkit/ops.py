@@ -12,10 +12,10 @@ from pathlib import Path
 
 from ruamel.yaml.comments import CommentedMap, CommentedSeq
 
-from .project import (FILE_RE, split_task_text, split_archived, FORMAT_VERSION, ProjectError, README, STATUSES, URL_SCHEME_RE, Project, file_line_indices,
+from .project import (FILE_RE, split_task_text, split_archived, FORMAT_VERSION, ProjectError, README, STATUSES, COMPLETED_ON_HOLD, URL_SCHEME_RE, Project, file_line_indices,
                       parse_file_line, section_bounds, task_blocks, task_file_indices, task_line_indices,
                       task_note_indices, PHOTO_DIR, parse_photo_line, photo_line_indices, task_photo_indices)
-from .workspace import BACKLOG_STEM, OVERVIEW_STEM, Workspace
+from .workspace import ARCHIVE_DIR, BACKLOG_STEM, OVERVIEW_STEM, TODAY_DIR, Workspace
 
 RECEIPT_TAG = "receipt"
 _BAD_NAME = re.compile(r'[/:\x00]')
@@ -396,6 +396,33 @@ def body_move_task(body: str, index: int, to: int) -> str:
     return "\n".join(lines) + "\n"
 
 
+def body_settle_task(body: str, index: int) -> tuple[str, int]:
+    """Keeps done tasks below open ones: a done task moves to the bottom, an open one to just
+    above the first done task. Returns the new body and the task's new index."""
+    lines = body.rstrip("\n").split("\n")
+    blocks = _task_blocks(lines)
+    if not 0 <= index < len(blocks):
+        raise OpError(f"no task #{index + 1}")
+    done = [lines[start][3:4] in ("x", "X") for start, _ in blocks]
+    if done[index]:
+        to = len(blocks) - 1
+    else:
+        others = done[:index] + done[index + 1:]
+        to = next((k for k, d in enumerate(others) if d), len(others))
+    return body_move_task(body, index, to), to
+
+
+def _task_ids_done(body: str) -> list[tuple[str | None, bool]]:
+    """(link id, done) of each task, read straight from the body."""
+    lines = body.rstrip("\n").split("\n")
+    return [(split_task_text(lines[start][6:])[1], lines[start][3:4] in ("x", "X"))
+            for start, _ in _task_blocks(lines)]
+
+
+def _task_count(body: str) -> int:
+    return len(_task_blocks(body.rstrip("\n").split("\n")))
+
+
 def _task_index(p: Project, ref: str) -> int:
     tasks = p.tasks
     if ref.isdigit():
@@ -410,19 +437,38 @@ def _task_index(p: Project, ref: str) -> int:
 
 
 def add_task(p: Project, text: str) -> None:
-    p.body = body_add_task(p.body, text)
+    """Adds an open task above the done ones."""
+    body = body_add_task(p.body, text)
+    p.body, _ = body_settle_task(body, _task_count(body) - 1)
     p.save()
 
 
 def set_task(p: Project, ref: str, done: bool, ws: Workspace | None = None) -> dict:
-    """Ticks or unticks a task; with `ws`, also every linked copy (Today <-> its project)."""
+    """Ticks or unticks a task; with `ws`, also every linked copy (Today <-> its project).
+    A ticked task moves to the bottom of the list, an unticked one back above the done ones."""
     i = _task_index(p, ref)
-    p.body = body_set_task(p.body, i, done)
+    p.body, i = body_settle_task(body_set_task(p.body, i, done), i)
+    if done:
+        _complete_if_all_done(p, ws)
     p.save()
     t = p.tasks[i]
     if ws is not None and t["id"]:
         sync_task_done(ws, t["id"], done, skip=p.dir)
     return t
+
+
+def _complete_if_all_done(p: Project, ws: Workspace | None) -> bool:
+    """Once every task is ticked, the project becomes "completed-on-hold" (not saved here). Today, the
+    Archive and closed projects are left alone. Mirrors ProjKit `Ops.completeIfAllDone`."""
+    if ws is not None and (ws.is_today(p) or ws.is_archive(p)):
+        return False
+    if p.dir.name in (TODAY_DIR, ARCHIVE_DIR) or p.status in ("closed", COMPLETED_ON_HOLD):
+        return False
+    tasks = p.tasks
+    if not tasks or not all(t["done"] for t in tasks):
+        return False
+    p.meta["status"] = COMPLETED_ON_HOLD
+    return True
 
 
 def edit_task(p: Project, ref: str, text: str) -> dict:
@@ -1125,7 +1171,7 @@ def promote_idea(ws: Workspace, ref: str, area: str, title: str | None = None) -
 
 # ---- Overview layout (0 - Overview.md: area order, collapsed areas, project order per area) ----
 # Mirrors ios/ProjKit Overview.swift. Areas by folder name; projects by folder name, case-insensitive.
-STATUS_ORDER = {"active": 0, "blocked": 1, "on-hold": 2, "backlog": 3, "idea": 4, "closed": 5}
+STATUS_ORDER = {"active": 0, "blocked": 1, "on-hold": 2, "completed-on-hold": 3, "backlog": 4, "idea": 5, "closed": 6}
 OVERVIEW_HEAD = ("# Overview\n\nLayout of the Projects overview: area order, collapsed areas, and project order "
                  "within areas. Written by proj; safe to edit.")
 _OV_SECTIONS = ("areas", "collapsed", "order")
@@ -1392,12 +1438,17 @@ def sync_task_done(ws: Workspace, task_id: str, done: bool, skip: Path | None = 
         if skip is not None and q.dir.resolve() == skip.resolve():
             continue
         body = q.body
-        for i, t in enumerate(q.tasks):
-            if t["id"] == task_id and t["done"] != done:
-                body = body_set_task(body, i, done)
-                changed += 1
+        while True:                      # positions shift as tasks settle: look again after each one
+            i = next((n for n, (tid, d) in enumerate(_task_ids_done(body))
+                      if tid == task_id and d != done), None)
+            if i is None:
+                break
+            body, _ = body_settle_task(body_set_task(body, i, done), i)
+            changed += 1
         if body != q.body:
             q.body = body
+            if done:
+                _complete_if_all_done(q, ws)
             q.save()
     return changed
 
@@ -1449,11 +1500,13 @@ def copy_to_today(ws: Workspace, p: Project, ref: str) -> tuple[dict, bool]:
     for x in today.tasks:
         if x["id"] == tid:
             return x, False
-    today.body = body_add_task(today.body, t["text"], tid)
+    body = body_add_task(today.body, t["text"], tid)
+    last = _task_count(body) - 1
     if t["done"]:
-        today.body = body_set_task(today.body, len(today.tasks) - 1, True)
+        body = body_set_task(body, last, True)
+    today.body, j = body_settle_task(body, last)
     today.save()
-    return today.tasks[-1], True
+    return today.tasks[j], True
 
 
 def clear_today_done(ws: Workspace) -> int:
@@ -1553,7 +1606,7 @@ def archive_projects(ws: Workspace) -> list[str]:
 
 
 def restore_task(ws: Workspace, ref: str) -> tuple[dict, Project]:
-    """Moves an archived task back to the end of its project's task list."""
+    """Moves an archived task back to its project's task list (above the done tasks when open)."""
     a = ws.archive()
     if a is None:
         raise OpError("the Archive is empty")
@@ -1565,18 +1618,19 @@ def restore_task(ws: Workspace, ref: str) -> tuple[dict, Project]:
     if p.legacy or p.parse_error:
         raise OpError(f"'{p.folder_name}' can't be edited right now")
     body = body_add_task_block(p.body, body_task_block(a.body, i))
-    p.body = body_set_task_archived(body, len(task_blocks(body.split("\n"))) - 1, None, None)
+    p.body, j = body_settle_task(body_set_task_archived(body, _task_count(body) - 1, None, None),
+                                 _task_count(body) - 1)
     _check_photo_move(t["photos"], a.dir, p.dir)
     p.save()
     _move_photos(t["photos"], a.dir, p.dir)
     a.body = body_remove_task(a.body, i)
     a.save()
-    return p.tasks[-1], p
+    return p.tasks[j], p
 
 
 def move_task_to(ws: Workspace, p: Project, ref: str, dest: Project) -> dict:
-    """Moves a task (with its notes, attachments and photo files) to the end of another project's
-    task list. Its Today link id is kept, so a copy in Today keeps syncing. Returns the moved task."""
+    """Moves a task (with its notes, attachments and photo files) to another project's task list
+    (above its done tasks when open). Its Today link id is kept, so a copy in Today keeps syncing. Returns the moved task."""
     if any(ws.is_today(q) or ws.is_archive(q) for q in (p, dest)):
         raise OpError("tasks can only be moved between projects")
     if p.dir.resolve() == dest.dir.resolve():
@@ -1586,12 +1640,13 @@ def move_task_to(ws: Workspace, p: Project, ref: str, dest: Project) -> dict:
     i = _task_index(p, ref)
     photos = p.tasks[i]["photos"]
     _check_photo_move(photos, p.dir, dest.dir)
-    dest.body = body_add_task_block(dest.body, body_task_block(p.body, i))
+    body = body_add_task_block(dest.body, body_task_block(p.body, i))
+    dest.body, j = body_settle_task(body, _task_count(body) - 1)
     dest.save()                              # written before the original is removed: never lost
     _move_photos(photos, p.dir, dest.dir)
     p.body = body_remove_task(p.body, i)
     p.save()
-    return dest.tasks[-1]
+    return dest.tasks[j]
 
 
 def retarget_archived(ws: Workspace, old: str, new: str) -> int:

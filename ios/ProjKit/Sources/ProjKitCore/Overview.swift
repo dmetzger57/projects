@@ -4,7 +4,7 @@ import Foundation
 /// Same format as projkit `ops.parse_overview` / `format_overview` (see SPEC.md).
 public let overviewFileName = "0 - Overview.md"
 
-public let projectStatusOrder = ["active": 0, "blocked": 1, "on-hold": 2, "backlog": 3, "idea": 4, "closed": 5]
+public let projectStatusOrder = ["active": 0, "blocked": 1, "on-hold": 2, "completed-on-hold": 3, "backlog": 4, "idea": 5, "closed": 6]
 
 public struct Overview: Sendable, Equatable {
     public static let defaultHead =

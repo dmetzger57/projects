@@ -345,7 +345,7 @@ struct ProjectDetailView: View {
         if !gone.isEmpty {
             Section {
                 if showArchived {
-                    ForEach(gone) { t in
+                    ForEach(gone, id: \.archivedRowID) { t in
                         archivedRow(t, showProject: false)
                             .swipeActions(edge: .leading, allowsFullSwipe: true) {
                                 Button { restore(t) } label: { Label("Restore", systemImage: "arrow.uturn.backward") }
@@ -609,7 +609,7 @@ struct ProjectDetailView: View {
                 Picker("Status", selection: Binding(
                     get: { p.status },
                     set: { new in Task { await model.perform { try Ops.setStatus($0, p, new) } } })) {
-                    ForEach(projectStatuses.filter { $0 != "closed" }, id: \.self) { Text($0).tag($0) }
+                    ForEach(projectStatuses.filter { $0 != "closed" }, id: \.self) { Text(statusLabel($0)).tag($0) }
                 }
             }
             if let c = p.created { LabeledContent("Created", value: longDate(c)) }
@@ -622,7 +622,7 @@ struct ProjectDetailView: View {
             if total > 0 {
                 ProgressView(value: Double(done), total: Double(total))
             }
-            ForEach(p.goals) { g in
+            ForEach(p.goals, id: \.rowID) { g in
                 HStack(alignment: .firstTextBaseline, spacing: 10) {
                     if total > 1 { DragHandle() }
                     Button {
@@ -689,7 +689,7 @@ struct ProjectDetailView: View {
             if total > 0 {
                 ProgressView(value: Double(done), total: Double(total)).tint(.blue)
             }
-            ForEach(p.tasks) { t in
+            ForEach(p.tasks, id: \.rowID) { t in
                 HStack(alignment: .firstTextBaseline, spacing: 10) {
                     if total > 1 { DragHandle() }
                     Button {
@@ -895,7 +895,7 @@ struct ProjectDetailView: View {
 
     private func projectFiles(_ p: Project) -> some View {
         Section {
-            ForEach(p.files) { f in
+            ForEach(p.files, id: \.rowID) { f in
                 Button { open(f) } label: {
                     HStack(alignment: .firstTextBaseline, spacing: 10) {
                         Image(systemName: f.isURL ? "link" : "doc")
@@ -1018,7 +1018,7 @@ struct ProjectDetailView: View {
 
     private func links(_ p: Project) -> some View {
         Section("Links") {
-            ForEach(p.links) { l in
+            ForEach(p.links, id: \.rowID) { l in
                 if let url = URL(string: l.url), ["http", "https", "mailto"].contains(url.scheme?.lowercased() ?? "") {
                     Link(destination: url) {
                         VStack(alignment: .leading, spacing: 2) {
@@ -1110,7 +1110,7 @@ struct ProjectDetailView: View {
 
     private func receipts(_ p: Project) -> some View {
         Section {
-            ForEach(p.receipts) { r in
+            ForEach(p.receipts, id: \.rowID) { r in
                 Button {
                     guard let url = model.receiptURL(for: r) else {
                         model.errorMessage = r.path.hasPrefix("Documents/")
@@ -1165,3 +1165,15 @@ struct ChipLabelStyle: LabelStyle {
         }
     }
 }
+
+// The project page is one List holding goals, tasks, files, links and receipts, and each of those
+// is identified by its position (0, 1, 2…). The Mac's List reuses rows by id across sections, so
+// goal 0 and task 0 got mixed up (tasks showed the goals' text). Rows get ids unique per kind.
+private extension Goal { var rowID: String { "goal-\(index)" } }
+private extension ProjectTask {
+    var rowID: String { "task-\(index)" }
+    var archivedRowID: String { "archived-\(index)" }
+}
+private extension ProjectFile { var rowID: String { "file-\(index)" } }
+private extension ProjectLink { var rowID: String { "link-\(index)" } }
+private extension Receipt { var rowID: String { "receipt-\(index)" } }

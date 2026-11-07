@@ -5,7 +5,7 @@
             title="Drag to reorder (or focus and use the arrow keys)"
             aria-label="Reorder “{{ c.p.title }}”. Use the arrow keys to move it earlier or later.">⋮⋮</button>
     <a class="card-title" href="{{ c.url }}">{{ c.p.title }}</a>
-    <span class="pill s-{{ c.status }}">{{ c.status }}</span>
+    <span class="pill s-{{ c.status }}">{{ status_label(c.status) }}</span>
   </div>
   {% if c.total %}
   <div class="progress-row"><span>Goals</span>

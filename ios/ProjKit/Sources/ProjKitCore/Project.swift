@@ -2,7 +2,16 @@ import Foundation
 
 public let readmeName = "README.md"
 public let formatVersion = 1
-public let projectStatuses = ["idea", "backlog", "active", "blocked", "on-hold", "closed"]
+public let projectStatuses = ["idea", "backlog", "active", "blocked", "on-hold", "completed-on-hold", "closed"]
+/// Set automatically when the last open task is ticked. Mirrors projkit `COMPLETED_ON_HOLD`.
+public let completedOnHold = "completed-on-hold"
+
+/// How a status is shown ("on-hold" → "On Hold"); files keep the names. Mirrors projkit `STATUS_LABELS`.
+public let projectStatusLabels = ["idea": "Idea", "backlog": "Backlog", "active": "Active", "blocked": "Blocked",
+                                  "on-hold": "On Hold", completedOnHold: "Completed – On Hold", "closed": "Closed",
+                                  "legacy": "Legacy"]
+
+public func statusLabel(_ status: String) -> String { projectStatusLabels[status] ?? status }
 
 public struct Goal: Identifiable, Hashable, Sendable {
     public let index: Int          // 0-based position in front matter
@@ -441,6 +450,17 @@ public enum ReadmeBody {
     }
 
     /// Moves task `index` (with its detail lines) so it becomes task number `to` (0-based, clamped).
+    /// Keeps done tasks below open ones: a done task moves to the bottom, an open one to just above
+    /// the first done task. Returns the new body and the task's new index. Mirrors projkit `body_settle_task`.
+    public static func settleTask(_ body: String, index: Int) throws -> (body: String, index: Int) {
+        let done = tasks(body).map(\.done)
+        guard done.indices.contains(index) else { throw OpError("no task #\(index + 1)") }
+        var others = done
+        others.remove(at: index)
+        let to = done[index] ? done.count - 1 : (others.firstIndex(of: true) ?? others.count)
+        return (try moveTask(body, index: index, to: to), to)
+    }
+
     public static func moveTask(_ body: String, index: Int, to rawTo: Int) throws -> String {
         var lines = splitBody(body)
         let blocks = taskBlocks(lines)

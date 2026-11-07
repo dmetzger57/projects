@@ -35,7 +35,7 @@ YAML front matter, then a Markdown body.
 format: 1
 title: Digital Photo Archive        # display name; should equal the folder name
 area: Digital Infrastructure        # must equal parent folder unless closed
-status: active                      # idea | backlog | active | blocked | on-hold | closed
+status: active                      # idea | backlog | active | blocked | on-hold | completed-on-hold | closed
 created: 2026-11-02
 closed: null                        # date when status = closed
 tags: [photos]
@@ -85,7 +85,10 @@ Rules:
 - Tasks are GitHub-style task-list lines (`- [ ] text`, `- [x] text`) in an optional `## Tasks` section; any other
   lines in that section (intro text, indented details) are kept. Tasks are numbered by order of their lines.
   Writers add new tasks after the last task line, creating the section just before `## Notes` (or at the end)
-  when missing; editing or ticking changes only that line. Indented, non-blank lines directly under a task
+  when missing; editing or ticking changes only that line. When ticking a task leaves every task of a project
+  done (ticked there or through its copy in Today), writers set `status: completed-on-hold` (shown as
+  "Completed – On Hold"); closed projects, Today and the Archive are left alone, and unticking doesn't change
+  the status back. Indented, non-blank lines directly under a task
   are its details: moving or deleting a task moves or deletes them with it. List order is the file order,
   so reordering moves lines. A task's attachments are detail lines that are indented Project Files links
   (`  - [Friendly name](<Documents/…>)` or `  - [Name](https://…)`, same target rules as Project Files below);
@@ -183,7 +186,7 @@ Layout of the Projects overview: area order, collapsed areas, and project order 
   Moving an area writes the complete list; resetting removes it.
 - `## Collapsed`: areas shown as just their name (their projects hidden). Writers drop areas that no longer exist.
 - `## Order`: one `### <Area>` per area whose projects were reordered, top first. Listed projects come first,
-  then unlisted ones (e.g. new projects) by status (active, blocked, on-hold, backlog, idea, closed), then
+  then unlisted ones (e.g. new projects) by status (active, blocked, on-hold, completed-on-hold, backlog, idea, closed), then
   title. Closed projects are listed under the area in their front matter, since the Closed filter shows
   them there. Reordering writes the area's complete list, so after that, status changes no longer move
   projects in that area. Resetting an area removes its list. Names that match no project are ignored.

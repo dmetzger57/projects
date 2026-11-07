@@ -223,17 +223,35 @@ public enum Ops {
 
     // MARK: tasks (## Tasks checklist in the body)
 
+    /// Adds an open task above the done ones.
     public static func addTask(_ ws: Workspace, _ p: Project, _ text: String) throws {
-        try editBody(ws, p) { try ReadmeBody.addTask($0, text: text) }
+        try editBody(ws, p) { body in try settleLast(try ReadmeBody.addTask(body, text: text)) }
     }
 
-    /// Ticks or unticks a task, and every linked copy (Today <-> its project).
+    /// Ticks or unticks a task, and every linked copy (Today <-> its project). A ticked task moves
+    /// to the bottom of the list, an unticked one back above the done ones.
     public static func setTask(_ ws: Workspace, _ p: Project, index: Int, done: Bool) throws {
-        try editBody(ws, p) { try ReadmeBody.setTask($0, index: index, done: done) }
-        let t = ws.load(p.url).tasks
-        if t.indices.contains(index), let id = t[index].linkID {
-            try syncTaskDone(ws, id: id, done: done, skip: p.url)
-        }
+        let t = try fresh(ws, p).tasks
+        let id = t.indices.contains(index) ? t[index].linkID : nil
+        try editBody(ws, p) { try ReadmeBody.settleTask(try ReadmeBody.setTask($0, index: index, done: done), index: index).body }
+        if done { try completeIfAllDone(ws, p) }
+        if let id { try syncTaskDone(ws, id: id, done: done, skip: p.url) }
+    }
+
+    /// Once every task is ticked, the project becomes "completed-on-hold". Today, the Archive and
+    /// closed projects are left alone. Returns whether it changed. Mirrors projkit `_complete_if_all_done`.
+    @discardableResult
+    static func completeIfAllDone(_ ws: Workspace, _ p: Project) throws -> Bool {
+        let q = try fresh(ws, p)
+        guard !ws.isToday(q), !ws.isArchive(q), !["closed", completedOnHold].contains(q.status),
+              !q.tasks.isEmpty, q.tasks.allSatisfy(\.done) else { return false }
+        _ = try setKeys(ws, q, [("status", .string(completedOnHold))])
+        return true
+    }
+
+    /// Settles the last task (just added) into place: above the done tasks when it is open.
+    static func settleLast(_ body: String) throws -> String {
+        try ReadmeBody.settleTask(body, index: ReadmeBody.tasks(body).count - 1).body
     }
 
     // MARK: Today list — mirrors projkit/ops.py (ensure_today, copy_to_today, sync_task_done, …)
@@ -261,11 +279,15 @@ public enum Ops {
 
     static func syncTaskDone(_ ws: Workspace, id: String, done: Bool, skip: URL?) throws {
         for q in linkedProjects(ws) where q.url.standardizedFileURL != skip?.standardizedFileURL {
-            let hits = q.tasks.filter { $0.linkID == id && $0.done != done }
-            guard !hits.isEmpty else { continue }
+            guard q.tasks.contains(where: { $0.linkID == id && $0.done != done }) else { continue }
             try editBody(ws, q) { body in
-                try hits.reduce(body) { try ReadmeBody.setTask($0, index: $1.index, done: done) }
+                var b = body                  // positions shift as tasks settle: look again after each one
+                while let i = ReadmeBody.tasks(b).firstIndex(where: { $0.linkID == id && $0.done != done }) {
+                    b = try ReadmeBody.settleTask(try ReadmeBody.setTask(b, index: i, done: done), index: i).body
+                }
+                return b
             }
+            if done { try completeIfAllDone(ws, q) }
         }
     }
 
@@ -284,7 +306,7 @@ public enum Ops {
         try editBody(ws, today) { body in
             var b = try ReadmeBody.addTask(body, text: t.text, linkID: id)
             if t.done { b = try ReadmeBody.setTask(b, index: ReadmeBody.tasks(b).count - 1, done: true) }
-            return b
+            return try settleLast(b)
         }
         return true
     }
@@ -364,7 +386,7 @@ public enum Ops {
         Set(archive?.tasks.compactMap(\.archivedFrom) ?? []).sorted { $0.lowercased() < $1.lowercased() }
     }
 
-    /// Moves an archived task back to the end of its project's task list. Returns that project.
+    /// Moves an archived task back to its project's task list (above the done tasks when open). Returns that project.
     @discardableResult
     public static func restoreTask(_ ws: Workspace, index: Int) throws -> Project {
         guard let a = ws.archive() else { throw OpError("the Archive is empty") }
@@ -379,15 +401,15 @@ public enum Ops {
         try checkPhotoMove(ws, photos, from: a.url, to: p.url)
         try editBody(ws, p) { body in
             let b = ReadmeBody.addTaskBlock(body, block)
-            return try ReadmeBody.setTaskArchived(b, index: ReadmeBody.tasks(b).count - 1, date: nil, from: nil)
+            return try settleLast(try ReadmeBody.setTaskArchived(b, index: ReadmeBody.tasks(b).count - 1, date: nil, from: nil))
         }
         try movePhotos(ws, photos, from: a.url, to: p.url)
         try editBody(ws, a) { try ReadmeBody.removeTask($0, index: index) }
         return ws.load(p.url)
     }
 
-    /// Moves a task (with its notes, attachments and photo files) to the end of another project's task
-    /// list. Its Today link id is kept, so a copy in Today keeps syncing. Mirrors projkit `move_task_to`.
+    /// Moves a task (with its notes, attachments and photo files) to another project's task list (above
+    /// its done tasks when open). Its Today link id is kept, so a copy in Today keeps syncing. Mirrors projkit `move_task_to`.
     public static func moveTaskTo(_ ws: Workspace, _ p: Project, index: Int, to dest: Project) throws {
         guard ![p, dest].contains(where: { ws.isToday($0) || ws.isArchive($0) }) else {
             throw OpError("tasks can only be moved between projects")
@@ -400,7 +422,7 @@ public enum Ops {
         let block = try ReadmeBody.taskBlock(q.document!.body, index: index)
         let photos = q.tasks.indices.contains(index) ? q.tasks[index].photos : []
         try checkPhotoMove(ws, photos, from: q.url, to: d.url)
-        try editBody(ws, d) { ReadmeBody.addTaskBlock($0, block) }     // written before the original is removed
+        try editBody(ws, d) { try settleLast(ReadmeBody.addTaskBlock($0, block)) }   // written before the original is removed
         try movePhotos(ws, photos, from: q.url, to: d.url)
         try editBody(ws, q) { try ReadmeBody.removeTask($0, index: index) }
     }

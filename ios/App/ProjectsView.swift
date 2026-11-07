@@ -419,6 +419,7 @@ struct StatusBadge: View {
         case "active": .green
         case "blocked": .red
         case "on-hold": .purple
+        case completedOnHold: .teal
         case "backlog": .gray
         case "idea": .blue
         case "legacy": .orange
@@ -426,7 +427,7 @@ struct StatusBadge: View {
         }
     }
     var body: some View {
-        Text(status)
+        Text(statusLabel(status))
             .font(.caption2.weight(.semibold))
             .padding(.horizontal, 7).padding(.vertical, 2)
             .background(color.opacity(0.15), in: Capsule())

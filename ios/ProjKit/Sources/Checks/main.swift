@@ -61,11 +61,11 @@ if args.count == 4, args[1] == "--mutate" {
         try Ops.addTask(ws, photo, "Order scanner")
         try Ops.addTask(ws, photo, "Pick storage")
         try Ops.addTask(ws, photo, "Temporary")
-        try Ops.setTask(ws, photo, index: 1, done: true)
+        try Ops.setTask(ws, photo, index: 1, done: true)        // done: settles at the bottom
         try Ops.editTask(ws, photo, index: 0, text: "Order Epson FF-680W")
-        try Ops.removeTask(ws, photo, index: 2)
-        try Ops.addTask(ws, photo, "Move me to the top")
-        try Ops.moveTask(ws, photo, from: 2, to: 0)
+        try Ops.removeTask(ws, photo, index: 1)                 // "Temporary"
+        try Ops.addTask(ws, photo, "Move me to the top")        // added above the done task
+        try Ops.moveTask(ws, photo, from: 1, to: 0)
         try Ops.addTaskFile(ws, photo, task: 1, target: "Documents/Quotes/Epson quote.pdf", name: nil)
         try Ops.addTaskFile(ws, photo, task: 1, target: "https://epson.com/ff-680w", name: "Product page")
         try Ops.addTaskNote(ws, photo, task: 1, text: "Ask about the 3-year warranty")
@@ -77,12 +77,13 @@ if args.count == 4, args[1] == "--mutate" {
         try Ops.copyToToday(ws, ws.load(photo.url), index: 0)
         try Ops.copyToToday(ws, ws.load(photo.url), index: 2)       // already done: copied done
         try Ops.setTask(ws, ws.today()!, index: 0, done: true)
-        try Ops.setTask(ws, ws.load(photo.url), index: 0, done: false)
+        try Ops.setTask(ws, ws.load(photo.url), index: 2, done: false)   // ticked: it had settled last
+        try Ops.moveTask(ws, ws.load(photo.url), from: 1, to: 0)          // unticked lands above the done
         try Ops.addTask(ws, ws.today()!, "Call the bank")
         // Archive: a task with a note moves out (the rename below must follow it into the Archive)
-        try Ops.addTask(ws, photo, "Archive me")
-        try Ops.addTaskNote(ws, photo, task: 3, text: "kept with it")
-        try Ops.archiveTask(ws, ws.load(photo.url), index: 3, date: "2026-11-04")
+        try Ops.addTask(ws, photo, "Archive me")                // above the done task
+        try Ops.addTaskNote(ws, photo, task: 2, text: "kept with it")
+        try Ops.archiveTask(ws, ws.load(photo.url), index: 2, date: "2026-11-04")
         try Ops.addFile(ws, photo, target: "Documents/Manuals/Epson FF-680W.pdf", name: "Scanner manual")
         try Ops.addFile(ws, photo, target: "https://docs.google.com/document/d/abc/edit?tab=t.0", name: nil)
         try Ops.editFile(ws, photo, index: 1, name: "Plan", target: nil)
@@ -94,8 +95,8 @@ if args.count == 4, args[1] == "--mutate" {
         let p = try Ops.newProject(ws, title: "Swift Made", area: "Digital Infrastructure")
         try Ops.addGoal(ws, p, "true")      // must stay a string, not a bool
         try Ops.addTask(ws, photo, "Move me across")           // moved to another project, with its note
-        try Ops.addTaskNote(ws, photo, task: 3, text: "came along")
-        try Ops.moveTaskTo(ws, ws.load(photo.url), index: 3, to: p)
+        try Ops.addTaskNote(ws, photo, task: 2, text: "came along")
+        try Ops.moveTaskTo(ws, ws.load(photo.url), index: 2, to: p)
         try Ops.close(ws, p)
         try Ops.addIdea(ws, "Idea from iPhone")
         photo = ws.load(photo.url)
@@ -341,20 +342,62 @@ test("today: copy, two-way done sync, clear") {
     let id = ws.load(p.url).tasks[0].linkID
     check(id != nil && ws.today()!.tasks[0].linkID == id, "shared id")
     try Ops.setTask(ws, ws.today()!, index: 0, done: true)
-    eq(ws.load(p.url).tasks[0].done, true, "done in Today ticks the project task")
-    try Ops.setTask(ws, ws.load(p.url), index: 0, done: false)
+    eq(ws.load(p.url).tasks.map { "\($0.text) \($0.done)" }, ["Hire roofer false", "Get quotes true"],
+       "done in Today ticks the project task, which moves below the open ones")
+    try Ops.setTask(ws, ws.load(p.url), index: 1, done: false)
     eq(ws.today()!.tasks[0].done, false, "undone in project unticks Today")
-    try Ops.setTask(ws, ws.load(p.url), index: 1, done: true)
+    eq(ws.load(p.url).tasks.map(\.text), ["Hire roofer", "Get quotes"])
+    try Ops.setTask(ws, ws.load(p.url), index: 0, done: true)
     eq(ws.today()!.tasks.map(\.done), [false], "unlinked task leaves Today alone")
     try Ops.addTask(ws, ws.today()!, "Call bank")
     try Ops.setTask(ws, ws.today()!, index: 0, done: true)
     eq(try Ops.clearTodayDone(ws), 1)
     eq(ws.today()!.tasks.map(\.text), ["Call bank"])
-    eq(ws.load(p.url).tasks[0].done, true, "original kept")
+    eq(ws.load(p.url).tasks.map { "\($0.text) \($0.done)" }, ["Hire roofer true", "Get quotes true"], "original kept")
     check(!ws.areas().contains(todayDirName) && !ws.projects().contains { ws.isToday($0) }, "Today is not an area project")
     var threw = false
     do { try Ops.copyToToday(ws, ws.today()!, index: 0) } catch { threw = true }
     check(threw, "can't copy Today into Today")
+}
+
+test("tasks: done tasks settle at the bottom (same steps as tests/test_today.py)") {
+    let ws = try tempWorkspace()
+    let p = try Ops.newProject(ws, title: "Garden", area: "House")
+    for t in ["Dig", "Plant", "Water"] { try Ops.addTask(ws, ws.load(p.url), t) }
+    let texts = { ws.load(p.url).tasks.map { "\($0.text) \($0.done)" } }
+    try Ops.setTask(ws, ws.load(p.url), index: 0, done: true)
+    eq(texts(), ["Plant false", "Water false", "Dig true"], "ticked: to the bottom")
+    try Ops.setTask(ws, ws.load(p.url), index: 0, done: true)
+    eq(texts(), ["Water false", "Dig true", "Plant true"], "the latest done goes last")
+    try Ops.addTask(ws, ws.load(p.url), "Weed")
+    eq(texts(), ["Water false", "Weed false", "Dig true", "Plant true"], "new tasks go above the done ones")
+    try Ops.setTask(ws, ws.load(p.url), index: 3, done: false)
+    eq(texts(), ["Water false", "Weed false", "Plant false", "Dig true"], "unticked: just above the done ones")
+}
+
+test("status: all tasks done → completed-on-hold (same steps as tests/test_today.py)") {
+    let ws = try tempWorkspace()
+    let p = try Ops.newProject(ws, title: "Garden", area: "House")
+    for t in ["Dig", "Plant"] { try Ops.addTask(ws, ws.load(p.url), t) }
+    try Ops.setTask(ws, ws.load(p.url), index: 0, done: true)
+    eq(ws.load(p.url).status, "active", "one still open")
+    try Ops.copyToToday(ws, ws.load(p.url), index: 0)
+    try Ops.setTask(ws, ws.today()!, index: 0, done: true)
+    eq(ws.load(p.url).status, "completed-on-hold", "the last one, ticked from Today")
+    check(ws.today()!.document!.frontMatter["status"]?.string != "completed-on-hold", "Today itself is never completed")
+    try Ops.setTask(ws, ws.load(p.url), index: 0, done: false)
+    eq(ws.load(p.url).status, "completed-on-hold", "unticking leaves the status alone")
+    try Ops.setStatus(ws, ws.load(p.url), "active")
+    try Ops.setTask(ws, ws.load(p.url), index: 0, done: true)
+    eq(ws.load(p.url).status, "completed-on-hold", "ticking again sets it again")
+    eq(statusLabel("completed-on-hold"), "Completed – On Hold")
+    eq(projectStatuses.map(statusLabel), ["Idea", "Backlog", "Active", "Blocked", "On Hold",
+                                          "Completed – On Hold", "Closed"], "same labels as tests/test_today.py")
+    let q = try Ops.newProject(ws, title: "Shed", area: "House")
+    try Ops.addTask(ws, ws.load(q.url), "Paint")
+    let c = try Ops.close(ws, ws.load(q.url))
+    try Ops.setTask(ws, ws.load(c.url), index: 0, done: true)
+    eq(ws.load(c.url).status, "closed", "closed projects stay closed")
 }
 
 test("archive marker: identical output to projkit (same literals as tests/test_archive.py)") {
@@ -492,7 +535,7 @@ test("project files: identical output to projkit/ops.py (same literals as tests/
 }
 
 test("statuses: backlog and blocked (same list as projkit/project.py STATUSES)") {
-    eq(projectStatuses, ["idea", "backlog", "active", "blocked", "on-hold", "closed"])
+    eq(projectStatuses, ["idea", "backlog", "active", "blocked", "on-hold", "completed-on-hold", "closed"])
     let ws = try tempWorkspace()
     let p = try Ops.newProject(ws, title: "Roof Repair", area: "House", status: "backlog")
     eq(ws.load(p.url).status, "backlog")

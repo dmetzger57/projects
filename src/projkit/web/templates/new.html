@@ -9,7 +9,7 @@
       <select name="area">{% for a in areas %}<option {{ 'selected' if a == area }}>{{ a }}</option>{% endfor %}</select>
     </label>
     <label>Status
-      <select name="status">{% for s in STATUSES if s != 'closed' %}<option {{ 'selected' if s == 'active' }}>{{ s }}</option>{% endfor %}</select>
+      <select name="status">{% for s in STATUSES if s != 'closed' %}<option value="{{ s }}" {{ 'selected' if s == 'active' }}>{{ status_label(s) }}</option>{% endfor %}</select>
     </label>
     <div class="row-end"><a class="btn" href="/">Cancel</a><button class="btn primary">Create</button></div>
   </form>

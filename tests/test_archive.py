@@ -94,8 +94,8 @@ def test_archive_restore_rename(ws):
 
     ops.archive_task(ws, Project.load(p.dir), "1")
     p = ops.close(ws, Project.load(p.dir))                           # closed projects can still restore
-    ops.restore_task(ws, "1")
-    assert [x["text"] for x in Project.load(p.dir).tasks] == ["Get quotes", "Hire roofer"]
+    ops.restore_task(ws, "1")                                        # open: back above the done task
+    assert [x["text"] for x in Project.load(p.dir).tasks] == ["Hire roofer", "Get quotes"]
 
     ops.archive_task(ws, Project.load(p.dir), "1")
     import shutil

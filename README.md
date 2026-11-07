@@ -52,7 +52,8 @@ proj file add photo "Documents/Manuals/scanner.pdf" -n "Scanner manual"   # Proj
 proj file add photo https://docs.google.com/… -n "Plan"                    # …or a URL
 proj file ls|edit|rm|open photo <entry>   # ls --paths shows targets
 proj receipt add roof ~/Documents/Receipts/2026/inv.pdf -$ 412.50 -v Lowes   # records the path; no copy
-proj status photo blocked                # idea | backlog | active | blocked | on-hold
+proj status photo blocked                # idea | backlog | active | blocked | on-hold | completed-on-hold
+                                         # (set automatically when the last open task is ticked)
 proj order                               # areas in order, each with its projects (1 = top)
 proj order area House 1                  # move an area (web: drag the area's ⋮⋮ or ↑/↓; iPhone: area ⋯ › Move / Reorder Areas)
 proj order mv photo 1                    # move a project within its area (web: drag the tile's ⋮⋮; iPhone: drag or long-press)

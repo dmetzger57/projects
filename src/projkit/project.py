@@ -13,7 +13,17 @@ from ruamel.yaml import YAML
 from ruamel.yaml.comments import CommentedMap
 
 README = "README.md"
-STATUSES = ("idea", "backlog", "active", "blocked", "on-hold", "closed")
+STATUSES = ("idea", "backlog", "active", "blocked", "on-hold", "completed-on-hold", "closed")
+COMPLETED_ON_HOLD = "completed-on-hold"     # set automatically when the last open task is ticked
+STATUS_LABELS = {"idea": "Idea", "backlog": "Backlog", "active": "Active", "blocked": "Blocked",
+                 "on-hold": "On Hold", COMPLETED_ON_HOLD: "Completed – On Hold", "closed": "Closed",
+                 "legacy": "Legacy"}
+
+
+def status_label(status: str) -> str:
+    """How a status is shown ("on-hold" → "On Hold"); files and the CLI's arguments keep the names.
+    Mirrors ProjKit `statusLabel`."""
+    return STATUS_LABELS.get(status, status)
 FORMAT_VERSION = 1
 
 _FM_RE = re.compile(r"\A---[ \t]*\n(.*?\n)---[ \t]*\n?", re.S)
