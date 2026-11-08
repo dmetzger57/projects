@@ -46,7 +46,7 @@ struct RootView: View {
     @Environment(AppModel.self) private var model
     @State private var tab: String = {
         #if DEBUG
-        // Simulator testing: PROJ_DEBUG_TAB=projects|ideas|archive|settings picks the starting tab;
+        // Simulator testing: PROJ_DEBUG_TAB=tasks|projects|ideas|archive|settings picks the starting tab;
         // PROJ_DEBUG_OPEN (open a project) implies the Projects tab.
         let env = ProcessInfo.processInfo.environment
         if let t = env["PROJ_DEBUG_TAB"], !t.isEmpty { return t }
@@ -65,6 +65,9 @@ struct RootView: View {
                     TodayView()
                         .tabItem { Label("Today", systemImage: "sun.max") }
                         .tag("today")
+                    OpenTasksView()
+                        .tabItem { Label("Open Tasks", systemImage: "checklist") }
+                        .tag("tasks")
                     ProjectsView()
                         .tabItem { Label("Projects", systemImage: "folder") }
                         .tag("projects")

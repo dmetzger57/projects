@@ -7,6 +7,12 @@ without the Mac being on, and changes show up in `proj` on the Mac.
 **Setup:** an empty folder is set up for you (areas, template, Closed, backlog) · **New Area** ·
 **Today:** the day's task list: swipe right on any project's task (or long-press › Copy to Today) to
 add it; ticking it in either place ticks both; add tasks directly; Clear Done for a fresh day ·
+**Open Tasks:** next to Today, every open task of every project that isn't closed, grouped by project in
+overview order (tap a project's name to open it); tap tasks to select them (or Select All per project) and
+Copy to Today, or swipe right on one; filter with search; tasks already in Today show ☀; ⋯ › Edit… edits a task's
+text and ↗ opens its project scrolled to it; the ⋯ menu (or long-press) also has Add Note…, Take/Choose Photo…,
+Add Link… and Add Reminder…, and a left swipe has Edit, Note, Remind and Open; each task shows its notes,
+links, photo count and reminder ·
 **Reminders:** swipe right on a task (or long-press › Add Reminder…) to create an Apple Reminder in the
 “Projects Tasks” list: the text starts as the task's and can be edited, pick the date and time; the task then
 shows 🔔 with the time (long-press › Forget Reminder clears that; the reminder stays in Reminders) ·

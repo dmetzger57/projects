@@ -260,6 +260,23 @@ details summary { cursor: pointer; color: var(--accent); font-size: 14px; margin
 .reminder-mark { color: var(--accent); font-weight: 600; }
 .reminder-mark .x { font-size: 12px; padding: 0 4px; }
 .today-col { max-width: 760px; }
+.open-tasks-head { gap: 10px; flex-wrap: wrap; }
+.open-filter { flex: 1; min-width: 160px; }
+.open-group { margin-top: 14px; }
+.open-group[hidden], .open-tasks li[hidden] { display: none; }
+.panel h3.open-project { display: flex; justify-content: flex-start; align-items: center; gap: 8px; margin: 0 0 4px;
+  font-size: 15px; flex-wrap: wrap; text-transform: none; letter-spacing: normal; color: var(--text); }
+.open-project .muted { font-weight: 400; }
+.open-project a { color: var(--text); text-decoration: none; }
+.open-project a:hover { text-decoration: underline; }
+.open-all { display: inline-flex; }
+.open-edit { display: flex; gap: 6px; flex: 1; }
+.open-edit input { flex: 1; }
+.open-link { text-decoration: none; }
+/* a task opened from Open Tasks (…/p/<project>#task-<n>): scrolled to and briefly highlighted */
+.tasks li:target { scroll-margin-top: 30vh; animation: task-flash 2.5s ease-out; border-radius: 6px; }
+@keyframes task-flash { 0%, 50% { background: var(--accent-soft); } 100% { background: transparent; } }
+.open-tasks .goals li { align-items: center; flex-wrap: wrap; }
 .x.edit { font-size: 15px; }
 .x.edit:hover { background: var(--accent-soft); color: var(--accent); }
 .handle {

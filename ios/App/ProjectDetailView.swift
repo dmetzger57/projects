@@ -59,6 +59,9 @@ struct PendingReceipt: Identifiable {
 struct ProjectDetailView: View {
     @Environment(AppModel.self) private var model
     @State var folder: String
+    /// Scroll to this task (index) when the page opens, and highlight it briefly (from Open Tasks).
+    var focusTask: Int? = nil
+    @State private var highlighted: Int?
 
     @State private var edit: TextEdit?
     @State private var newGoal = ""
@@ -96,9 +99,18 @@ struct ProjectDetailView: View {
 
     var body: some View {
         if let p = model.project(folder) {
-            content(p)
-                // here, not in projectContent: Today's task rows offer "Add Reminder…" too
-                .sheet(item: $remindingTask) { t in ReminderSheet(task: t, project: p) }
+            ScrollViewReader { proxy in
+                content(p)
+                    // here, not in projectContent: Today's task rows offer "Add Reminder…" too
+                    .sheet(item: $remindingTask) { t in ReminderSheet(task: t, project: p) }
+                    .task(id: focusTask) {
+                        guard let i = focusTask, p.tasks.indices.contains(i) else { return }
+                        try? await Task.sleep(for: .milliseconds(350))     // let the List lay out first
+                        withAnimation { proxy.scrollTo("task-\(i)", anchor: .center); highlighted = i }
+                        try? await Task.sleep(for: .seconds(2.5))
+                        withAnimation(.easeOut(duration: 0.8)) { highlighted = nil }
+                    }
+            }
         } else {
             ContentUnavailableView("Project not found", systemImage: "questionmark.folder",
                                    description: Text("It may have been renamed or moved on another device."))
@@ -757,6 +769,8 @@ struct ProjectDetailView: View {
                         }
                     }
                 }
+                .id("task-\(t.index)")                               // scroll target (Open Tasks › Open)
+                .listRowBackground(highlighted == t.index ? Color.accentColor.opacity(0.18) : nil)
                 .swipeActions(edge: .leading, allowsFullSwipe: true) {
                     if !isToday && !(t.linkID.map(inToday.contains) ?? false) {
                         Button { copyToToday(p, t) } label: { Label("Today", systemImage: "sun.max") }

@@ -225,3 +225,50 @@ extension Ops {
         try writeOverview(ws, ov)
     }
 }
+
+// MARK: - All Open Tasks
+
+/// One project's open tasks on the All Open Tasks view.
+public struct OpenTaskGroup: Identifiable, Hashable, Sendable {
+    public let area: String
+    public let project: Project
+    public let tasks: [ProjectTask]          // open ones only; `index` is the task's place in the project
+    public var id: String { project.folderName }
+
+    public init(area: String, project: Project, tasks: [ProjectTask]) {
+        self.area = area; self.project = project; self.tasks = tasks
+    }
+}
+
+extension Ops {
+    /// All Open Tasks: every not-done task of every project that isn't closed (Today and the Archive
+    /// aren't projects here), grouped by project in overview order (areas, then projects in each area);
+    /// projects with no open tasks are left out. Mirrors projkit `ops.open_tasks`.
+    /// Pure, so the app can build it from what it has loaded; `areas` are the area folders.
+    public static func openTasks(projects: [Project], areas: [String], overview ov: Overview,
+                                 area: (Project) -> String, isClosed: (Project) -> Bool) -> [OpenTaskGroup] {
+        var names = areas
+        for p in projects where !names.contains(area(p)) { names.append(area(p)) }
+        return ov.sortedAreas(names).flatMap { a in
+            ov.sorted(projects.filter { area($0) == a }, area: a).compactMap { p -> OpenTaskGroup? in
+                guard !p.isLegacy, p.parseError == nil, p.status != "closed", !isClosed(p) else { return nil }
+                let open = p.tasks.filter { !$0.done }
+                return open.isEmpty ? nil : OpenTaskGroup(area: a, project: p, tasks: open)
+            }
+        }
+    }
+
+    public static func openTasks(_ ws: Workspace) -> [OpenTaskGroup] {
+        openTasks(projects: ws.projects(), areas: ws.areas(), overview: ws.overview(),
+                  area: ws.displayArea, isClosed: ws.isInClosed)
+    }
+
+    /// Copies several tasks ((project, 0-based index) pairs) into Today, linked; returns how many were
+    /// new there (ones already in Today are skipped). Mirrors projkit `ops.copy_many_to_today`.
+    @discardableResult
+    public static func copyManyToToday(_ ws: Workspace, _ picks: [(Project, Int)]) throws -> Int {
+        var added = 0
+        for (p, i) in picks where try copyToToday(ws, p, index: i) { added += 1 }
+        return added
+    }
+}

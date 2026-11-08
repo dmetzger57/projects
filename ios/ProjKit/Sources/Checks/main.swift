@@ -417,6 +417,36 @@ test("status: all tasks done → completed-on-hold (same steps as tests/test_tod
     eq(ws.load(c.url).status, "closed", "closed projects stay closed")
 }
 
+test("all open tasks: by project in overview order, copy a selection to Today (same steps as tests/test_open_tasks.py)") {
+    let ws = try tempWorkspace()
+    try FileManager.default.createDirectory(at: ws.root.appendingPathComponent("House"), withIntermediateDirectories: true)
+    try FileManager.default.createDirectory(at: ws.root.appendingPathComponent("Garden"), withIntermediateDirectories: true)
+    let roof = try Ops.newProject(ws, title: "Roof", area: "House")
+    for t in ["Get quotes", "Hire roofer", "Buy shingles"] { try Ops.addTask(ws, roof, t) }
+    try Ops.setTask(ws, roof, index: 1, done: true)
+    let fence = try Ops.newProject(ws, title: "Fence", area: "Garden")
+    try Ops.addTask(ws, fence, "Paint fence")
+    try Ops.setTask(ws, fence, index: 0, done: true)                 // nothing open: left out
+    let shed = try Ops.newProject(ws, title: "Shed", area: "Garden")
+    try Ops.addTask(ws, shed, "Fix shed door")
+    let old = try Ops.newProject(ws, title: "Old Porch", area: "House")
+    try Ops.addTask(ws, old, "Never mind")
+    _ = try Ops.close(ws, old)                                       // closed: left out
+    try Ops.moveArea(ws, "House", to: 0)                             // House first on the overview
+    func shape() -> [String] {
+        Ops.openTasks(ws).map { g in "\(g.area)/\(g.project.title): " + g.tasks.map { "\($0.index) \($0.text)" }.joined(separator: ", ") }
+    }
+    eq(shape(), ["House/Roof: 0 Get quotes, 1 Buy shingles", "Garden/Shed: 0 Fix shed door"])
+    var g = Ops.openTasks(ws)
+    eq(try Ops.copyManyToToday(ws, [(g[0].project, 1), (g[1].project, 0)]), 2)
+    eq(ws.today()!.tasks.map(\.text), ["Buy shingles", "Fix shed door"])
+    g = Ops.openTasks(ws)
+    eq(try Ops.copyManyToToday(ws, [(g[0].project, 1), (g[0].project, 0)]), 1)   // one already there
+    eq(ws.today()!.tasks.map(\.text), ["Buy shingles", "Fix shed door", "Get quotes"])
+    try Ops.setTask(ws, ws.today()!, index: 1, done: true)          // ticked in Today: no longer open in Shed
+    eq(shape(), ["House/Roof: 0 Get quotes, 1 Buy shingles"])
+}
+
 test("reminder marker: identical output to projkit (same literals as tests/test_reminders.py)") {
     let body = "\n## Tasks\n- [ ] Call plumber <!-- task:ab12cd34 -->\n  - Ask about warranty\n- [x] Order boards\n"
     let sr = ReadmeBody.splitReminder("Call <!-- reminder:2026-11-10T09:00 -->")

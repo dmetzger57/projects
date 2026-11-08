@@ -15,7 +15,7 @@
   {% endif %}
   <ul class="goals tasks" data-move-url="{{ url }}/tasks">
     {% for t in tasks %}
-    <li class="{{ 'done' if t.done }}" data-task="{{ loop.index }}">
+    <li class="{{ 'done' if t.done }}" data-task="{{ loop.index }}" id="task-{{ loop.index }}">
       {% if task_edit == loop.index %}
       <form class="task-edit editing" hx-post="{{ url }}/tasks/{{ loop.index }}/edit" hx-target="#tasks" hx-swap="outerHTML">
         <input name="text" value="{{ t.text }}" aria-label="Task text" required autofocus

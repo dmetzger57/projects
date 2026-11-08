@@ -1536,6 +1536,32 @@ def copy_to_today(ws: Workspace, p: Project, ref: str) -> tuple[dict, bool]:
     return today.tasks[j], True
 
 
+def open_tasks(ws: Workspace, ov: Overview | None = None) -> list[dict]:
+    """All Open Tasks: every not-done task of every project that isn't closed (Today and the Archive
+    aren't projects here), grouped by project in overview order (areas, then projects in each area).
+    Each group is {"area", "project", "tasks": [(0-based index, task), ...]}; projects with no open
+    tasks are left out. Mirrors ProjKit `Ops.openTasks`."""
+    ov = ov or overview(ws)
+    out = []
+    for area in overview_areas(ws, ov):
+        for p in area_projects(ws, area, ov):
+            if p.legacy or p.parse_error or p.status == "closed" or ws.is_in_closed(p):
+                continue
+            tasks = [(i, t) for i, t in enumerate(p.tasks) if not t["done"]]
+            if tasks:
+                out.append({"area": area, "project": p, "tasks": tasks})
+    return out
+
+
+def copy_many_to_today(ws: Workspace, picks: list[tuple[Project, int]]) -> int:
+    """Copies several tasks ((project, 0-based index) pairs) into Today, linked; returns how many were
+    new there (ones already in Today are skipped). Mirrors ProjKit `Ops.copyManyToToday`."""
+    added = 0
+    for p, i in picks:
+        added += copy_to_today(ws, p, str(i + 1))[1]
+    return added
+
+
 def clear_today_done(ws: Workspace) -> int:
     """Removes ticked-off tasks from Today (their originals are untouched). Returns how many."""
     today = ws.today()

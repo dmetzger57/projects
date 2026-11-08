@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}All Open Tasks · Projects{% endblock %}
+{% block body %}
+<div class="proj-head">
+  <div>
+    <h1>All Open Tasks</h1>
+    <div class="muted">Every open task of every project that isn’t closed, by project. Check some and copy them to
+      <a href="/today">Today</a>; ticking a copy ticks its original too.</div>
+  </div>
+</div>
+<div class="today-col">
+  {% include "_open_tasks.html" %}
+</div>
+{% endblock %}

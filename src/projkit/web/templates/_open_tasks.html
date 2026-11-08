@@ -1,0 +1,183 @@
+<section class="panel open-tasks" id="open-tasks">
+  <div class="panel-head open-tasks-head">
+    <input type="search" class="open-filter" placeholder="Filter tasks or projects…" aria-label="Filter tasks or projects"
+           oninput="openTasksFilter(this)">
+    <span class="muted small" data-selected>{{ total }} open</span>
+    <button type="button" class="btn small primary" data-copy disabled
+            hx-post="/tasks/today" hx-include="#open-tasks input[type=checkbox][name=pick]"
+            hx-target="#open-tasks" hx-swap="outerHTML">☀ Copy to Today</button>
+  </div>
+  {% if copied is not none %}
+  <p class="task-moved small" role="status">Copied {{ copied }} task{{ 's' if copied != 1 }} to <a href="/today">Today</a>{% if skipped %} ({{ skipped }} already there){% endif %}.</p>
+  {% endif %}
+  {% if done_msg %}<p class="task-moved small" role="status">{{ done_msg }}</p>{% endif %}
+  {% for g in groups %}
+  <section class="open-group" data-group>
+    <h3 class="open-project">
+      <label class="open-all" title="Select all of this project’s tasks">
+        <input type="checkbox" aria-label="Select all open tasks of {{ g.p.title }}" data-all
+               {% if g.tasks|rejectattr('in_today')|list|length == 0 %}disabled{% endif %}>
+      </label>
+      <a href="{{ g.url }}" data-text>{{ g.p.title }}</a>
+      <span class="muted small">{{ g.area }}{% if g.p.status != 'active' %} · {{ status_label(g.p.status) }}{% endif %}</span>
+    </h3>
+    <ul class="goals tasks">
+      {% for x in g.tasks %}
+      {% set pick = g.p.folder_name ~ ':' ~ x.n %}
+      {% set open_form = form_kind if form_pick == pick else None %}
+      {% set esc = "if(event.key==='Escape'){htmx.ajax('GET','/tasks/list',{target:'#open-tasks',swap:'outerHTML'})}" %}
+      <li data-task>
+        <div class="task-main">
+          {% if open_form == 'edit' %}
+          <form class="task-edit editing" hx-post="/tasks/edit" hx-target="#open-tasks" hx-swap="outerHTML">
+            <input type="hidden" name="pick" value="{{ pick }}">
+            <input name="text" value="{{ x.t.text }}" required autofocus aria-label="Task text" onkeydown="{{ esc }}">
+            <button class="btn small primary">Save</button>
+            <button type="button" class="btn small" hx-get="/tasks/list" hx-target="#open-tasks" hx-swap="outerHTML">Cancel</button>
+          </form>
+          {% else %}
+          <label>
+            {% if x.in_today %}
+            <input type="checkbox" checked disabled aria-label="Already in Today">
+            {% else %}
+            <input type="checkbox" name="pick" value="{{ pick }}" aria-label="Select “{{ x.t.text }}”">
+            {% endif %}
+            <span data-text>{{ x.t.text }}</span>
+          </label>
+          {% endif %}
+          {% if x.in_today %}<span class="task-from today-mark small">☀ In Today</span>{% endif %}
+          {% if x.t.reminder %}<span class="task-from reminder-mark small">⏰ Reminder {{ reminder_label(x.t.reminder) }}</span>{% endif %}
+          {% if x.t.notes %}
+          <ul class="plain task-notes">
+            {% for note in x.t.notes %}<li><span class="note-text">{{ note }}</span></li>{% endfor %}
+          </ul>
+          {% endif %}
+          {% if x.t.files %}
+          <ul class="plain task-files">
+            {% for f in x.t.files %}
+            <li><span class="file-icon" aria-hidden="true">{{ '🔗' if f.kind == 'url' else '📄' }}</span>
+              {% if f.kind == 'url' %}<a href="{{ f.target|safe_url }}" target="_blank" rel="noopener noreferrer" title="{{ f.target }}">{{ f.name }}</a>
+              {% else %}<span title="{{ f.target }}">{{ f.name }}</span>{% endif %}</li>
+            {% endfor %}
+          </ul>
+          {% endif %}
+          {% if x.t.photos %}
+          <ul class="task-photos">
+            {% for ph in x.t.photos %}
+            <li class="photo small-photo">
+              <a href="{{ photo_src(g.url, ph.path) }}" target="_blank" rel="noopener" title="{{ ph.note or 'Open photo' }}">
+                <img src="{{ photo_src(g.url, ph.path) }}" alt="{{ ph.note or 'Photo' }}" loading="lazy">
+              </a>
+            </li>
+            {% endfor %}
+          </ul>
+          {% endif %}
+          {% if open_form == 'note' %}
+          <form class="task-edit editing task-note-add" hx-post="/tasks/note" hx-target="#open-tasks" hx-swap="outerHTML">
+            <input type="hidden" name="pick" value="{{ pick }}">
+            <input name="text" placeholder="Add a note" aria-label="New note for “{{ x.t.text }}”" required autofocus onkeydown="{{ esc }}">
+            <button class="btn small primary">Add</button>
+            <button type="button" class="btn small" hx-get="/tasks/list" hx-target="#open-tasks" hx-swap="outerHTML">Cancel</button>
+          </form>
+          {% elif open_form == 'photo' %}
+          <form class="stack task-photo-add editing" hx-post="/tasks/photo" hx-encoding="multipart/form-data"
+                hx-target="#open-tasks" hx-swap="outerHTML">
+            <input type="hidden" name="pick" value="{{ pick }}">
+            <input type="file" name="image" accept="image/*" required autofocus aria-label="Photo for “{{ x.t.text }}”">
+            <input name="note" placeholder="Note (optional)" aria-label="Note for the photo">
+            <div class="row-end">
+              <button type="button" class="btn small" hx-get="/tasks/list" hx-target="#open-tasks" hx-swap="outerHTML">Cancel</button>
+              <button class="btn small primary">Add photo</button>
+            </div>
+          </form>
+          {% elif open_form == 'link' %}
+          <form class="stack file-form task-attach editing" hx-post="/tasks/link" hx-target="#open-tasks" hx-swap="outerHTML">
+            <input type="hidden" name="pick" value="{{ pick }}">
+            <input name="target" required autofocus aria-label="Link (URL or Documents/… path)"
+                   placeholder="https://…  or  Documents/Folder/file.pdf" onkeydown="{{ esc }}">
+            <input name="name" placeholder="Friendly name (default: the website or file name)" aria-label="Friendly name">
+            <div class="row-end">
+              <button type="button" class="btn small" hx-get="/tasks/list" hx-target="#open-tasks" hx-swap="outerHTML">Cancel</button>
+              <button class="btn small primary">Add link</button>
+            </div>
+          </form>
+          {% elif open_form == 'remind' %}
+          <form class="stack task-remind editing" hx-post="/tasks/remind" hx-target="#open-tasks" hx-swap="outerHTML">
+            <input type="hidden" name="pick" value="{{ pick }}">
+            <input name="text" value="{{ x.t.text }}" required autofocus aria-label="Reminder text" onkeydown="{{ esc }}">
+            <div class="add-row">
+              <input name="when" type="datetime-local" value="{{ x.t.reminder or remind_default }}" required aria-label="Remind me at">
+            </div>
+            <div class="row-end">
+              <span class="muted small">Goes into Reminders › {{ reminder_list }}</span>
+              <button type="button" class="btn small" hx-get="/tasks/list" hx-target="#open-tasks" hx-swap="outerHTML">Cancel</button>
+              <button class="btn small primary">Create reminder</button>
+            </div>
+          </form>
+          {% endif %}
+        </div>
+        {% set q = pick|q %}
+        <button type="button" class="x edit" title="Add a note" aria-label="Add a note to “{{ x.t.text }}”"
+                hx-get="/tasks/list?form=note&pick={{ q }}" hx-target="#open-tasks" hx-swap="outerHTML">📝</button>
+        <button type="button" class="x edit" title="Add a photo" aria-label="Add a photo to “{{ x.t.text }}”"
+                hx-get="/tasks/list?form=photo&pick={{ q }}" hx-target="#open-tasks" hx-swap="outerHTML">📷</button>
+        <button type="button" class="x edit" title="Add a link" aria-label="Add a link to “{{ x.t.text }}”"
+                hx-get="/tasks/list?form=link&pick={{ q }}" hx-target="#open-tasks" hx-swap="outerHTML">🔗</button>
+        <button type="button" class="x edit" title="Create an Apple Reminder" aria-label="Create an Apple Reminder for “{{ x.t.text }}”"
+                hx-get="/tasks/list?form=remind&pick={{ q }}" hx-target="#open-tasks" hx-swap="outerHTML">⏰</button>
+        <button type="button" class="x edit" title="Edit task" aria-label="Edit “{{ x.t.text }}”"
+                hx-get="/tasks/list?form=edit&pick={{ q }}" hx-target="#open-tasks" hx-swap="outerHTML">✎</button>
+        <a class="x edit open-link" href="{{ g.url }}#task-{{ x.n }}" title="Open in {{ g.p.title }}"
+           aria-label="Open “{{ x.t.text }}” in {{ g.p.title }}">↗</a>
+      </li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% else %}
+  <p class="muted">No open tasks. 🎉</p>
+  {% endfor %}
+  <p class="muted small" data-none hidden>No matching open tasks.</p>
+</section>
+<script>
+  (() => {
+    const root = document.getElementById("open-tasks");
+    const picks = sel => root.querySelectorAll(`input[type=checkbox][name=pick]${sel || ""}`);
+    const sync = () => {
+      const n = picks(":checked").length;
+      root.querySelector("[data-copy]").disabled = n === 0;
+      root.querySelector("[data-selected]").textContent = n ? `${n} selected` : "{{ total }} open";
+      root.querySelectorAll("[data-group]").forEach(g => {
+        const all = g.querySelector("[data-all]"), boxes = [...g.querySelectorAll("input[type=checkbox][name=pick]")];
+        const on = boxes.filter(c => c.checked).length;
+        all.checked = boxes.length > 0 && on === boxes.length;
+        all.indeterminate = on > 0 && on < boxes.length;
+      });
+    };
+    root.addEventListener("change", e => {
+      if (e.target.matches("[data-all]")) {
+        e.target.closest("[data-group]").querySelectorAll("input[type=checkbox][name=pick]").forEach(c => {
+          if (!c.closest("[data-task]").hidden) c.checked = e.target.checked;
+        });
+      }
+      sync();
+    });
+    window.openTasksFilter = input => {
+      const q = input.value.trim().toLowerCase();
+      let any = false;
+      root.querySelectorAll("[data-group]").forEach(g => {
+        const projectHit = g.querySelector(".open-project [data-text]").textContent.toLowerCase().includes(q);
+        let shown = 0;
+        g.querySelectorAll(":scope > ul > [data-task]").forEach(li => {
+          const text = li.querySelector("[data-text]");
+          li.hidden = !(projectHit || !text || text.textContent.toLowerCase().includes(q));
+          if (!li.hidden) shown++;
+        });
+        g.hidden = shown === 0;
+        any ||= shown > 0;
+      });
+      const none = root.querySelector("[data-none]");
+      if (none) none.hidden = any || !root.querySelector("[data-group]");
+    };
+    sync();
+  })();
+</script>

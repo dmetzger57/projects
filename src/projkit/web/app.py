@@ -182,6 +182,95 @@ def create_app(ws: Workspace) -> FastAPI:
     def today_page(request: Request):
         return project_page(request, TODAY_DIR)
 
+    # ---- All Open Tasks (a peer of Today): every open task, by project; copy a selection to Today ----
+    def open_tasks_ctx(copied: int | None = None, skipped: int = 0, form: str | None = None,
+                       pick: str | None = None, done_msg: str | None = None) -> dict:
+        in_today = ops.today_ids(ws)
+        groups = [dict(area=g["area"], p=g["project"], url=purl(g["project"]),
+                       tasks=[dict(n=i + 1, t=t, in_today=t["id"] in in_today) for i, t in g["tasks"]])
+                  for g in ops.open_tasks(ws)]
+        tomorrow = (dt.datetime.now() + dt.timedelta(days=1)).replace(hour=9, minute=0)
+        return dict(groups=groups, total=sum(len(g["tasks"]) for g in groups), copied=copied, skipped=skipped,
+                    form_kind=form, form_pick=pick, done_msg=done_msg,
+                    remind_default=tomorrow.strftime("%Y-%m-%dT%H:%M"), reminder_list=reminders.REMINDER_LIST,
+                    photo_src=lambda url, path: f"{url}/photo/{quote(path.split('/', 1)[1], safe='')}")
+
+    OPEN_FORMS = ("edit", "note", "photo", "link", "remind")
+
+    def _pick(v: str) -> tuple[str, int]:
+        """ "<project folder>:<task number>" -> (folder, 0-based index)."""
+        folder, _, n = str(v).rpartition(":")
+        if not folder or not n.isdigit() or int(n) < 1:
+            raise HTTPException(400, f"bad pick {v!r}")
+        return folder, int(n) - 1
+
+    @app.get("/tasks/list", response_class=HTMLResponse)
+    def open_tasks_list(request: Request, form: str | None = None, pick: str | None = None):
+        """The Open Tasks list alone; with `form` (edit|note|photo|link|remind) and `pick` ("<folder>:<n>"),
+        that task shows the form inline."""
+        if form is not None and (form not in OPEN_FORMS or not pick):
+            raise HTTPException(400, f"bad form {form!r}")
+        return partial(request, "_open_tasks.html", **open_tasks_ctx(form=form, pick=pick))
+
+    def _picked(pick: str) -> tuple[Project, str, dict]:
+        """(project, 1-based task ref, task) of a pick."""
+        folder, i = _pick(pick)
+        p = get_project(folder)
+        if not 0 <= i < len(p.tasks):
+            raise ops.OpError(f"no task #{i + 1} in {p.title}")
+        return p, str(i + 1), p.tasks[i]
+
+    def open_done(request: Request, msg: str):
+        return partial(request, "_open_tasks.html", **open_tasks_ctx(done_msg=msg))
+
+    @app.post("/tasks/edit", response_class=HTMLResponse)
+    def open_tasks_edit(request: Request, pick: str = Form(...), text: str = Form(...)):
+        p, ref, _ = _picked(pick)
+        ops.edit_task(p, ref, text)
+        return partial(request, "_open_tasks.html", **open_tasks_ctx())
+
+    @app.post("/tasks/note", response_class=HTMLResponse)
+    def open_tasks_note(request: Request, pick: str = Form(...), text: str = Form(...)):
+        p, ref, t = _picked(pick)
+        ops.add_task_note(p, ref, text)
+        return open_done(request, f"Added a note to “{t['text']}”.")
+
+    @app.post("/tasks/photo", response_class=HTMLResponse)
+    async def open_tasks_photo(request: Request, pick: str = Form(...), image: UploadFile = File(...),
+                               note: str = Form("")):
+        p, ref, t = _picked(pick)
+        data, ext = await _upload(image)
+        ops.add_photo(p, data, ext, note.strip() or None, task=ref)
+        return open_done(request, f"Added a photo to “{t['text']}”.")
+
+    @app.post("/tasks/link", response_class=HTMLResponse)
+    def open_tasks_link(request: Request, pick: str = Form(...), target: str = Form(...), name: str = Form("")):
+        p, ref, t = _picked(pick)
+        ops.add_task_file(p, ref, target, name.strip() or None)
+        return open_done(request, f"Added a link to “{t['text']}”.")
+
+    @app.post("/tasks/remind", response_class=HTMLResponse)
+    def open_tasks_remind(request: Request, pick: str = Form(...), when: str = Form(...), text: str = Form("")):
+        p, ref, t = _picked(pick)
+        t = reminders.schedule_task_reminder(p, ref, when, text)
+        return open_done(request, f"Reminder set for {reminders.reminder_label(t['reminder'])}: “{text.strip() or t['text']}”.")
+
+    @app.get("/tasks", response_class=HTMLResponse)
+    def open_tasks_page(request: Request, form: str | None = None, pick: str | None = None):
+        if form is not None and (form not in OPEN_FORMS or not pick):
+            raise HTTPException(400, f"bad form {form!r}")
+        return page(request, "tasks.html", nav="tasks", **open_tasks_ctx(form=form, pick=pick))
+
+    @app.post("/tasks/today", response_class=HTMLResponse)
+    async def open_tasks_to_today(request: Request):
+        """Copies the checked tasks (`pick` = "<project folder>:<task number>") into Today."""
+        form = await request.form()
+        picks = [_pick(v) for v in form.getlist("pick")]
+        loaded: dict[str, Project] = {}           # one Project per folder, so its ids accumulate
+        pairs = [(loaded.setdefault(f, get_project(f)), i) for f, i in picks]
+        added = ops.copy_many_to_today(ws, pairs)
+        return partial(request, "_open_tasks.html", **open_tasks_ctx(copied=added, skipped=len(pairs) - added))
+
     @app.post("/today/clear")
     def today_clear(request: Request):
         ops.clear_today_done(ws)

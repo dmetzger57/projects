@@ -542,6 +542,146 @@ def today_clear(root: Optional[Path] = RootOpt, receipts: Optional[Path] = Recei
     console.print(f"cleared {n} done task{'s' if n != 1 else ''} from Today")
 
 
+tasks_app = typer.Typer(invoke_without_command=True,
+                        help="All Open Tasks: every open task of every project that isn't closed, by project.")
+app.add_typer(tasks_app, name="tasks")
+
+
+def _open_numbered(ws: Workspace) -> list[tuple[int, dict, int, dict]]:
+    """(number, group, task index, task) for every open task; numbers run across all projects."""
+    out, n = [], 0
+    for g in ops.open_tasks(ws):
+        for i, t in g["tasks"]:
+            n += 1
+            out.append((n, g, i, t))
+    return out
+
+
+@tasks_app.callback()
+def tasks_ls(ctx: typer.Context,
+             search: Optional[str] = typer.Option(None, "--search", "-s", help="Only tasks or projects containing this text"),
+             area: Optional[str] = typer.Option(None, "--area", "-a", help="Only projects in this area"),
+             root: Optional[Path] = RootOpt, receipts: Optional[Path] = ReceiptsOpt):
+    """List all open tasks, grouped by project (copy some to Today with `proj tasks today <n>…`)."""
+    if ctx.invoked_subcommand:
+        return
+    ws = _ws(root, receipts)
+    in_today = ops.today_ids(ws)
+    q = (search or "").lower()
+    shown, last = 0, None
+    for n, g, _, t in _open_numbered(ws):
+        p = g["project"]
+        if area and g["area"].lower() != area.lower():
+            continue
+        if q and q not in t["text"].lower() and q not in p.title.lower():
+            continue
+        if last is not p:
+            console.print(f"\n[bold]{p.title}[/]  [dim]{g['area']} · {status_label(p.status)}[/]", highlight=False)
+            last = p
+        sun = "  [yellow]☀ in Today[/]" if t["id"] in in_today else ""
+        console.print(f"{n:4}. ☐ {t['text']}{sun}", highlight=False)
+        shown += 1
+    if not shown:
+        console.print("[dim]No open tasks.[/]" if not (q or area) else "[dim]No matching open tasks.[/]")
+
+
+def _open_row(ws: Workspace, number: int) -> tuple[dict, int, dict]:
+    for n, g, i, t in _open_numbered(ws):
+        if n == number:
+            return g, i, t
+    _fail(f"no open task #{number} (see `proj tasks`)")
+
+
+@tasks_app.command("show")
+def tasks_show(number: int = typer.Argument(..., help="Task number from `proj tasks`"),
+               root: Optional[Path] = RootOpt, receipts: Optional[Path] = ReceiptsOpt):
+    """Open an open task: show it with its project, notes, attachments and reminder."""
+    ws = _ws(root, receipts)
+    g, i, t = _open_row(ws, number)
+    p = g["project"]
+    console.print(f"[bold]{p.title}[/]  [dim]{g['area']} · {status_label(p.status)} · task {i + 1} of {len(p.tasks)}[/]",
+                  highlight=False)
+    sun = "  [yellow]☀ in Today[/]" if t["id"] in ops.today_ids(ws) else ""
+    bell = f"  [cyan]⏰ {reminders.reminder_label(t['reminder'])}[/]" if t["reminder"] else ""
+    console.print(f"  ☐ {t['text']}{sun}{bell}", highlight=False)
+    _print_task_details(t)
+    for ph in t["photos"]:
+        console.print(f"       📷 {ph['note'] or ph['path']}  [dim]{ph['path']}[/]", highlight=False)
+    console.print(f"[dim]Edit: proj tasks edit {number} \"new text\"  ·  more: proj task … \"{p.folder_name}\" {i + 1}[/]",
+                  highlight=False)
+
+
+@tasks_app.command("edit")
+def tasks_edit(number: int = typer.Argument(..., help="Task number from `proj tasks`"), text: str = typer.Argument(...),
+               root: Optional[Path] = RootOpt, receipts: Optional[Path] = ReceiptsOpt):
+    """Change an open task's text (keeps its Today link and reminder)."""
+    ws = _ws(root, receipts)
+    g, i, _ = _open_row(ws, number)
+    t = _run(ops.edit_task, g["project"], str(i + 1), text)
+    console.print(f"edited: {t['text']}  [dim]· {g['project'].title}[/]", highlight=False)
+
+
+@tasks_app.command("note")
+def tasks_note(number: int = typer.Argument(..., help="Task number from `proj tasks`"), text: str = typer.Argument(...),
+               root: Optional[Path] = RootOpt, receipts: Optional[Path] = ReceiptsOpt):
+    """Add a note to an open task (shown indented under it)."""
+    g, i, t = _open_row(_ws(root, receipts), number)
+    _run(ops.add_task_note, g["project"], str(i + 1), text)
+    console.print(f"[green]note added[/] to {t['text']}  [dim]· {g['project'].title}[/]", highlight=False)
+
+
+@tasks_app.command("photo")
+def tasks_photo(number: int = typer.Argument(..., help="Task number from `proj tasks`"),
+                file: Path = typer.Argument(..., help="Image file (copied into the project's Photos/ folder)"),
+                note: Optional[str] = typer.Option(None, "--note", "-n", help="Caption for the photo"),
+                root: Optional[Path] = RootOpt, receipts: Optional[Path] = ReceiptsOpt):
+    """Add a photo to an open task."""
+    g, i, t = _open_row(_ws(root, receipts), number)
+    ph = _run(ops.add_photo_file, g["project"], file, note, task=str(i + 1))
+    console.print(f"[green]photo added[/] to {t['text']}: {ph['path']}  [dim]· {g['project'].title}[/]", highlight=False)
+
+
+@tasks_app.command("link")
+def tasks_link(number: int = typer.Argument(..., help="Task number from `proj tasks`"),
+               target: str = typer.Argument(..., help="A URL, or a file under ~/Documents"),
+               name: Optional[str] = typer.Option(None, "--name", help="Friendly name (default: the website or file name)"),
+               root: Optional[Path] = RootOpt, receipts: Optional[Path] = ReceiptsOpt):
+    """Add a link (or a ~/Documents file) to an open task."""
+    g, i, t = _open_row(_ws(root, receipts), number)
+    f = _run(ops.add_task_file, g["project"], str(i + 1), target, name)
+    console.print(f"[green]link added[/] to {t['text']}: {f['name']}  [dim]· {g['project'].title}[/]", highlight=False)
+
+
+@tasks_app.command("remind")
+def tasks_remind(number: int = typer.Argument(..., help="Task number from `proj tasks`"),
+                 when: str = typer.Argument(..., metavar="WHEN", help='Date and time, "YYYY-MM-DD HH:MM" (a date alone means 09:00)'),
+                 text: Optional[str] = typer.Option(None, "--text", "-t", help="Reminder text (default: the task's text)"),
+                 root: Optional[Path] = RootOpt, receipts: Optional[Path] = ReceiptsOpt):
+    """Create an Apple Reminder for an open task (Reminders › Projects Tasks) and record it on the task."""
+    g, i, t = _open_row(_ws(root, receipts), number)
+    t = _run(reminders.schedule_task_reminder, g["project"], str(i + 1), when, text)
+    console.print(f"[green]⏰ reminder set[/] for {reminders.reminder_label(t['reminder'])}: {text or t['text']}  "
+                  f"[dim]· {g['project'].title}[/]", highlight=False)
+
+
+@tasks_app.command("today")
+def tasks_today(numbers: list[int] = typer.Argument(..., help="Task numbers from `proj tasks`"),
+                root: Optional[Path] = RootOpt, receipts: Optional[Path] = ReceiptsOpt):
+    """Copy open tasks into Today by their numbers in `proj tasks` (linked: ticking either ticks both)."""
+    ws = _ws(root, receipts)
+    rows = {n: (g, i, t) for n, g, i, t in _open_numbered(ws)}
+    bad = [n for n in numbers if n not in rows]
+    if bad:
+        _fail(f"no open task #{', #'.join(map(str, bad))} (see `proj tasks`)")
+    picks = [(rows[n][0]["project"], rows[n][1]) for n in dict.fromkeys(numbers)]
+    added = _run(ops.copy_many_to_today, ws, picks)
+    for n in dict.fromkeys(numbers):
+        console.print(f"[yellow]☀[/] {rows[n][2]['text']}  [dim]· {rows[n][0]['project'].title}[/]", highlight=False)
+    skipped = len(picks) - added
+    console.print(f"[green]copied {added} task{'s' if added != 1 else ''} to Today[/]"
+                  + (f" [dim]({skipped} already there)[/]" if skipped else ""))
+
+
 order_app = typer.Typer(invoke_without_command=True,
                         help="Order of areas, and of projects within each area, on the overview (1 = top).")
 app.add_typer(order_app, name="order")

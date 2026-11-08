@@ -44,6 +44,16 @@ proj task move-to photo <task> roof     # move a task (notes, attachments, photo
 proj task remind photo <task> "2026-11-10 09:00"   # Apple Reminder in Reminders › Projects Tasks; --text "…" to change
                                         # its text (default: the task's), --clear to forget it (web: ⏰; iPhone: swipe right › Remind,
                                         # or long-press › Add Reminder…). The task shows ⏰ with the time. macOS only for CLI/web.
+proj tasks                              # All Open Tasks: every open task of every project that isn't closed, by project
+proj tasks -s quote --area House        # …filtered; numbers stay the same as the full list
+proj tasks today 2 5 7                  # copy those to Today (linked). Web: Open Tasks page, check tasks › ☀ Copy to Today;
+                                        # iPhone/iPad/Mac: Open Tasks tab, tap tasks › Copy to Today
+proj tasks show 5                       # open one: its project, notes, attachments, reminder (web/app: ↗ opens the project at it)
+proj tasks edit 5 "new text"            # edit one (web/app: ✎; app: also swipe left or long-press › Edit…)
+proj tasks note 5 "Ask about cedar"     # add a note    (web: 📝; app: ⋯ › Add Note…)
+proj tasks photo 5 ~/Desktop/a.jpg -n "Sample"   # add a photo (web: 📷; app: ⋯ › Take/Choose Photo…)
+proj tasks link 5 https://example.com --name "Supplier"   # add a link (web: 🔗; app: ⋯ › Add Link…)
+proj tasks remind 5 "2026-11-20 10:00"  # Apple Reminder (web: ⏰; app: ⋯ › Add Reminder…)
 proj task ls photo --archived           # …and list the project's archived tasks below its own
 proj archive                            # all archived tasks with their project and date (web/iPhone: Archive)
 proj archive -p photo --since 30d --sort name   # filter by project / date (YYYY-MM-DD or Nd); sort newest|oldest|name|project
