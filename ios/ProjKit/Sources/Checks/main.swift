@@ -50,7 +50,11 @@ if args.count == 3, args[1] == "--dump-tasks" {
 if args.count == 4, args[1] == "--mutate" {
     let ws = Workspace(root: URL(fileURLWithPath: args[2]), receiptsRoot: URL(fileURLWithPath: args[3]))
     do {
-        guard var photo = ws.project(named: "Digital Photo Archive") else { throw OpError("photo project missing") }
+        // Its own project in the first real area (from the template), so the check doesn't depend on
+        // which real projects exist or are open; the rest of the copied tree (Today, overview) is real.
+        guard let area = ws.areas().first else { throw OpError("no areas to add a project to") }
+        var photo = try Ops.newProject(ws, title: "Crosscheck Scanner", area: area)
+        try Ops.addGoal(ws, photo, "Scan the slides")           // goal #1 (the template may have none)
         try Ops.setGoal(ws, photo, index: 0, done: true)
         try Ops.addGoal(ws, photo, "Buy a scanner: Epson FF-680W")
         try Ops.addNote(ws, photo, "Edited on iPhone\nsecond line")
@@ -63,6 +67,7 @@ if args.count == 4, args[1] == "--mutate" {
         try Ops.addTask(ws, photo, "Temporary")
         try Ops.setTask(ws, photo, index: 1, done: true)        // done: settles at the bottom
         try Ops.editTask(ws, photo, index: 0, text: "Order Epson FF-680W")
+        try Ops.setTaskReminder(ws, photo, index: 0, when: "2026-11-10T09:00")   // kept through the edits below
         try Ops.removeTask(ws, photo, index: 1)                 // "Temporary"
         try Ops.addTask(ws, photo, "Move me to the top")        // added above the done task
         try Ops.moveTask(ws, photo, from: 1, to: 0)
@@ -103,8 +108,8 @@ if args.count == 4, args[1] == "--mutate" {
         try Ops.moveProject(ws, photo, to: 0)                 // overview: top of its area, area collapsed and first
         try Ops.setCollapsed(ws, areas: [ws.displayArea(photo)], true)
         try Ops.moveArea(ws, ws.displayArea(photo), to: 0)
-        photo = try Ops.rename(ws, photo, to: "Photo Archive")
-        let p = try Ops.newProject(ws, title: "Swift Made", area: "Digital Infrastructure")
+        photo = try Ops.rename(ws, photo, to: "Crosscheck Photos")
+        let p = try Ops.newProject(ws, title: "Crosscheck Swift Made", area: area)
         try Ops.addGoal(ws, p, "true")      // must stay a string, not a bool
         try Ops.addTask(ws, photo, "Move me across")           // moved to another project, with its note
         try Ops.addTaskNote(ws, photo, task: 2, text: "came along")

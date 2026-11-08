@@ -21,10 +21,10 @@ from projkit.lint import lint_workspace
 from projkit.project import Project
 from projkit.workspace import Workspace
 T = Path(sys.argv[1]); ws = Workspace(T / "Projects", T / "Receipts")
-p = ws.find("Photo Archive")[0]
-assert p.title == "Photo Archive" and p.status == "blocked"
+p = ws.find("Crosscheck Photos")[0]                       # made by Swift in the first area
+assert p.title == "Crosscheck Photos" and p.status == "blocked"
 ov = ops.overview(ws)                                    # overview written by Swift, renamed with the project
-assert ops.area_projects(ws, ops.project_area(ws, p), ov)[0].folder_name == "Photo Archive", ov
+assert ops.area_projects(ws, ops.project_area(ws, p), ov)[0].folder_name == "Crosscheck Photos", ov
 assert ov.is_collapsed(ops.project_area(ws, p)) and ops.overview_areas(ws, ov)[0] == ops.project_area(ws, p), ov
 assert p.goals[0]["done"] is True and str(p.goals[0]["done_on"]) == datetime.date.today().isoformat()
 assert p.goals[-1]["text"] == "Buy a scanner: Epson FF-680W"
@@ -39,6 +39,7 @@ assert [(f["name"], f["target"], f["kind"]) for f in p.tasks[1]["files"]] == [
     ("Product page", "https://epson.com/ff-680w", "url")], p.tasks[1]
 assert ops.add_task_file(p, "Order", "https://b-h.example/epson")["name"] == "b-h.example"
 assert p.tasks[1]["notes"] == ["Ask about the 3-year warranty", "Check B&H and Adorama prices"], p.tasks[1]
+assert p.tasks[1]["reminder"] == "2026-11-10T09:00", p.tasks[1]   # reminder recorded by Swift
 assert [ph["note"] for ph in p.photos] == ["Shelf (old) scanner"], p.photos     # photos written by Swift
 assert [ph["note"] for ph in p.tasks[1]["photos"]] == ["Quote"], p.tasks[1]
 assert all((p.dir / ph["path"]).is_file() for ph in p.photos + p.tasks[1]["photos"])
@@ -69,19 +70,19 @@ ops.move_task(p, "Pick", 1)
 assert [t["text"] for t in Project.load(p.dir).tasks] == ["Pick storage", "Move me to the top", "Order Epson FF-680W"]
 assert len(Project.load(p.dir).tasks[2]["files"]) == 3          # attachments moved with their task
 arch = [t for t in ws.archive().tasks if t["text"] == "Archive me"]   # Archive written by Swift
-assert [(t["from"], t["archived"], t["notes"]) for t in arch] == [("Photo Archive", "2026-11-04", ["kept with it"])], arch
+assert [(t["from"], t["archived"], t["notes"]) for t in arch] == [("Crosscheck Photos", "2026-11-04", ["kept with it"])], arch
 n = next(i for i, t in enumerate(ws.archive().tasks, 1) if t["text"] == "Archive me")
 r, back = ops.restore_task(ws, str(n))                   # Python restores what Swift archived
 assert back.dir == p.dir and task(p, "Archive me")["notes"] == ["kept with it"]
-s = ws.find("Swift Made")[0]
-assert s.status == "closed" and s.area == "Digital Infrastructure" and s.goals[0]["text"] == "true"
+s = ws.find("Crosscheck Swift Made")[0]
+assert s.status == "closed" and s.area == p.area and s.goals[0]["text"] == "true"
 assert ops.ideas(ws)[-1] == "Idea from iPhone"
 ops.add_note(p, "Back on the Mac")
 assert Project.load(p.dir).notes[-1].text.endswith("Back on the Mac")
-s = ws.find("Swift Made")[0]                             # task moved by Swift, with its note
+s = ws.find("Crosscheck Swift Made")[0]                  # task moved by Swift, with its note
 assert [(t["text"], t["notes"]) for t in s.tasks] == [("Move me across", ["came along"])], s.tasks
 m = ops.move_task_to(ws, s, "Move me", Project.load(p.dir))   # and Python moves it back
-assert m["notes"] == ["came along"] and not ws.find("Swift Made")[0].tasks
+assert m["notes"] == ["came along"] and not ws.find("Crosscheck Swift Made")[0].tasks
 errors = [i for i in lint_workspace(ws) if i.severity == "error"]
 assert not errors, errors
 assert any(i.code == "L013" for i in lint_workspace(ws)), "iPhone receipt should be flagged for tagging"
