@@ -13,7 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from markdown_it import MarkdownIt
 
-from .. import ops
+from .. import ops, reminders
 from ..about import version_string
 from ..lint import lint_workspace
 from ..project import STATUSES, Project, ProjectError, status_label
@@ -47,7 +47,7 @@ def create_app(ws: Workspace) -> FastAPI:
     tpl.env.filters.update(md=render_md, safe_url=safe_url, money=_fmt_money,
                            q=lambda s: quote(str(s), safe=""),
                            tilde=lambda p: str(p).replace(str(Path.home()), "~", 1))
-    tpl.env.globals.update(STATUSES=STATUSES, status_label=status_label, EDITABLE=ops.EDITABLE_SECTIONS, VERSION=version_string())
+    tpl.env.globals.update(STATUSES=STATUSES, status_label=status_label, reminder_label=reminders.reminder_label, EDITABLE=ops.EDITABLE_SECTIONS, VERSION=version_string())
 
     def asset(name: str) -> str:
         """/static/<name>?v=<mtime>: a changed file gets a new URL, so browsers never keep a stale copy."""
@@ -292,8 +292,11 @@ def create_app(ws: Workspace) -> FastAPI:
     def tasks_partial(request: Request, p: Project, editing: int | None = None, attach: int | None = None,
                       note: int | None = None, note_edit: tuple[int, int] | None = None,
                       archived_open: bool = False, photo: int | None = None, move: int | None = None,
-                      moved: dict | None = None):
+                      moved: dict | None = None, remind: int | None = None):
+        tomorrow = (dt.datetime.now() + dt.timedelta(days=1)).replace(hour=9, minute=0)
         return partial(request, "_tasks.html", **{**_project_ctx(Project.load(p.dir)),
+                                                  "task_remind": remind, "remind_default": tomorrow.strftime("%Y-%m-%dT%H:%M"),
+                                                  "reminder_list": reminders.REMINDER_LIST,
                                                   "task_edit": editing, "task_attach": attach,
                                                   "task_note_add": note, "task_note_edit": note_edit,
                                                   "archived_open": archived_open, "task_photo_add": photo,
@@ -380,14 +383,14 @@ def create_app(ws: Workspace) -> FastAPI:
     @app.get("/p/{key}/tasks", response_class=HTMLResponse)
     def tasks_view(request: Request, key: str, edit: int | None = None, attach: int | None = None,
                    note: int | None = None, note_edit: str | None = None, photo: int | None = None,
-                   move: int | None = None):
+                   move: int | None = None, remind: int | None = None):
         ne = None
         if note_edit:                      # "task.note", both 1-based
             try:
                 ne = tuple(int(x) for x in note_edit.split(".", 1))
             except ValueError:
                 raise HTTPException(400, "note_edit must look like 2.1")
-        return tasks_partial(request, get_project(key), edit, attach, note, ne, photo=photo, move=move)
+        return tasks_partial(request, get_project(key), edit, attach, note, ne, photo=photo, move=move, remind=remind)
 
     # task notes: indented "  - text" lines under a task
     @app.post("/p/{key}/tasks/{n}/notes")
@@ -450,6 +453,19 @@ def create_app(ws: Workspace) -> FastAPI:
     def task_copy_today(request: Request, key: str, n: int):
         p = get_project(key)
         ops.copy_to_today(ws, p, str(n))
+        return tasks_partial(request, p)
+
+    @app.post("/p/{key}/tasks/{n}/remind")
+    def task_remind(request: Request, key: str, n: int, text: str = Form(""), when: str = Form(...)):
+        """Creates an Apple Reminder (Reminders › Projects Tasks) and records it in the task."""
+        p = get_project(key)
+        reminders.schedule_task_reminder(p, str(n), when, text)
+        return tasks_partial(request, p)
+
+    @app.post("/p/{key}/tasks/{n}/reminder/clear")
+    def task_reminder_clear(request: Request, key: str, n: int):
+        p = get_project(key)
+        ops.set_task_reminder(p, str(n), None)
         return tasks_partial(request, p)
 
     @app.post("/p/{key}/tasks/{n}/archive")

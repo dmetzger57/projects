@@ -41,6 +41,9 @@ proj today done|undo|rm <task>          # ticking a copy ticks its original too 
 proj today clear                        # remove done tasks from Today; originals stay ticked
 proj task archive photo <task>          # move a task (notes, attachments) to the Archive (web: 🗄; iPhone: swipe left)
 proj task move-to photo <task> roof     # move a task (notes, attachments, photos) to the end of another project (web: ↪; iPhone: swipe right › Move, or long-press › Move to Project…)
+proj task remind photo <task> "2026-11-10 09:00"   # Apple Reminder in Reminders › Projects Tasks; --text "…" to change
+                                        # its text (default: the task's), --clear to forget it (web: ⏰; iPhone: swipe right › Remind,
+                                        # or long-press › Add Reminder…). The task shows ⏰ with the time. macOS only for CLI/web.
 proj task ls photo --archived           # …and list the project's archived tasks below its own
 proj archive                            # all archived tasks with their project and date (web/iPhone: Archive)
 proj archive -p photo --since 30d --sort name   # filter by project / date (YYYY-MM-DD or Nd); sort newest|oldest|name|project

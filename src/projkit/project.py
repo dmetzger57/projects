@@ -50,6 +50,17 @@ def split_archived(text: str) -> tuple[str, str | None, str | None]:
     return (text[:m.start()].strip(), m.group(1), m.group(2).strip()) if m else (text.strip(), None, None)
 
 
+# A scheduled Apple Reminder for the task (local time), after the text and before any archive marker:
+# "- [ ] Call the plumber <!-- reminder:2026-11-10T09:00 --> <!-- task:k3x9q2ab -->"
+REMINDER_RE = re.compile(r"\s*<!--\s*reminder:(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})\s*-->\s*$")
+
+
+def split_reminder(text: str) -> tuple[str, str | None]:
+    """(text, reminder "YYYY-MM-DDTHH:MM" or None) of a task's text (link id and archive marker already removed)."""
+    m = REMINDER_RE.search(text)
+    return (text[:m.start()].strip(), m.group(1)) if m else (text.strip(), None)
+
+
 def section_bounds(lines: list[str], heading: str) -> tuple[int, int] | None:
     """(index of the `## heading` line, index of the next `## ` line or len(lines))."""
     for i, ln in enumerate(lines):
@@ -328,8 +339,9 @@ class Project:
             photos = [parse_photo_line(lines[j].lstrip(" \t")) for j in task_photo_indices(lines, (start, end))]
             text, tid = split_task_text(m.group(2))
             text, archived, source = split_archived(text)
+            text, reminder = split_reminder(text)
             out.append({"text": text, "done": m.group(1) != " ", "files": files, "notes": notes, "photos": photos, "id": tid,
-                        "archived": archived, "from": source})
+                        "archived": archived, "from": source, "reminder": reminder})
         return out
 
     @property

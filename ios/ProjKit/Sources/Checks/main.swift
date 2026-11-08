@@ -412,6 +412,34 @@ test("status: all tasks done → completed-on-hold (same steps as tests/test_tod
     eq(ws.load(c.url).status, "closed", "closed projects stay closed")
 }
 
+test("reminder marker: identical output to projkit (same literals as tests/test_reminders.py)") {
+    let body = "\n## Tasks\n- [ ] Call plumber <!-- task:ab12cd34 -->\n  - Ask about warranty\n- [x] Order boards\n"
+    let sr = ReadmeBody.splitReminder("Call <!-- reminder:2026-11-10T09:00 -->")
+    eq([sr.0, sr.1 ?? ""], ["Call", "2026-11-10T09:00"])
+    eq(ReadmeBody.splitReminder("Plain").1, nil)
+    var b = try ReadmeBody.setTaskReminder(body, index: 0, when: "2026-11-10T09:00")
+    eq(b, "\n## Tasks\n- [ ] Call plumber <!-- reminder:2026-11-10T09:00 --> <!-- task:ab12cd34 -->\n"
+        + "  - Ask about warranty\n- [x] Order boards\n")
+    let t = ReadmeBody.tasks(b)
+    eq(t.map(\.text), ["Call plumber", "Order boards"])
+    eq(t.map(\.reminder), ["2026-11-10T09:00", nil])
+    eq(t.map(\.linkID), ["ab12cd34", nil])
+    b = try ReadmeBody.editTask(b, index: 0, text: "Call the plumber")
+    check(b.hasPrefix("\n## Tasks\n- [ ] Call the plumber <!-- reminder:2026-11-10T09:00 --> <!-- task:ab12cd34 -->\n"), "edit keeps reminder and id")
+    b = try ReadmeBody.setTaskReminder(b, index: 0, when: "2026-11-12T14:30")
+    check(b.contains("- [ ] Call the plumber <!-- reminder:2026-11-12T14:30 --> <!-- task:ab12cd34 -->\n"), "reschedule replaces")
+    b = try ReadmeBody.setTaskArchived(b, index: 0, date: "2026-11-13", from: "House")
+    check(b.contains("- [ ] Call the plumber <!-- reminder:2026-11-12T14:30 --> <!-- archived:2026-11-13 from:House -->"
+        + " <!-- task:ab12cd34 -->\n"), "archive marker goes after it")
+    eq(ReadmeBody.tasks(b)[0].reminder, "2026-11-12T14:30")
+    b = try ReadmeBody.setTaskArchived(b, index: 0, date: nil, from: nil)
+    b = try ReadmeBody.setTaskReminder(b, index: 0, when: nil)
+    check(b.hasPrefix("\n## Tasks\n- [ ] Call the plumber <!-- task:ab12cd34 -->\n  - Ask about warranty\n"), "clear keeps id")
+    var threw = false
+    do { _ = try ReadmeBody.setTaskReminder(body, index: 0, when: "tomorrow") } catch { threw = true }
+    check(threw, "refuses a malformed time")
+}
+
 test("archive marker: identical output to projkit (same literals as tests/test_archive.py)") {
     let arch = "\n## Tasks\n- [x] Get quotes <!-- archived:2026-11-05 from:Roof Repair --> <!-- task:ab12cd34 -->\n"
         + "  - Ask about warranty\n- [ ] Order boards <!-- archived:2026-10-01 from:Raised Beds -->\n"

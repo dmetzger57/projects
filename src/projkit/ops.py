@@ -12,7 +12,7 @@ from pathlib import Path
 
 from ruamel.yaml.comments import CommentedMap, CommentedSeq
 
-from .project import (FILE_RE, split_task_text, split_archived, FORMAT_VERSION, ProjectError, README, STATUSES, COMPLETED_ON_HOLD, URL_SCHEME_RE, Project, file_line_indices,
+from .project import (FILE_RE, split_task_text, split_archived, split_reminder, FORMAT_VERSION, ProjectError, README, STATUSES, COMPLETED_ON_HOLD, URL_SCHEME_RE, Project, file_line_indices,
                       parse_file_line, section_bounds, task_blocks, task_file_indices, task_line_indices,
                       task_note_indices, PHOTO_DIR, parse_photo_line, photo_line_indices, task_photo_indices)
 from .workspace import ARCHIVE_DIR, BACKLOG_STEM, OVERVIEW_STEM, TODAY_DIR, Workspace
@@ -334,11 +334,13 @@ def body_set_task(body: str, index: int, done: bool) -> str:
 
 
 def body_edit_task(body: str, index: int, text: str) -> str:
-    """Replaces the task's text, keeping its done mark, archive marker and Today link id."""
+    """Replaces the task's text, keeping its done mark, reminder, archive marker and Today link id."""
     lines, i = _task_line(body, index)
     visible, tid = split_task_text(lines[i][6:])
-    _, date, source = split_archived(visible)
-    lines[i] = lines[i][:6] + _clean_task(text) + _archived_suffix(date, source) + _task_suffix(tid)
+    rest, date, source = split_archived(visible)
+    reminder = split_reminder(rest)[1]
+    lines[i] = (lines[i][:6] + _clean_task(text) + _reminder_suffix(reminder) + _archived_suffix(date, source)
+                + _task_suffix(tid))
     return "\n".join(lines) + "\n"
 
 
@@ -375,6 +377,23 @@ def body_set_task_archived(body: str, index: int, date: str | None, source: str 
     visible, tid = split_task_text(lines[i][6:])
     text = split_archived(visible)[0]
     lines[i] = lines[i][:6] + text + _archived_suffix(date, source and source.strip()) + _task_suffix(tid)
+    return "\n".join(lines) + "\n"
+
+
+def _reminder_suffix(when: str | None) -> str:
+    return f" <!-- reminder:{when} -->" if when else ""
+
+
+def body_set_task_reminder(body: str, index: int, when: str | None) -> str:
+    """Records (or with None, clears) the Apple Reminder scheduled for task `index` ("YYYY-MM-DDTHH:MM"),
+    keeping its archive marker and link id."""
+    if when is not None and not re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}", when):
+        raise OpError(f"reminder time must be YYYY-MM-DDTHH:MM, not '{when}'")
+    lines, i = _task_line(body, index)
+    visible, tid = split_task_text(lines[i][6:])
+    rest, date, source = split_archived(visible)
+    text = split_reminder(rest)[0]
+    lines[i] = lines[i][:6] + text + _reminder_suffix(when) + _archived_suffix(date, source) + _task_suffix(tid)
     return "\n".join(lines) + "\n"
 
 
@@ -474,6 +493,14 @@ def _complete_if_all_done(p: Project, ws: Workspace | None) -> bool:
 def edit_task(p: Project, ref: str, text: str) -> dict:
     i = _task_index(p, ref)
     p.body = body_edit_task(p.body, i, text)
+    p.save()
+    return p.tasks[i]
+
+
+def set_task_reminder(p: Project, ref: str, when: str | None) -> dict:
+    """Records that an Apple Reminder was scheduled for a task (see `reminders.create_reminder`)."""
+    i = _task_index(p, ref)
+    p.body = body_set_task_reminder(p.body, i, when)
     p.save()
     return p.tasks[i]
 

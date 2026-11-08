@@ -74,6 +74,7 @@ def main() -> None:
         "INFOPLIST_KEY_ITSAppUsesNonExemptEncryption": "NO",
         "INFOPLIST_KEY_LSApplicationCategoryType": "public.app-category.productivity",
         "INFOPLIST_KEY_NSCameraUsageDescription": "Proj uses the camera to scan receipts and to take photos for projects and tasks.",
+        "INFOPLIST_KEY_NSRemindersFullAccessUsageDescription": "Proj adds reminders for your project tasks to the “Projects Tasks” list in Reminders.",
         "INFOPLIST_KEY_UIApplicationSceneManifest_Generation": "YES",
         "INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents": "YES",
         "INFOPLIST_KEY_UILaunchScreen_Generation": "YES",

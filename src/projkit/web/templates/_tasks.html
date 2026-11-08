@@ -41,6 +41,11 @@
         {% elif not is_today and t.id in in_today %}
         <span class="task-from today-mark small" title="Ticking it here or in Today ticks both">☀ In Today</span>
         {% endif %}
+        {% if t.reminder %}
+        <span class="task-from reminder-mark small" title="An Apple Reminder was scheduled (Reminders › {{ reminder_list }})">⏰ Reminder {{ reminder_label(t.reminder) }}
+          <button class="x" title="Forget this reminder (doesn’t delete it from Reminders)" aria-label="Forget the reminder for “{{ t.text }}”"
+                  hx-post="{{ url }}/tasks/{{ n }}/reminder/clear" hx-target="#tasks" hx-swap="outerHTML">×</button></span>
+        {% endif %}
         {% if t.notes %}
         <ul class="plain task-notes">
           {% for note in t.notes %}
@@ -125,6 +130,20 @@
           </div>
         </form>
         {% endif %}
+        {% if task_remind == n %}
+        <form class="stack task-remind editing" hx-post="{{ url }}/tasks/{{ n }}/remind" hx-target="#tasks" hx-swap="outerHTML">
+          <input name="text" value="{{ t.text }}" required autofocus aria-label="Reminder text"
+                 onkeydown="if(event.key==='Escape'){htmx.ajax('GET','{{ url }}/tasks',{target:'#tasks',swap:'outerHTML'})}">
+          <div class="add-row">
+            <input name="when" type="datetime-local" value="{{ t.reminder or remind_default }}" required aria-label="Remind me at">
+          </div>
+          <div class="row-end">
+            <span class="muted small">Goes into Reminders › {{ reminder_list }}</span>
+            <button type="button" class="btn small" hx-get="{{ url }}/tasks" hx-target="#tasks" hx-swap="outerHTML">Cancel</button>
+            <button class="btn small primary">Create reminder</button>
+          </div>
+        </form>
+        {% endif %}
         {% if task_move == n %}
         <form class="task-edit editing task-move" hx-post="{{ url }}/tasks/{{ n }}/move-to" hx-target="#tasks" hx-swap="outerHTML">
           {% if move_targets %}
@@ -172,6 +191,8 @@
       <button class="x edit" title="Archive task" aria-label="Archive “{{ t.text }}”"
               hx-post="{{ url }}/tasks/{{ n }}/archive" hx-target="#tasks" hx-swap="outerHTML">🗄</button>
       {% endif %}
+      <button class="x edit" title="Create an Apple Reminder" aria-label="Create an Apple Reminder for “{{ t.text }}”"
+              hx-get="{{ url }}/tasks?remind={{ n }}" hx-target="#tasks" hx-swap="outerHTML">⏰</button>
       <button class="x edit" title="Add a note" aria-label="Add a note to “{{ t.text }}”"
               hx-get="{{ url }}/tasks?note={{ n }}" hx-target="#tasks" hx-swap="outerHTML">📝</button>
       {% if not is_today %}

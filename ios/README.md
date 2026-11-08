@@ -7,6 +7,9 @@ without the Mac being on, and changes show up in `proj` on the Mac.
 **Setup:** an empty folder is set up for you (areas, template, Closed, backlog) · **New Area** ·
 **Today:** the day's task list: swipe right on any project's task (or long-press › Copy to Today) to
 add it; ticking it in either place ticks both; add tasks directly; Clear Done for a fresh day ·
+**Reminders:** swipe right on a task (or long-press › Add Reminder…) to create an Apple Reminder in the
+“Projects Tasks” list: the text starts as the task's and can be edited, pick the date and time; the task then
+shows 🔔 with the time (long-press › Forget Reminder clears that; the reminder stays in Reminders) ·
 **Archive:** swipe left on a task (or long-press › Archive) to move it, with its notes and attachments,
 to the Archive tab, which shows each task's project and date and filters by project and date archived and
 sorts newest/oldest, A–Z or by project; a project's own archived tasks show under its Tasks (Show/Hide);

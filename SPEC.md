@@ -127,6 +127,12 @@ Rules:
   recorded. Renaming a project rewrites its archived tasks' `from:`. Restoring moves the task back to the
   end of that project's tasks (closed projects included) without the marker; the link id stays, so a copy
   still in Today keeps syncing either way. Today and Archive tasks can't be archived.
+- **Reminders:** scheduling an Apple Reminder for a task (in the Reminders list `Projects Tasks`, created on
+  first use; its notes are `Project: <title>`) records the local time on the task line as
+  `<!-- reminder:YYYY-MM-DDTHH:MM -->`, after the text and before any archive marker and link id:
+  `- [ ] Call the plumber <!-- reminder:2026-11-10T09:00 --> <!-- task:k3x9q2ab -->`. The visible text is the
+  line without it; editing, archiving, restoring and moving keep it; scheduling again replaces it. It is not
+  copied to Today. Clearing it only removes the marker (the reminder stays in Reminders).
 - **Moving a task to another project:** the task line with all its detail lines (notes, attachments, photos)
   goes unchanged to the end of the other project's tasks (closed projects included), written there before
   it is removed from the first project. Its photo files move to the other project's `Photos/` (same paths);

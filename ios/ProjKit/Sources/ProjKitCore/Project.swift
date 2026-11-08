@@ -58,6 +58,8 @@ public struct ProjectTask: Identifiable, Hashable, Sendable {
     /// Set on tasks in the Archive: when it was archived ("YYYY-MM-DD") and the project folder it came from.
     public var archived: String? = nil
     public var archivedFrom: String? = nil
+    /// An Apple Reminder was scheduled for this task, at this local time ("YYYY-MM-DDTHH:MM").
+    public var reminder: String? = nil
     public var id: Int { index }
 }
 
@@ -294,7 +296,8 @@ public enum ReadmeBody {
         return taskBlocks(lines).enumerated().map { n, b in
             let raw = parseTask(lines[b.start])!
             let (visible, linkID) = splitTaskText(raw.text)
-            let (text, archived, from) = splitArchived(visible)
+            let (rest, archived, from) = splitArchived(visible)
+            let (text, reminder) = splitReminder(rest)
             let t = (done: raw.done, text: text)
             let files = taskFileIndices(lines, b).enumerated().map { k, j in
                 let f = parseFileLine(stripIndent(lines[j]))!
@@ -306,7 +309,7 @@ public enum ReadmeBody {
                 return ProjectPhoto(index: k, note: ph.note, path: ph.path)
             }
             return ProjectTask(index: n, text: t.text, done: t.done, files: files, notes: notes, photos: photos,
-                               linkID: linkID, archived: archived, archivedFrom: from)
+                               linkID: linkID, archived: archived, archivedFrom: from, reminder: reminder)
         }
     }
 
@@ -384,8 +387,39 @@ public enum ReadmeBody {
     public static func editTask(_ body: String, index: Int, text: String) throws -> String {
         var (lines, i) = try taskLine(body, index)
         let (visible, id) = splitTaskText(String(lines[i].dropFirst(6)))
-        let (_, date, from) = splitArchived(visible)
-        lines[i] = String(lines[i].prefix(6)) + (try cleanTask(text)) + archivedSuffix(date, from) + taskSuffix(id)
+        let (rest, date, from) = splitArchived(visible)
+        lines[i] = String(lines[i].prefix(6)) + (try cleanTask(text)) + reminderSuffix(splitReminder(rest).1)
+            + archivedSuffix(date, from) + taskSuffix(id)
+        return lines.joined(separator: "\n") + "\n"
+    }
+
+    // MARK: Reminder marker — byte-identical with projkit (REMINDER_RE, split_reminder, body_set_task_reminder)
+
+    static let reminderRegex = try! NSRegularExpression(
+        pattern: #"\s*<!--\s*reminder:(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})\s*-->\s*$"#)
+
+    /// (text, reminder "YYYY-MM-DDTHH:MM" or nil) of a task's text (link id and archive marker already removed).
+    public static func splitReminder(_ text: String) -> (String, String?) {
+        let ns = text as NSString
+        guard let m = reminderRegex.firstMatch(in: text, range: NSRange(location: 0, length: ns.length)) else {
+            return (text.trimmingCharacters(in: .whitespaces), nil)
+        }
+        return (ns.substring(to: m.range.location).trimmingCharacters(in: .whitespaces), ns.substring(with: m.range(at: 1)))
+    }
+
+    static func reminderSuffix(_ when: String?) -> String { when.map { " <!-- reminder:\($0) -->" } ?? "" }
+
+    /// Records (or with nil, clears) the Apple Reminder scheduled for task `index` ("YYYY-MM-DDTHH:MM"),
+    /// keeping its archive marker and link id.
+    public static func setTaskReminder(_ body: String, index: Int, when: String?) throws -> String {
+        if let w = when, w.range(of: #"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$"#, options: .regularExpression) == nil {
+            throw OpError("reminder time must be YYYY-MM-DDTHH:MM, not '\(w)'")
+        }
+        var (lines, i) = try taskLine(body, index)
+        let (visible, id) = splitTaskText(String(lines[i].dropFirst(6)))
+        let (rest, date, from) = splitArchived(visible)
+        lines[i] = String(lines[i].prefix(6)) + splitReminder(rest).0 + reminderSuffix(when)
+            + archivedSuffix(date, from) + taskSuffix(id)
         return lines.joined(separator: "\n") + "\n"
     }
 

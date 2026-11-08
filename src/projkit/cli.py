@@ -15,7 +15,7 @@ from rich.console import Console
 from rich.markdown import Markdown
 from rich.table import Table
 
-from . import ops
+from . import ops, reminders
 from .lint import lint_workspace
 from .project import Project, status_label
 from .workspace import Workspace
@@ -149,7 +149,7 @@ def _fail(msg: str):
 def _run(fn, *a, **kw):
     try:
         return fn(*a, **kw)
-    except ops.OpError as e:
+    except (ops.OpError, reminders.ReminderError) as e:
         console.print(f"[red]{e}[/]")
         raise typer.Exit(1)
 
@@ -322,7 +322,8 @@ def task_ls(project: str,
     in_today = ops.today_ids(ws)
     for i, t in enumerate(p.tasks, 1):
         sun = "  [yellow]☀ in Today[/]" if t["id"] in in_today else ""
-        console.print(f"{i:3}. {'[green]✔[/]' if t['done'] else '☐'} {t['text']}{sun}", highlight=False)
+        bell = f"  [cyan]⏰ {reminders.reminder_label(t['reminder'])}[/]" if t["reminder"] else ""
+        console.print(f"{i:3}. {'[green]✔[/]' if t['done'] else '☐'} {t['text']}{sun}{bell}", highlight=False)
         _print_task_details(t)
     if not p.tasks:
         console.print("[dim]No tasks.[/]")
@@ -410,6 +411,23 @@ def task_today(project: str, task: str, root: Optional[Path] = RootOpt, receipts
     ws = _ws(root, receipts)
     t, added = _run(ops.copy_to_today, ws, _pick(ws, project), task)
     console.print(f"[green]copied to Today:[/] {t['text']}" if added else f"already in Today: {t['text']}", highlight=False)
+
+
+@task_app.command("remind")
+def task_remind(project: str, task: str,
+                when: str = typer.Argument(..., metavar="WHEN", help='Date and time, "YYYY-MM-DD HH:MM" (a date alone means 09:00)'),
+                text: Optional[str] = typer.Option(None, "--text", "-t", help="Reminder text (default: the task's text)"),
+                clear: bool = typer.Option(False, "--clear", help="Only forget the recorded reminder (WHEN is ignored)"),
+                root: Optional[Path] = RootOpt, receipts: Optional[Path] = ReceiptsOpt):
+    """Create an Apple Reminder for a task in the 'Projects Tasks' list, and record it in the task."""
+    p = _pick(_ws(root, receipts), project)
+    if clear:
+        t = _run(ops.set_task_reminder, p, task, None)
+        console.print(f"cleared reminder: {t['text']}", highlight=False)
+        return
+    t = _run(reminders.schedule_task_reminder, p, task, when, text)
+    console.print(f"[green]⏰ reminder set[/] for {reminders.reminder_label(t['reminder'])}: {text or t['text']}  "
+                  f"[dim](Reminders › {reminders.REMINDER_LIST})[/]", highlight=False)
 
 
 @task_app.command("archive")

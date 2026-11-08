@@ -91,11 +91,14 @@ struct ProjectDetailView: View {
     @State private var archiveSort: Ops.ArchiveSort = .newest
     @State private var deletingArchived: ProjectTask?
     @State private var movingTask: ProjectTask?           // "Move to Project…"
+    @State private var remindingTask: ProjectTask?        // "Add Reminder…" (Apple Reminders)
     @FocusState private var goalFieldFocused: Bool
 
     var body: some View {
         if let p = model.project(folder) {
             content(p)
+                // here, not in projectContent: Today's task rows offer "Add Reminder…" too
+                .sheet(item: $remindingTask) { t in ReminderSheet(task: t, project: p) }
         } else {
             ContentUnavailableView("Project not found", systemImage: "questionmark.folder",
                                    description: Text("It may have been renamed or moved on another device."))
@@ -712,6 +715,11 @@ struct ProjectDetailView: View {
                                 .font(.caption.weight(.semibold)).foregroundStyle(.orange)
                                 .accessibilityLabel("In Today. Ticking it here or in Today ticks both.")
                         }
+                        if let when = t.reminder {
+                            Label("Reminder \(Reminders.label(when))", systemImage: "bell.fill")
+                                .font(.caption.weight(.semibold)).foregroundStyle(Color.accentColor)
+                                .accessibilityLabel("Apple Reminder scheduled for \(Reminders.label(when))")
+                        }
                         ForEach(t.notes) { n in
                             HStack(alignment: .firstTextBaseline, spacing: 6) {
                                 Text("–").accessibilityHidden(true)
@@ -758,6 +766,8 @@ struct ProjectDetailView: View {
                         Button { movingTask = t } label: { Label("Move", systemImage: "arrow.right.doc.on.clipboard") }
                             .tint(.teal)
                     }
+                    Button { remindingTask = t } label: { Label("Remind", systemImage: "bell") }
+                        .tint(.purple)
                 }
                 .swipeActions(edge: .trailing) {
                     Button(role: .destructive) {
@@ -777,6 +787,14 @@ struct ProjectDetailView: View {
                             Label("In Today", systemImage: "sun.max.fill")
                         } else {
                             Button { copyToToday(p, t) } label: { Label("Copy to Today", systemImage: "sun.max") }
+                        }
+                    }
+                    Section("Reminder") {
+                        Button { remindingTask = t } label: { Label("Add Reminder…", systemImage: "bell.badge") }
+                        if t.reminder != nil {
+                            Button {
+                                Task { await model.perform { try Ops.setTaskReminder($0, p, index: t.index, when: nil) } }
+                            } label: { Label("Forget Reminder", systemImage: "bell.slash") }
                         }
                     }
                     Section("Notes") {

@@ -441,6 +441,12 @@ public enum Ops {
         try editBody(ws, p) { try ReadmeBody.editTask($0, index: index, text: text) }
     }
 
+    /// Records that an Apple Reminder was scheduled for a task (the app creates it with EventKit).
+    /// Mirrors projkit `ops.set_task_reminder`.
+    public static func setTaskReminder(_ ws: Workspace, _ p: Project, index: Int, when: String?) throws {
+        try editBody(ws, p) { try ReadmeBody.setTaskReminder($0, index: index, when: when) }
+    }
+
     public static func moveTask(_ ws: Workspace, _ p: Project, from: Int, to: Int) throws {
         try editBody(ws, p) { try ReadmeBody.moveTask($0, index: from, to: to) }
     }
