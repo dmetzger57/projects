@@ -159,7 +159,7 @@ struct ProjectsView: View {
         list
             .navigationTitle(windowTitle)
             .searchable(text: $search, prompt: "Projects, goals, notes")
-            .refreshable { await model.reload() }
+            .refreshable { await model.syncWithICloud() }
             .overlay {
                 if model.projects.isEmpty && !model.isLoading {
                     ContentUnavailableView("No projects found", systemImage: "folder",

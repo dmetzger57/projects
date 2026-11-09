@@ -146,7 +146,7 @@ struct ProjectDetailView: View {
         }
         .readableWidth()
         .navigationTitle("Today")
-        .refreshable { await model.reload() }
+        .refreshable { await model.syncWithICloud() }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button("Clear Done") { confirmClearDone = true }
@@ -210,7 +210,7 @@ struct ProjectDetailView: View {
         .readableWidth()
         .navigationTitle(p.title)
         .inlineTitle()
-        .refreshable { await model.reload() }
+        .refreshable { await model.syncWithICloud() }
         .toolbar {
             ToolbarItem(placement: .primaryAction) { actionsMenu(p, closed: closed) }
         }
@@ -524,7 +524,7 @@ struct ProjectDetailView: View {
         }
         .readableWidth()
         .navigationTitle("Archive")
-        .refreshable { await model.reload() }
+        .refreshable { await model.syncWithICloud() }
         .confirmationDialog("Delete “\(deletingArchived?.text ?? "")” for good?",
                             isPresented: Binding(get: { deletingArchived != nil }, set: { if !$0 { deletingArchived = nil } }),
                             titleVisibility: .visible) {

@@ -34,6 +34,13 @@ type a path, friendly names, Show Paths, tap to open), links, and receipts (scan
 preview, detach), rename, close and reopen · **Ideas:** add, delete, make into a project ·
 pull to refresh; reloads when you return to the app.
 
+**iCloud sync:** there's no way for an app to make iCloud Drive sync on demand, so Proj does the closest
+thing. When it opens, comes back to the foreground, or you pull to refresh (⌘R on the Mac), it shows what's on
+the device, asks iCloud for the newest version of every project README and the Overview / Idea Backlog, and
+reloads once they arrive (waiting up to 15 s; a note at the bottom shows progress, or what's still
+downloading). When it closes (to the background on iPhone/iPad, Quit on the Mac), it first lets any save in
+progress finish, so iCloud has every change to upload; the upload itself is done by the system.
+
 **On iPad** (and other wide windows): Projects shows a sidebar of projects beside the selected project,
 or, with none selected, an **Overview** of project tiles by area like the web UI (tap the area name to collapse
 it, Collapse All / Expand All in the toolbar or on an area name's long-press menu, long-press a tile to move it; the ⊞ button returns to it). Other screens keep their content in a centered,

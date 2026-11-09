@@ -77,7 +77,7 @@ struct OpenTasksView: View {
             }
             .searchable(text: $search, prompt: "Filter tasks or projects")
             .navigationTitle("Open Tasks")
-            .refreshable { await model.reload() }
+            .refreshable { await model.syncWithICloud() }
             .toolbar {
                 if selecting {
                     ToolbarItem(placement: .primaryAction) {

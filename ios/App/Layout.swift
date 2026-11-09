@@ -58,7 +58,7 @@ struct ProjectGridView: View {
         .background(Color.groupedBackground)
         .navigationTitle("Overview")
         .toolbar { ToolbarItem(placement: .primaryAction) { CollapseAllButton(shown: groups.map(\.area)) } }
-        .refreshable { await model.reload() }
+        .refreshable { await model.syncWithICloud() }
     }
 
     @ViewBuilder

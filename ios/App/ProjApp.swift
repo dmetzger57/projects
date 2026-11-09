@@ -5,20 +5,34 @@ import ProjKitCore
 struct ProjApp: App {
     @State private var model = AppModel()
     @Environment(\.scenePhase) private var scenePhase
+    #if os(macOS)
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+    #endif
 
     var body: some Scene {
         WindowGroup {
             RootView()
                 .environment(model)
-                .task { await model.reload() }
+                .task {
+                    #if os(macOS)
+                    appDelegate.model = model                  // Quit waits for a save in progress
+                    #endif
+                    await model.syncWithICloud()
+                }
                 .onChange(of: scenePhase) { _, phase in
+                    switch phase {
                     // pick up edits made on the Mac (or other devices) when returning to the app
-                    if phase == .active { Task { await model.reload() } }
+                    case .active: Task { await model.syncWithICloud() }
+                    #if os(iOS)
+                    case .background: model.appWillClose()     // finish saving before iOS suspends the app
+                    #endif
+                    default: break
+                    }
                 }
                 #if os(macOS)
                 .frame(minWidth: 760, minHeight: 480)
                 .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
-                    Task { await model.reload() }      // back from Terminal, Finder or the web UI
+                    Task { await model.syncWithICloud() }      // back from Terminal, Finder or the web UI
                 }
                 #endif
         }
@@ -26,7 +40,7 @@ struct ProjApp: App {
         .defaultSize(width: 1180, height: 800)
         .commands {
             CommandGroup(after: .toolbar) {
-                Button("Refresh") { Task { await model.reload() } }
+                Button("Refresh") { Task { await model.syncWithICloud() } }
                     .keyboardShortcut("r")
             }
         }
@@ -90,6 +104,18 @@ struct RootView: View {
                 OnboardingView()
             }
         }
+        .overlay(alignment: .bottom) {
+            if let s = model.syncStatus {
+                Label(s.text, systemImage: s.isFinished ? "exclamationmark.icloud" : "icloud.and.arrow.down")
+                    .font(.footnote)
+                    .padding(.horizontal, 14).padding(.vertical, 8)
+                    .background(.regularMaterial, in: Capsule())
+                    .padding(.bottom, 64)                 // above the tab bar
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .accessibilityAddTraits(.updatesFrequently)
+            }
+        }
+        .animation(.default, value: model.syncStatus)
         .alert("Something went wrong", isPresented: Binding(get: { model.errorMessage != nil },
                                                              set: { if !$0 { model.errorMessage = nil } })) {
             Button("OK", role: .cancel) {}

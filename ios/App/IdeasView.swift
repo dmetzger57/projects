@@ -41,7 +41,7 @@ struct IdeasView: View {
             }
             .readableWidth()
             .navigationTitle("Ideas")
-            .refreshable { await model.reload() }
+            .refreshable { await model.syncWithICloud() }
             .overlay {
                 if model.ideas.isEmpty {
                     ContentUnavailableView("No ideas yet", systemImage: "lightbulb",

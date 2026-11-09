@@ -22,6 +22,10 @@ final class AppModel {
     private(set) var areas: [String] = []
     private(set) var isLoading = false
     private(set) var lastLoaded: Date?
+    /// File operations still running (closing the app waits for them; see ICloudSync.swift).
+    private(set) var writesInFlight = 0
+    /// The iCloud sync on open, while it fetches newer versions (nil otherwise).
+    var syncStatus: SyncStatus?
     var errorMessage: String?
 
     private static let projectsKey = "projectsBookmark"
@@ -233,7 +237,9 @@ final class AppModel {
     @discardableResult
     func perform<T: Sendable>(_ action: @escaping @Sendable (Workspace) throws -> T) async -> T? {
         guard let ws = workspace else { return nil }
+        writesInFlight += 1
         let r = await Task.detached(priority: .userInitiated) { Result { try action(ws) } }.value
+        writesInFlight -= 1
         await reload()
         switch r {
         case let .success(v): return v
