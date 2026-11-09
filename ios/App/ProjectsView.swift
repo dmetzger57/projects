@@ -174,16 +174,11 @@ struct ProjectsView: View {
                         Button { newAreaName = ""; showNewArea = true } label: { Label("New Area", systemImage: "folder.badge.plus") }
                         Divider()
                         Button { showReorderAreas = true } label: { Label("Reorder Areas", systemImage: "arrow.up.arrow.down") }
-                        Button { setCollapsed(model.workspace?.overviewAreas(overview: model.overview) ?? model.areas, true) } label: {
-                            Label("Collapse All Areas", systemImage: "rectangle.compress.vertical")
-                        }
-                        Button { setCollapsed(model.workspace?.overviewAreas(overview: model.overview) ?? model.areas, false) } label: {
-                            Label("Expand All Areas", systemImage: "rectangle.expand.vertical")
-                        }
                     } label: {
                         Label("Add", systemImage: "plus")
                     }
                 }
+                ToolbarItem(placement: .primaryAction) { CollapseAllButton(shown: grouped.map(\.area)) }
             }
             .sheet(isPresented: $showReorderAreas) { ReorderAreasSheet() }
             .sheet(isPresented: $showNew) {
@@ -252,6 +247,7 @@ struct ProjectsView: View {
                     Label(collapsed ? "Expand" : "Collapse to Name",
                           systemImage: collapsed ? "rectangle.expand.vertical" : "rectangle.compress.vertical")
                 }
+                CollapseAllMenuItems()
                 if all.count > 1 {
                     Section("Move Area") {
                         Button { moveArea(area, before: all[max(i - 1, 0)]) } label: { Label("Move Up", systemImage: "arrow.up") }
@@ -490,4 +486,39 @@ func money(_ amount: Double) -> String {
 func markdown(_ s: String) -> AttributedString {
     (try? AttributedString(markdown: s, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)))
         ?? AttributedString(s)
+}
+
+// MARK: - collapse / expand all areas
+
+/// Collapses every area to just its name, or expands them all again (Projects toolbar, iPad/Mac Overview).
+/// Shows "Expand All" when every area on screen is collapsed, else "Collapse All".
+struct CollapseAllButton: View {
+    @Environment(AppModel.self) private var model
+    let shown: [String]                 // the areas on screen (decides which way the button goes)
+
+    var body: some View {
+        let allCollapsed = !shown.isEmpty && shown.allSatisfy(model.overview.isCollapsed)
+        Button { model.setAllAreasCollapsed(!allCollapsed) } label: {
+            Label(allCollapsed ? "Expand All" : "Collapse All",
+                  systemImage: allCollapsed ? "rectangle.expand.vertical" : "rectangle.compress.vertical")
+        }
+        .help(allCollapsed ? "Expand all areas" : "Collapse all areas to just their names")
+        .disabled(shown.isEmpty)
+    }
+}
+
+/// "Collapse All Areas" / "Expand All Areas", for an area's ⋯ and long-press menus.
+struct CollapseAllMenuItems: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        Section("All Areas") {
+            Button { model.setAllAreasCollapsed(true) } label: {
+                Label("Collapse All Areas", systemImage: "rectangle.compress.vertical")
+            }
+            Button { model.setAllAreasCollapsed(false) } label: {
+                Label("Expand All Areas", systemImage: "rectangle.expand.vertical")
+            }
+        }
+    }
 }

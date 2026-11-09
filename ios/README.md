@@ -21,7 +21,7 @@ to the Archive tab, which shows each task's project and date and filters by proj
 sorts newest/oldest, A–Z or by project; a project's own archived tasks show under its Tasks (Show/Hide);
 swipe right to restore one ·
 **Projects:** projects by area, filters, search, goal progress and spending; tap an area's name to collapse it
-to just the name; reorder areas from the area's ⋯ menu or + › Reorder Areas, and projects within an area by
+to just the name, or use the Collapse All / Expand All toolbar button (also in each area's ⋯ menu); reorder areas from the area's ⋯ menu or + › Reorder Areas, and projects within an area by
 dragging or long-press › Move (the same layout as the web overview) ·
 **Project:** status, goals (tap to tick off, swipe to delete), a **Tasks** checklist (tap the box
 to tick, tap the text to edit, swipe or long-press to edit, move or delete; drag to reorder; long-press ›
@@ -35,7 +35,7 @@ pull to refresh; reloads when you return to the app.
 
 **On iPad** (and other wide windows): Projects shows a sidebar of projects beside the selected project,
 or, with none selected, an **Overview** of project tiles by area like the web UI (tap the area name to collapse
-it, long-press a tile to move it; the ⊞ button returns to it). Other screens keep their content in a centered,
+it, Collapse All / Expand All in the toolbar or on an area name's long-press menu, long-press a tile to move it; the ⊞ button returns to it). Other screens keep their content in a centered,
 readable column. In narrow Split View or Slide Over it falls back to the iPhone layout.
 
 ## Mac app

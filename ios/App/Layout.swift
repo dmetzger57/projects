@@ -57,6 +57,7 @@ struct ProjectGridView: View {
         }
         .background(Color.groupedBackground)
         .navigationTitle("Overview")
+        .toolbar { ToolbarItem(placement: .primaryAction) { CollapseAllButton(shown: groups.map(\.area)) } }
         .refreshable { await model.reload() }
     }
 
@@ -77,6 +78,13 @@ struct ProjectGridView: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel(collapsed ? "Expand \(area)" : "Collapse \(area)")
+            .contextMenu {
+                Button { setCollapsed(area, !collapsed) } label: {
+                    Label(collapsed ? "Expand" : "Collapse to Name",
+                          systemImage: collapsed ? "rectangle.expand.vertical" : "rectangle.compress.vertical")
+                }
+                CollapseAllMenuItems()
+            }
             if !collapsed {
                 if items.isEmpty {
                     Text("No projects").foregroundStyle(.secondary).italic().padding(.leading, 4)

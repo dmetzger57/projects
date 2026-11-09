@@ -75,7 +75,8 @@ proj order                               # areas in order, each with its project
 proj order area House 1                  # move an area (web: drag the area's ⋮⋮ or ↑/↓; iPhone: area ⋯ › Move / Reorder Areas)
 proj order mv photo 1                    # move a project within its area (web: drag the tile's ⋮⋮; iPhone: drag or long-press)
 proj order reset [AREA] [--areas]        # projects back to status, then name; --areas: areas A–Z
-proj collapse House [Garden …] | --all   # area shows just its name (web: click the area name; iPhone: tap it)
+proj collapse House [Garden …] | --all   # area shows just its name (web: click the area name, or Collapse all;
+                                        # apps: tap it, or the Collapse All toolbar button)
 proj expand House | --all
 proj rename web "Web-Check Service"
 proj close roof            # → 2 - Closed, area kept

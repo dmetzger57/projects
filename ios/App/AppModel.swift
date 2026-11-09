@@ -224,6 +224,11 @@ final class AppModel {
         return nil
     }
 
+    /// Collapses (or expands) every area on the Projects overview: all areas, not just those shown.
+    func setAllAreasCollapsed(_ on: Bool) {
+        Task { await perform { ws in try Ops.setCollapsed(ws, areas: ws.overviewAreas(), on) } }
+    }
+
     /// Runs one file operation off the main thread, then reloads. Returns its result or nil on error.
     @discardableResult
     func perform<T: Sendable>(_ action: @escaping @Sendable (Workspace) throws -> T) async -> T? {
