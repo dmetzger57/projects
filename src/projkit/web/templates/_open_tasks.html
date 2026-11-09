@@ -1,20 +1,27 @@
+{# Each task's checkbox ticks it done (like on its project page). "Select" switches to selecting tasks
+   (the dashed boxes) to Copy to Today. #}
 <section class="panel open-tasks" id="open-tasks">
   <div class="panel-head open-tasks-head">
     <input type="search" class="open-filter" placeholder="Filter tasks or projects…" aria-label="Filter tasks or projects"
            oninput="openTasksFilter(this)">
     <span class="muted small" data-selected>{{ total }} open</span>
-    <button type="button" class="btn small primary" data-copy disabled
+    <button type="button" class="btn small" data-select aria-pressed="false"
+            title="Select tasks to copy to Today">Select</button>
+    <button type="button" class="btn small primary select-only" data-copy disabled
             hx-post="/tasks/today" hx-include="#open-tasks input[type=checkbox][name=pick]"
             hx-target="#open-tasks" hx-swap="outerHTML">☀ Copy to Today</button>
   </div>
   {% if copied is not none %}
   <p class="task-moved small" role="status">Copied {{ copied }} task{{ 's' if copied != 1 }} to <a href="/today">Today</a>{% if skipped %} ({{ skipped }} already there){% endif %}.</p>
   {% endif %}
-  {% if done_msg %}<p class="task-moved small" role="status">{{ done_msg }}</p>{% endif %}
+  {% if done_msg %}<p class="task-moved small" role="status">{{ done_msg }}
+    {% if undo %}<button type="button" class="link-quiet" hx-post="/tasks/undone"
+            hx-vals='{"folder": {{ undo.folder|tojson }}, "text": {{ undo.text|tojson }}}'
+            hx-target="#open-tasks" hx-swap="outerHTML">Undo</button>{% endif %}</p>{% endif %}
   {% for g in groups %}
   <section class="open-group" data-group>
     <h3 class="open-project">
-      <label class="open-all" title="Select all of this project’s tasks">
+      <label class="open-all select-only" title="Select all of this project’s tasks">
         <input type="checkbox" aria-label="Select all open tasks of {{ g.p.title }}" data-all
                {% if g.tasks|rejectattr('in_today')|list|length == 0 %}disabled{% endif %}>
       </label>
@@ -36,14 +43,18 @@
             <button type="button" class="btn small" hx-get="/tasks/list" hx-target="#open-tasks" hx-swap="outerHTML">Cancel</button>
           </form>
           {% else %}
-          <label>
+          <div class="open-task-line">
+            <input type="checkbox" class="task-done not-selecting" aria-label="Mark “{{ x.t.text }}” done"
+                   title="Mark done" hx-post="/tasks/done" hx-vals='{"pick": {{ pick|tojson }}}'
+                   hx-target="#open-tasks" hx-swap="outerHTML">
             {% if x.in_today %}
-            <input type="checkbox" checked disabled aria-label="Already in Today">
+            <input type="checkbox" class="task-pick select-only" checked disabled aria-label="Already in Today">
             {% else %}
-            <input type="checkbox" name="pick" value="{{ pick }}" aria-label="Select “{{ x.t.text }}”">
+            <input type="checkbox" class="task-pick select-only" name="pick" value="{{ pick }}"
+                   aria-label="Select “{{ x.t.text }}” to copy to Today">
             {% endif %}
             <span data-text>{{ x.t.text }}</span>
-          </label>
+          </div>
           {% endif %}
           {% if x.in_today %}<span class="task-from today-mark small">☀ In Today</span>{% endif %}
           {% if x.t.reminder %}<span class="task-from reminder-mark small">⏰ Reminder {{ reminder_label(x.t.reminder) }}</span>{% endif %}
@@ -166,6 +177,14 @@
         all.indeterminate = on > 0 && on < boxes.length;
       });
     };
+    const selectBtn = root.querySelector("[data-select]");
+    selectBtn.addEventListener("click", () => {
+      const on = root.classList.toggle("selecting");
+      selectBtn.textContent = on ? "Done" : "Select";
+      selectBtn.setAttribute("aria-pressed", on);
+      if (!on) picks().forEach(c => { c.checked = false; });
+      sync();
+    });
     root.addEventListener("change", e => {
       if (e.target.matches("[data-all]")) {
         e.target.closest("[data-group]").querySelectorAll("input[type=checkbox][name=pick]").forEach(c => {

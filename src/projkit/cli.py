@@ -703,6 +703,32 @@ def tasks_today(numbers: list[int] = typer.Argument(..., help="Task numbers from
                   + (f" [dim]({skipped} already there)[/]" if skipped else ""))
 
 
+@tasks_app.command("done")
+def tasks_done(numbers: list[int] = typer.Argument(..., help="Task numbers from `proj tasks`"),
+               root: Optional[Path] = RootOpt, receipts: Optional[Path] = ReceiptsOpt):
+    """Tick open tasks done by their numbers in `proj tasks` (their Today copies too; a project whose last
+    open task is ticked becomes completed-on-hold). Undo: `proj task undo <project> <task>`."""
+    ws = _ws(root, receipts)
+    rows = {n: (g, i, t) for n, g, i, t in _open_numbered(ws)}
+    bad = [n for n in numbers if n not in rows]
+    if bad:
+        _fail(f"no open task #{', #'.join(map(str, bad))} (see `proj tasks`)")
+    # A ticked task settles below the open ones, which shifts the open tasks after it: tick each
+    # project's tasks from the bottom up so the other numbers stay valid.
+    picked = sorted(dict.fromkeys(numbers), key=lambda n: (rows[n][0]["project"].folder_name, -rows[n][1]))
+    loaded: dict[str, Project] = {}
+    for n in picked:
+        g, i, t = rows[n]
+        p = loaded.setdefault(g["project"].folder_name, g["project"])
+        before = p.status
+        _run(ops.set_task, p, str(i + 1), True, ws)
+        console.print(f"[green]✔[/] {t['text']}  [dim]· {p.title}[/]", highlight=False)
+        if p.status != before:
+            console.print(f"  All tasks done: {p.title} is now {status_label(p.status)}", highlight=False)
+    g, _, t = rows[picked[-1]]
+    console.print(f"[dim]Undo: proj task undo \"{g['project'].folder_name}\" \"{t['text']}\"[/]", highlight=False)
+
+
 order_app = typer.Typer(invoke_without_command=True,
                         help="Order of areas, and of projects within each area, on the overview (1 = top).")
 app.add_typer(order_app, name="order")

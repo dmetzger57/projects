@@ -2,15 +2,27 @@ import SwiftUI
 import ProjKitCore
 
 /// The Open Tasks tab (a peer of Today): every open task of every project that isn't closed, grouped by
-/// project in overview order. Tap tasks to select them, then Copy to Today (linked, like the ☀ action).
+/// project in overview order. Tap a task's circle to tick it done (in its project and its Today copy, with
+/// Undo); tap Select, then tasks, to Copy them to Today (linked, like the ☀ action).
 /// Each task can also be edited, given a note, photo, link or Apple Reminder here (the ⋯ menu, a left swipe
 /// or long-press), have its links and photos removed, or be opened in its project (scrolled to and highlighted).
 /// Mirrors the web UI's /tasks page and `proj tasks`.
 struct OpenTasksView: View {
     @Environment(AppModel.self) private var model
     @State private var selected: Set<Pick> = []
+    @State private var selecting = false                  // Select mode: circles pick tasks for Copy to Today
+    @State private var completing: Set<Pick> = []         // ticked, waiting for the write (shows the checkmark)
     @State private var search = ""
-    @State private var copiedMessage: String?
+    @State private var status: Status?
+
+    /// The line above the list after an action: what happened, and for a tick, how to undo it.
+    struct Status: Equatable {
+        enum Kind { case copied, completed }
+        let kind: Kind
+        let text: String
+        var undo: Undo? = nil
+        struct Undo: Equatable { let folder: String; let taskText: String }
+    }
     @State private var path = NavigationPath()
     @State private var sheet: TaskSheet?
     @State private var photoRequest: PhotoRequest?
@@ -47,9 +59,7 @@ struct OpenTasksView: View {
         NavigationStack(path: $path) {
             let groups = groups
             List {
-                if let copiedMessage {
-                    Section { Label(copiedMessage, systemImage: "sun.max.fill").foregroundStyle(.orange) }
-                }
+                if let status { Section { statusRow(status) } }
                 ForEach(groups) { g in
                     Section {
                         ForEach(g.tasks) { t in row(g, t) }
@@ -69,16 +79,21 @@ struct OpenTasksView: View {
             .navigationTitle("Open Tasks")
             .refreshable { await model.reload() }
             .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Button { Task { await copySelected() } } label: {
-                        Label(selected.isEmpty ? "Copy to Today" : "Copy \(selected.count) to Today", systemImage: "sun.max")
-                            .labelStyle(.titleAndIcon)
+                if selecting {
+                    ToolbarItem(placement: .primaryAction) {
+                        Button { Task { await copySelected() } } label: {
+                            Label(selected.isEmpty ? "Copy to Today" : "Copy \(selected.count) to Today", systemImage: "sun.max")
+                                .labelStyle(.titleAndIcon)
+                        }
+                        .disabled(selected.isEmpty)
                     }
-                    .disabled(selected.isEmpty)
-                }
-                if !selected.isEmpty {
                     ToolbarItem(placement: .cancellationAction) {
-                        Button("Deselect") { selected = [] }
+                        Button("Done") { selecting = false; selected = [] }
+                    }
+                } else {
+                    ToolbarItem(placement: .primaryAction) {
+                        Button { selecting = true } label: { Label("Select", systemImage: "checklist") .labelStyle(.titleAndIcon) }
+                            .help("Select tasks to copy to Today")
                     }
                 }
             }
@@ -167,6 +182,7 @@ struct OpenTasksView: View {
             }
         }
         Divider()
+        Button { complete(g, t) } label: { Label("Mark Done", systemImage: "checkmark.circle") }
         if inToday(t) {
             Label("In Today", systemImage: "sun.max.fill")
         } else {
@@ -188,7 +204,7 @@ struct OpenTasksView: View {
             }
             .buttonStyle(.plain)
             Spacer()
-            if !picks.isEmpty {
+            if selecting && !picks.isEmpty {
                 Button(all ? "Deselect All" : "Select All") {
                     if all { selected.subtract(picks) } else { selected.formUnion(picks) }
                 }
@@ -205,15 +221,27 @@ struct OpenTasksView: View {
         let pick = Pick(folder: g.project.folderName, index: t.index)
         let today = inToday(t)
         let on = selected.contains(pick)
+        let ticking = completing.contains(pick)
         HStack(alignment: .firstTextBaseline, spacing: 6) {
         Button {
-            guard !today else { return }
-            if on { selected.remove(pick) } else { selected.insert(pick) }
+            if selecting {
+                guard !today else { return }
+                if on { selected.remove(pick) } else { selected.insert(pick) }
+            } else {
+                complete(g, t)
+            }
         } label: {
             HStack(alignment: .firstTextBaseline, spacing: 10) {
-                Image(systemName: today ? "sun.max.fill" : (on ? "checkmark.circle.fill" : "circle"))
-                    .foregroundStyle(today ? Color.orange : (on ? Color.accentColor : Color.secondary))
-                    .imageScale(.large)
+                Group {
+                    if selecting {      // selection: a filled blue check, or ☀ when it's already in Today
+                        Image(systemName: today ? "sun.max.fill" : (on ? "checkmark.circle.fill" : "circle.dashed"))
+                            .foregroundStyle(today ? Color.orange : (on ? Color.accentColor : Color.secondary))
+                    } else {            // the task's own checkbox, like on the project page
+                        Image(systemName: ticking ? "checkmark.circle.fill" : "circle")
+                            .foregroundStyle(ticking ? Color.green : Color.secondary)
+                    }
+                }
+                .imageScale(.large)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(markdown(t.text)).foregroundStyle(.primary)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -243,8 +271,9 @@ struct OpenTasksView: View {
         .buttonStyle(.borderless)
         .tint(.primary)
         .accessibilityLabel(today ? "\(t.text), in Today" : t.text)
-        .accessibilityAddTraits(on ? .isSelected : [])
-        .accessibilityHint(today ? "" : (on ? "Double-tap to deselect" : "Double-tap to select"))
+        .accessibilityAddTraits(selecting && on ? .isSelected : [])
+        .accessibilityHint(selecting ? (today ? "" : (on ? "Double-tap to deselect" : "Double-tap to select"))
+                                     : "Double-tap to mark done")
         Menu { actions(g, t, pick) } label: {
             Image(systemName: "ellipsis.circle").foregroundStyle(.secondary)
         }
@@ -271,6 +300,8 @@ struct OpenTasksView: View {
                 .tint(.accentColor)
         }
         .swipeActions(edge: .leading, allowsFullSwipe: true) {
+            Button { complete(g, t) } label: { Label("Done", systemImage: "checkmark") }
+                .tint(.green)
             if !today {
                 Button { Task { await copy([pick]) } } label: { Label("Today", systemImage: "sun.max") }
                     .tint(.orange)
@@ -291,11 +322,64 @@ struct OpenTasksView: View {
         let added = await model.perform { ws in try Ops.copyManyToToday(ws, pairs) }
         guard let added else { return }
         selected.subtract(picks)
+        selecting = false
         let skipped = pairs.count - added
-        copiedMessage = "Copied \(added) task\(added == 1 ? "" : "s") to Today" + (skipped > 0 ? " (\(skipped) already there)" : "")
+        show(Status(kind: .copied, text: "Copied \(added) task\(added == 1 ? "" : "s") to Today"
+                    + (skipped > 0 ? " (\(skipped) already there)" : "")))
+    }
+
+    /// Ticks a task done, the same as its checkbox on the project page: its Today copy is ticked too, and
+    /// ticking a project's last open task makes it Completed (On Hold). It then leaves this list.
+    private func complete(_ g: OpenTaskGroup, _ t: ProjectTask) {
+        let pick = Pick(folder: g.project.folderName, index: t.index)
+        guard !completing.contains(pick) else { return }
+        withAnimation { _ = completing.insert(pick) }
+        let p = g.project
         Task {
-            try? await Task.sleep(for: .seconds(4))
-            copiedMessage = nil
+            try? await Task.sleep(for: .milliseconds(250))      // let the checkmark show
+            let ok = await model.perform { try Ops.setTask($0, p, index: t.index, done: true) } != nil
+            completing.remove(pick)
+            selected.remove(pick)
+            if ok {
+                show(Status(kind: .completed, text: "Done: \(t.text) · \(p.title)",
+                            undo: .init(folder: p.folderName, taskText: t.text)), seconds: 8)
+            }
+        }
+    }
+
+    /// Unticks a task just ticked here. A ticked task settles among the done ones, so it's found by its text
+    /// (the first done task with that text is the one ticked last).
+    private func undo(_ u: Status.Undo) async {
+        status = nil
+        guard let p = model.project(u.folder),
+              let t = p.tasks.first(where: { $0.done && $0.text == u.taskText }) else {
+            model.errorMessage = "Couldn't find “\(u.taskText)” to undo. Untick it on its project page."
+            return
+        }
+        await model.perform { try Ops.setTask($0, p, index: t.index, done: false) }
+    }
+
+    private func show(_ s: Status, seconds: Double = 4) {
+        withAnimation { status = s }
+        Task {
+            try? await Task.sleep(for: .seconds(seconds))
+            if status == s { withAnimation { status = nil } }
+        }
+    }
+
+    @ViewBuilder
+    private func statusRow(_ s: Status) -> some View {
+        HStack {
+            switch s.kind {
+            case .copied: Label(s.text, systemImage: "sun.max.fill").foregroundStyle(.orange)
+            case .completed: Label(s.text, systemImage: "checkmark.circle.fill").foregroundStyle(.green)
+            }
+            Spacer()
+            if let u = s.undo {
+                Button("Undo") { Task { await undo(u) } }
+                    .buttonStyle(.borderless)
+                    .font(.body.weight(.semibold))
+            }
         }
     }
 }

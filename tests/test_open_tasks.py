@@ -182,3 +182,32 @@ def test_cli_delete_photo_and_link(ws, tmp_path):
     t = Project.load(ws.find("Roof")[0].dir).tasks[1]
     assert t["files"] == [] and t["photos"] == []
     assert run("photo-rm", "2", "1").exit_code == 1
+
+
+def test_web_mark_done_and_undo(ws):
+    # same behavior as OpenTasksView.complete / undo in the apps
+    c = TestClient(create_app(ws))
+    r = c.get("/tasks/list")
+    assert 'hx-post="/tasks/done"' in r.text and "data-select" in r.text
+    ops.copy_to_today(ws, Project.load(ws.find("Roof")[0].dir), "1")     # "Get quotes" is in Today too
+    r = c.post("/tasks/done", data={"pick": "Roof:1"}, headers=HX)
+    assert r.status_code == 200 and "Done: “Get quotes” · Roof" in r.text and 'hx-post="/tasks/undone"' in r.text
+    roof = Project.load(ws.find("Roof")[0].dir)
+    assert [t["text"] for t in roof.tasks if not t["done"]] == ["Buy shingles"]
+    assert all(t["done"] for t in ops.ensure_today(ws).tasks if t["text"] == "Get quotes")   # Today copy ticked
+    r = c.post("/tasks/undone", data={"folder": roof.folder_name, "text": "Get quotes"}, headers=HX)
+    assert r.status_code == 200 and "Not done" in r.text
+    assert "Get quotes" in [t["text"] for t in Project.load(roof.dir).tasks if not t["done"]]
+    assert c.post("/tasks/undone", data={"folder": roof.folder_name, "text": "Nope"}, headers=HX).status_code == 400
+    # the last open task: the project becomes Completed – On Hold
+    r = c.post("/tasks/done", data={"pick": "Shed:1"}, headers=HX)
+    assert "now Completed" in r.text and Project.load(ws.find("Shed")[0].dir).status == "completed-on-hold"
+
+
+def test_cli_done(ws):
+    run = lambda *a: CliRunner().invoke(cli, ["tasks", *a, "--root", str(ws.root), "--receipts", str(ws.receipts_root)])
+    # open: 1 Get quotes, 2 Buy shingles (Roof), 3 Fix shed door (Shed)
+    r = run("done", "1", "2", "3")
+    assert r.exit_code == 0 and "✔ Get quotes" in r.output and "Shed is now Completed" in r.output, r.output
+    assert all(t["done"] for t in Project.load(ws.find("Roof")[0].dir).tasks)
+    assert run("done", "1").exit_code == 1                               # nothing open any more

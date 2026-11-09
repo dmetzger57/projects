@@ -184,14 +184,14 @@ def create_app(ws: Workspace) -> FastAPI:
 
     # ---- All Open Tasks (a peer of Today): every open task, by project; copy a selection to Today ----
     def open_tasks_ctx(copied: int | None = None, skipped: int = 0, form: str | None = None,
-                       pick: str | None = None, done_msg: str | None = None) -> dict:
+                       pick: str | None = None, done_msg: str | None = None, undo: dict | None = None) -> dict:
         in_today = ops.today_ids(ws)
         groups = [dict(area=g["area"], p=g["project"], url=purl(g["project"]),
                        tasks=[dict(n=i + 1, t=t, in_today=t["id"] in in_today) for i, t in g["tasks"]])
                   for g in ops.open_tasks(ws)]
         tomorrow = (dt.datetime.now() + dt.timedelta(days=1)).replace(hour=9, minute=0)
         return dict(groups=groups, total=sum(len(g["tasks"]) for g in groups), copied=copied, skipped=skipped,
-                    form_kind=form, form_pick=pick, done_msg=done_msg,
+                    form_kind=form, form_pick=pick, done_msg=done_msg, undo=undo,
                     remind_default=tomorrow.strftime("%Y-%m-%dT%H:%M"), reminder_list=reminders.REMINDER_LIST,
                     photo_src=lambda url, path: f"{url}/photo/{quote(path.split('/', 1)[1], safe='')}")
 
@@ -248,6 +248,30 @@ def create_app(ws: Workspace) -> FastAPI:
         p, ref, t = _picked(pick)
         ops.add_task_file(p, ref, target, name.strip() or None)
         return open_done(request, f"Added a link to “{t['text']}”.")
+
+    @app.post("/tasks/done", response_class=HTMLResponse)
+    def open_tasks_done(request: Request, pick: str = Form(...)):
+        """Ticks a task done, the same as its checkbox on the project page: its Today copy too, and the
+        project becomes Completed – On Hold when it was the last open task. Offers Undo."""
+        p, ref, t = _picked(pick)
+        before = p.status
+        ops.set_task(p, ref, True, ws)
+        msg = f"Done: “{t['text']}” · {p.title}"
+        if p.status != before:
+            msg += f" (all its tasks are done: now {status_label(p.status)})"
+        return partial(request, "_open_tasks.html",
+                       **open_tasks_ctx(done_msg=msg, undo=dict(folder=p.folder_name, text=t["text"])))
+
+    @app.post("/tasks/undone", response_class=HTMLResponse)
+    def open_tasks_undone(request: Request, folder: str = Form(...), text: str = Form(...)):
+        """Undo of /tasks/done: unticks the task. A ticked task settles among the done ones, so it's found by
+        its text (the first done task with that text is the one ticked last). Same as OpenTasksView.undo."""
+        p = get_project(folder)
+        hits = [i for i, t in enumerate(p.tasks) if t["done"] and t["text"] == text]
+        if not hits:
+            raise ops.OpError(f"no done task “{text}” in {p.title}")
+        ops.set_task(p, str(hits[0] + 1), False, ws)
+        return open_done(request, f"Not done: “{text}” · {p.title}")
 
     @app.post("/tasks/photo/delete", response_class=HTMLResponse)
     def open_tasks_photo_delete(request: Request, pick: str = Form(...), n: int = Form(...)):

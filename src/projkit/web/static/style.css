@@ -270,6 +270,10 @@ details summary { cursor: pointer; color: var(--accent); font-size: 14px; margin
 .open-project a { color: var(--text); text-decoration: none; }
 .open-project a:hover { text-decoration: underline; }
 .open-all { display: inline-flex; }
+/* Open Tasks: a task's checkbox ticks it done; in Select mode, the dashed boxes pick tasks for Copy to Today */
+.open-tasks:not(.selecting) .select-only, .open-tasks.selecting .not-selecting { display: none; }
+.open-task-line { display: flex; gap: 10px; align-items: start; flex: 1; color: var(--text); font-size: 14.5px; }
+.task-pick { outline: 1.5px dashed var(--accent); outline-offset: 1px; border-radius: 3px; }
 .open-edit { display: flex; gap: 6px; flex: 1; }
 .open-edit input { flex: 1; }
 .open-link { text-decoration: none; }

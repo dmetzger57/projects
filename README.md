@@ -46,8 +46,9 @@ proj task remind photo <task> "2026-11-10 09:00"   # Apple Reminder in Reminders
                                         # or long-press › Add Reminder…). The task shows ⏰ with the time. macOS only for CLI/web.
 proj tasks                              # All Open Tasks: every open task of every project that isn't closed, by project
 proj tasks -s quote --area House        # …filtered; numbers stay the same as the full list
-proj tasks today 2 5 7                  # copy those to Today (linked). Web: Open Tasks page, check tasks › ☀ Copy to Today;
-                                        # iPhone/iPad/Mac: Open Tasks tab, tap tasks › Copy to Today
+proj tasks done 2 5                     # tick those done (and their Today copies). Web/app: a task's checkbox
+                                        # on Open Tasks (with Undo); app: also swipe right › Done
+proj tasks today 2 5 7                  # copy those to Today (linked). Web/app: Open Tasks › Select, pick tasks › ☀ Copy to Today
 proj tasks show 5                       # open one: its project, notes, attachments, reminder (web/app: ↗ opens the project at it)
 proj tasks edit 5 "new text"            # edit one (web/app: ✎; app: also swipe left or long-press › Edit…)
 proj tasks note 5 "Ask about cedar"     # add a note    (web: 📝; app: ⋯ › Add Note…)

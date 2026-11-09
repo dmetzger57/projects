@@ -8,8 +8,9 @@ without the Mac being on, and changes show up in `proj` on the Mac.
 **Today:** the day's task list: swipe right on any project's task (or long-press › Copy to Today) to
 add it; ticking it in either place ticks both; add tasks directly; Clear Done for a fresh day ·
 **Open Tasks:** next to Today, every open task of every project that isn't closed, grouped by project in
-overview order (tap a project's name to open it); tap tasks to select them (or Select All per project) and
-Copy to Today, or swipe right on one; filter with search; tasks already in Today show ☀; ⋯ › Edit… edits a task's
+overview order (tap a project's name to open it); tap a task's circle to mark it done (in its project and its
+Today copy; Undo appears at the top), or swipe right › Done; tap **Select** to pick tasks (or Select All per
+project) and Copy to Today, or swipe right › Today on one; filter with search; tasks already in Today show ☀; ⋯ › Edit… edits a task's
 text and ↗ opens its project scrolled to it; the ⋯ menu (or long-press) also has Add Note…, Take/Choose Photo…,
 Add Link… and Add Reminder…, plus Remove Link and Delete Photo when the task has some, and a left swipe has Edit, Note, Remind and Open; each task shows its notes,
 links, photo count and reminder ·
