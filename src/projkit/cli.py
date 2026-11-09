@@ -987,6 +987,55 @@ def receipt_add(project: str, file: Path,
     console.print(f"[green]attached[/] {e['path']}")
 
 
+def _export_photos_selection(dest: Path) -> Path:
+    """Export the one photo selected in the Photos app (as JPEG) into `dest`."""
+    script = ('on run argv\n tell application "Photos"\n  set sel to selection\n'
+              '  if (count of sel) is not 1 then error "Select exactly one photo in Photos (" & (count of sel) & " selected)."\n'
+              '  export sel to (POSIX file (item 1 of argv))\n end tell\nend run')
+    r = subprocess.run(["osascript", "-e", script, str(dest)], capture_output=True, text=True)
+    if r.returncode != 0:
+        msg = r.stderr.strip().split("execution error: ")[-1]
+        console.print(f"[red]Photos: {msg or 'export failed'}[/]")
+        raise typer.Exit(1)
+    out = [f for f in dest.iterdir() if f.is_file()]
+    if len(out) != 1:
+        console.print("[red]Photos exported nothing (is the photo still downloading from iCloud?)[/]")
+        raise typer.Exit(1)
+    return out[0]
+
+
+@receipt_app.command("import")
+def receipt_import(project: str,
+                   file: Optional[Path] = typer.Argument(None, help="Image or PDF to copy in (omit with --from-photos)"),
+                   from_photos: bool = typer.Option(False, "--from-photos", "-p", help="Use the photo selected in the Photos app"),
+                   description: Optional[str] = typer.Option(None, "--description", "-D", help="Default: the vendor, else the file name"),
+                   amount: Optional[float] = typer.Option(None, "--amount", "-$"),
+                   vendor: Optional[str] = typer.Option(None, "--vendor", "-v"),
+                   date: Optional[str] = typer.Option(None, "--date", "-d", help="YYYY-MM-DD (default today)"),
+                   root: Optional[Path] = RootOpt, receipts: Optional[Path] = ReceiptsOpt):
+    """Save a new receipt (a photo, e.g. from Photos) into the receipts folder as <year>/<date> <description>.<ext>.
+    Unlike `receipt add`, the file is copied: use this for images that have no other original."""
+    import tempfile
+    ws = _ws(root, receipts)
+    try:
+        d = dt.date.fromisoformat(date) if date else None
+    except ValueError:
+        console.print(f"[red]bad date: {date}[/]")
+        raise typer.Exit(1)
+    if from_photos == (file is not None):
+        console.print("[red]give a file or --from-photos (not both)[/]")
+        raise typer.Exit(1)
+    p = _pick(ws, project)
+    with tempfile.TemporaryDirectory() as tmp:
+        if from_photos:
+            file = _export_photos_selection(Path(tmp))
+            description = description if description is not None else ""   # Photos names (IMG_1234) say nothing
+        if description is None and vendor:
+            description = ""
+        e = _run(ops.save_receipt_file, ws, p, file, description, amount, vendor, d)
+    console.print(f"[green]saved[/] {e['path']}  [dim]· {p.title}[/]", highlight=False)
+
+
 idea_app = typer.Typer(no_args_is_help=True, help="Idea backlog.")
 app.add_typer(idea_app, name="idea")
 

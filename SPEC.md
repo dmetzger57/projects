@@ -208,8 +208,11 @@ it is **never copied or moved**. Each entry's `path` is either
 - `Documents/…` (relative to the home folder, the same form as Project Files) for a file anywhere else under `~/Documents`.
 
 Files outside `~/Documents` are refused, since the iPhone app could not reach them. The only time a new
-file is written is a document scanned on the iPhone (it has no other original), which is saved as
-`$PROJ_RECEIPTS/<year>/YYYY-MM-DD <description>.pdf`. Receipt files carry the Finder tag `receipt`
+file is written is a receipt that has no other original: a document scanned on the iPhone, or a photo
+taken from Photos (apps: Add Receipt › Choose from Photos; web: "Add receipt from Photos";
+CLI: `proj receipt import`). It is saved as `$PROJ_RECEIPTS/<year>/YYYY-MM-DD <description>.<ext>`
+(`.pdf` for scans, `.jpg` from the apps; the description defaults to the vendor, else `Receipt`), and an
+existing file of that name is never overwritten. Receipt files carry the Finder tag `receipt`
 (the iPhone app cannot set tags; `proj lint` reports untagged receipts as L013 and `--fix` adds the tag).
 
 ## Naming

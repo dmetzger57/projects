@@ -29,7 +29,7 @@ Attach File/Link to add files from iCloud Drive › Documents or URLs, tap one t
 for notes shown under the task, tap a note to edit it, long-press it to delete), notes, **Photos** (Take Photo with the camera or Choose from Photos, with a note; tap to view, touch and hold
 to edit the note or delete; long-press a task › Take Photo / Choose Photo for the task's own photos), editing
 Description, **Project Files** links to files in iCloud Drive › Documents or to URLs (browse or
-type a path, friendly names, Show Paths, tap to open), links, and receipts (scan with the camera or pick a file,
+type a path, friendly names, Show Paths, tap to open), links, and receipts (scan with the camera, choose from Photos, or pick a file,
 preview, detach), rename, close and reopen · **Ideas:** add, delete, make into a project ·
 pull to refresh; reloads when you return to the app.
 
@@ -44,7 +44,7 @@ The same app runs natively on the Mac (macOS 15+): one multiplatform SwiftUI tar
 sidebar (Today, Projects, Ideas, Archive) instead of tabs, the iPad's wide layout (project list, Overview
 tiles, project details), Settings in the app menu (⌘,) and View › Refresh (⌘R); it also reloads whenever you
 switch back to it. Project Files open in their usual app (Preview, Pages…) instead of Quick Look. There's no
-camera or document scanner; add photos with Choose Photo, and receipts with Choose File.
+camera or document scanner; add photos with Choose Photo, and receipts with Choose from Photos or Choose File (Receipts section, or Actions › Add Receipt).
 
 It's sandboxed, so on first launch choose **Documents › Projects** (then, in Settings, your Documents folder
 for Project Files and Documents › Receipts). It remembers them.
@@ -137,7 +137,8 @@ The build appears in App Store Connect → **TestFlight** after processing.
 - `App/`: the SwiftUI app (iOS 17+, macOS 15+). Platform-specific code (camera, document scanner, colors,
   toolbar placement) is in `App/Platform.swift`; the Mac entitlements are in `Mac/Proj.entitlements`.
 - A receipt picked with **Choose File** is linked by its path, never copied (pick it from iCloud Drive › Documents).
-  Only scanned receipts become new files, saved as `Receipts/<year>/<date> <description>.pdf`. iOS can't set Finder tags,
+  Only scanned receipts and receipts chosen from Photos become new files, saved as
+  `Receipts/<year>/<date> <description>.pdf` (or `.jpg`; the photo is scaled down like task photos). iOS can't set Finder tags,
   so run `proj lint --fix` on the Mac to add the `receipt` tag (lint reports it as L013).
 
 ## Checks (no Xcode needed)

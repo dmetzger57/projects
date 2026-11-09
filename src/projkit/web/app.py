@@ -628,6 +628,23 @@ def create_app(ws: Workspace) -> FastAPI:
         ops.add_receipt(ws, p, src, amt, vendor.strip() or None, d)
         return partial(request, "_receipts.html", **_project_ctx(Project.load(p.dir)))
 
+    @app.post("/p/{key}/receipts/upload")
+    async def receipt_upload(request: Request, key: str, image: UploadFile = File(...), description: str = Form(""),
+                             amount: str = Form(""), vendor: str = Form(""), date: str = Form("")):
+        """A new receipt with no other original (a photo from Photos, a scan): saved into the receipts
+        folder as <year>/<date> <description>.<ext>, the same as the apps do."""
+        p = get_project(key)
+        try:
+            amt = float(amount.replace("$", "").replace(",", "")) if amount.strip() else None
+            d = dt.date.fromisoformat(date) if date else None
+        except ValueError as e:
+            raise ops.OpError(f"invalid amount or date: {e}")
+        data, ext = await _upload(image)
+        if ext.lower() not in ops.PHOTO_EXTS | {".pdf"}:
+            raise ops.OpError(f"not an image or PDF: {image.filename}")
+        ops.save_receipt(ws, p, data, ext, description, amt, vendor, d)
+        return partial(request, "_receipts.html", **_project_ctx(Project.load(p.dir)))
+
     @app.post("/p/{key}/receipts/{n}/delete")
     def receipt_delete(request: Request, key: str, n: int):
         p = get_project(key)

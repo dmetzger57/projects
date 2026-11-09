@@ -80,6 +80,7 @@ struct ProjectDetailView: View {
     @State private var pendingOpen: ProjectFile?           // file to open once the Documents folder is chosen
     @State private var scanning = false
     @State private var pendingReceipt: PendingReceipt?
+    @State private var receiptPhoto: PhotoRequest?          // "Choose from Photos" for a receipt
     @State private var preview: URL?
     @State private var fileSheet: FileSheet?
     @AppStorage("showPaths") private var showPaths = false
@@ -275,6 +276,10 @@ struct ProjectDetailView: View {
         .sheet(item: $fileSheet) { s in fileEntrySheet(s, p) }
         .documentScanner(isPresented: $scanning) { pdf in
             pendingReceipt = PendingReceipt(data: pdf, fileExtension: "pdf", suggestedName: "")
+        }
+        // A receipt photo has no other original, so it's saved as a new file (like a scan).
+        .photoPicking($receiptPhoto) { jpeg, _ in
+            pendingReceipt = PendingReceipt(data: jpeg, fileExtension: "jpg", suggestedName: "")
         }
         .quickLookPreview($preview)
         .alert("Rename Project", isPresented: $renaming) {
@@ -597,6 +602,10 @@ struct ProjectDetailView: View {
         Menu {
             Button { renameText = p.title; renaming = true } label: { Label("Rename", systemImage: "pencil") }
                 .disabled(p.isLegacy)
+            if !p.isLegacy {      // also at the bottom of the page (Receipts), easy to miss there
+                Menu { addReceiptButtons } label: { Label("Add Receipt", systemImage: "doc.text") }
+                    .disabled(model.receiptsRoot == nil)
+            }
             if closed {
                 ReopenMenu(project: p)
             } else {
@@ -1136,6 +1145,17 @@ struct ProjectDetailView: View {
         }
     }
 
+    /// Scan / Choose from Photos / Choose File: in the Receipts section and in the Actions menu.
+    @ViewBuilder private var addReceiptButtons: some View {
+        if DocumentScanner.isAvailable {
+            Button { scanning = true } label: { Label("Scan Document", systemImage: "doc.viewfinder") }
+        }
+        Button { receiptPhoto = PhotoRequest(task: nil, source: .library) } label: {
+            Label("Choose from Photos", systemImage: "photo.on.rectangle")
+        }
+        Button { importingDocumentsFolder = false; importing = true } label: { Label("Choose File", systemImage: "folder") }
+    }
+
     private func receipts(_ p: Project) -> some View {
         Section {
             ForEach(p.receipts, id: \.rowID) { r in
@@ -1160,12 +1180,7 @@ struct ProjectDetailView: View {
                 let indices = idx.map { p.receipts[$0].index }.sorted(by: >)
                 Task { await model.perform { ws in for i in indices { try Ops.removeReceipt(ws, p, index: i) } } }
             }
-            Menu {
-                if DocumentScanner.isAvailable {
-                    Button { scanning = true } label: { Label("Scan Document", systemImage: "doc.viewfinder") }
-                }
-                Button { importingDocumentsFolder = false; importing = true } label: { Label("Choose File", systemImage: "folder") }
-            } label: {
+            Menu { addReceiptButtons } label: {
                 Label("Add Receipt", systemImage: "plus.circle")
             }
             .disabled(model.receiptsRoot == nil)

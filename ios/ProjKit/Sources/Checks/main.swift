@@ -662,6 +662,7 @@ test("ops: new project, goals, close/reopen, rename, uniqueness") {
 }
 
 test("ops: receipts are filed by year and referenced") {
+    // same steps as tests/test_ops.py test_new_receipt_is_filed_by_year_and_referenced
     let ws = try tempWorkspace()
     let p = try Ops.newProject(ws, title: "R", area: "House")
     let rel = try Ops.addReceipt(ws, p, data: Data("%PDF".utf8), fileExtension: "PDF", description: "Shingles/roof",
@@ -671,8 +672,18 @@ test("ops: receipts are filed by year and referenced") {
     eq(q.totalCost, 12.5)
     eq(q.receipts[0].vendor, "Lowes")
     check(Ops.receiptURL(ws, q.receipts[0]).map { FileManager.default.fileExists(atPath: $0.path) } ?? false, "file exists")
+    do {   // same name again: never overwrite
+        try Ops.addReceipt(ws, q, data: Data("%PDF".utf8), fileExtension: "pdf", description: "Shingles/roof",
+                           amount: nil, vendor: nil, date: "2026-10-09")
+        check(false, "duplicate receipt name should throw")
+    } catch is OpError {}
     try Ops.removeReceipt(ws, q, index: 0)
     eq(ws.load(p.url).receipts.count, 0)
+    // a photo from Photos: named after the vendor when there's no description
+    eq(try Ops.addReceipt(ws, ws.load(p.url), data: Data("jpg".utf8), fileExtension: "jpg", description: "",
+                          amount: 4, vendor: "Home Depot", date: "2026-11-01"), "2026/2026-11-01 Home Depot.jpg")
+    eq(Ops.receiptFileName(description: "", date: "2026-01-02", ext: ""), "2026-01-02 Receipt")
+    eq(Ops.receiptFileName(description: "2026-01-02 Lowes", date: "2026-01-02", ext: ".JPG"), "2026-01-02 Lowes.jpg")
     eq(Ops.receiptURL(ws, Receipt(index: 0, path: "../../etc/passwd", amount: nil, vendor: nil, date: nil)), nil)
 }
 

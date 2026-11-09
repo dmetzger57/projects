@@ -65,6 +65,8 @@ proj file add photo "Documents/Manuals/scanner.pdf" -n "Scanner manual"   # Proj
 proj file add photo https://docs.google.com/… -n "Plan"                    # …or a URL
 proj file ls|edit|rm|open photo <entry>   # ls --paths shows targets
 proj receipt add roof ~/Documents/Receipts/2026/inv.pdf -$ 412.50 -v Lowes   # records the path; no copy
+proj receipt import roof ~/Desktop/IMG_0042.jpg -$ 19.99 -v "Home Depot"    # a photo: copied to Receipts/<year>/<date> Home Depot.jpg
+proj receipt import roof --from-photos -v Lowes                             # …the photo selected in the Photos app
 proj status photo blocked                # idea | backlog | active | blocked | on-hold | completed-on-hold
                                          # (set automatically when the last open task is ticked)
 proj order                               # areas in order, each with its projects (1 = top)
@@ -100,7 +102,7 @@ make version V=1.2.0      # on an up-to-date, clean main: bump, commit "Version 
 
 `proj serve` opens http://127.0.0.1:8765/ — overview by area (filters, search, goal progress, spend; click an
 area's name to collapse it to just the name, drag ⋮⋮ to reorder areas or the projects in an area),
-project pages (edit Description/Project Files, goals, notes, links, receipts by path, status/close/rename,
+project pages (edit Description/Project Files, goals, notes, links, receipts by path or from Photos, status/close/rename,
 reveal in Finder), idea backlog with "Make project", and a Health page with one-click lint fixes.
 
 - Reads the files on every request and polls for changes, so CLI/Finder/iCloud edits appear live.

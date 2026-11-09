@@ -67,17 +67,39 @@ extension View {
                      save: @escaping (_ jpeg: Data, _ note: String, _ task: Int?) async -> Void) -> some View {
         modifier(PhotoAdding(request: request, save: save))
     }
+
+    /// Presents the camera or the Photos picker for `request`; `picked` gets the JPEG (upright, scaled
+    /// down). Used for task/project photos (then a note) and for receipts from Photos (then their details).
+    func photoPicking(_ request: Binding<PhotoRequest?>,
+                      picked: @escaping (_ jpeg: Data, _ task: Int?) -> Void) -> some View {
+        modifier(PhotoPicking(request: request, picked: picked))
+    }
 }
 
 private struct PhotoAdding: ViewModifier {
     @Binding var request: PhotoRequest?
     let save: (Data, String, Int?) async -> Void
+    @State private var pending: PendingPhoto?
+
+    func body(content: Content) -> some View {
+        content
+            .photoPicking($request) { jpeg, task in pending = PendingPhoto(task: task, jpeg: jpeg) }
+            .sheet(item: $pending) { p in
+                PhotoNoteSheet(jpeg: p.jpeg, title: p.task == nil ? "Add Photo" : "Add Photo to Task") { note in
+                    await save(p.jpeg, note, p.task)
+                }
+            }
+    }
+}
+
+private struct PhotoPicking: ViewModifier {
+    @Binding var request: PhotoRequest?
+    let picked: (Data, Int?) -> Void
     @Environment(AppModel.self) private var model
     @State private var camera = false
     @State private var library = false
-    @State private var picked: PhotosPickerItem?
+    @State private var item: PhotosPickerItem?
     @State private var task: Int?
-    @State private var pending: PendingPhoto?
 
     func body(content: Content) -> some View {
         content
@@ -90,25 +112,20 @@ private struct PhotoAdding: ViewModifier {
                 case .library: library = true
                 }
             }
-            .cameraPicker(isPresented: $camera) { jpeg in pending = PendingPhoto(task: task, jpeg: jpeg) }
-            .photosPicker(isPresented: $library, selection: $picked, matching: .images, preferredItemEncoding: .compatible)
-            .onChange(of: picked) { _, item in
-                guard let item else { return }
-                picked = nil
+            .cameraPicker(isPresented: $camera) { jpeg in picked(jpeg, task) }
+            .photosPicker(isPresented: $library, selection: $item, matching: .images, preferredItemEncoding: .compatible)
+            .onChange(of: item) { _, it in
+                guard let it else { return }
+                item = nil
                 let forTask = task
                 Task {
-                    let data = try? await item.loadTransferable(type: Data.self)
+                    let data = try? await it.loadTransferable(type: Data.self)
                     let jpeg = await Task.detached(priority: .userInitiated) { data.flatMap(PhotoPrep.jpeg(from:)) }.value
                     if let jpeg {
-                        pending = PendingPhoto(task: forTask, jpeg: jpeg)
+                        picked(jpeg, forTask)
                     } else {
                         model.errorMessage = "Couldn't read that photo. If it's in iCloud Photos, wait for it to download and try again."
                     }
-                }
-            }
-            .sheet(item: $pending) { p in
-                PhotoNoteSheet(jpeg: p.jpeg, title: p.task == nil ? "Add Photo" : "Add Photo to Task") { note in
-                    await save(p.jpeg, note, p.task)
                 }
             }
     }

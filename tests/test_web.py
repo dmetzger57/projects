@@ -103,6 +103,20 @@ def test_receipt_reference_serve_detach(client, ws):
     assert proj(ws).receipts == [] and src.exists()
 
 
+def test_receipt_from_photos_is_saved_and_served(client, ws):
+    files = {"image": ("IMG_0042.jpeg", b"\xff\xd8jpeg", "image/jpeg")}
+    r = client.post("/p/Roof%20Repair/receipts/upload", files=files, headers=HX,
+                    data={"description": "", "amount": "42", "vendor": "Lowes", "date": "2026-10-09"})
+    assert r.status_code == 200, r.text
+    assert "2026-10-09 Lowes.jpeg" in r.text
+    rec = proj(ws).receipts[0]
+    assert rec["path"] == "2026/2026-10-09 Lowes.jpeg" and rec["amount"] == 42
+    assert client.get("/p/Roof%20Repair/receipts/1").content == b"\xff\xd8jpeg"
+    bad = {"image": ("notes.txt", b"x", "text/plain")}
+    assert client.post("/p/Roof%20Repair/receipts/upload", files=bad, headers=HX).status_code == 400
+    assert len(proj(ws).receipts) == 1
+
+
 def test_status_close_reopen_rename(client, ws):
     client.post("/p/Roof%20Repair/status", data={"status": "on-hold"}, headers=HX)
     assert proj(ws).status == "on-hold"

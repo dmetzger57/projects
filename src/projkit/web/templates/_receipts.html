@@ -37,4 +37,20 @@
       <p class="hint">The file stays where it is; the project only records its path (no copy is made). It is tagged “receipt”.</p>
     </form>
   </details>
+  <details>
+    <summary>Add receipt from Photos</summary>
+    <form hx-post="{{ url }}/receipts/upload" hx-encoding="multipart/form-data" hx-target="#receipts"
+          hx-swap="outerHTML" class="stack">
+      <input type="file" name="image" accept="image/*,application/pdf" required aria-label="Receipt photo">
+      <input name="description" placeholder="Description (default: vendor)" aria-label="Description">
+      <div class="add-row">
+        <input name="amount" inputmode="decimal" placeholder="Amount" aria-label="Amount">
+        <input name="date" type="date" value="{{ today }}" aria-label="Date">
+      </div>
+      <input name="vendor" placeholder="Vendor" aria-label="Vendor">
+      <button class="btn primary">Save receipt</button>
+      <p class="hint">A photo has no other original, so it is saved in the Receipts folder as
+        <code>&lt;year&gt;/&lt;date&gt; &lt;description&gt;</code> and tagged “receipt”.</p>
+    </form>
+  </details>
 </section>

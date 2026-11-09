@@ -135,6 +135,31 @@ def test_receipt_elsewhere_in_documents_referenced_by_path(ws, tmp_path, monkeyp
         ops.add_receipt(ws, p, outside)
 
 
+def test_new_receipt_is_filed_by_year_and_referenced(ws, tmp_path):
+    # same steps as "ops: receipts are filed by year and referenced" in ios/ProjKit Checks
+    p = ops.new_project(ws, "R", "House")
+    e = ops.save_receipt(ws, p, b"%PDF", "PDF", "Shingles/roof", 12.5, "Lowes", dt.date(2026, 10, 9))
+    assert e["path"] == "2026/2026-10-09 Shingles-roof.pdf"
+    q = Project.load(p.dir)
+    assert q.total_cost == 12.5 and q.receipts[0]["vendor"] == "Lowes"
+    assert ops.receipt_target(ws, e["path"]).read_bytes() == b"%PDF"
+    with pytest.raises(ops.OpError):  # same name again: never overwrite
+        ops.save_receipt(ws, q, b"%PDF", "pdf", "Shingles/roof", None, None, dt.date(2026, 10, 9))
+    ops.remove_receipt(q, 0)
+    assert Project.load(p.dir).receipts == []
+    # an image from Photos: copied in, named after the vendor when there's no description
+    img = tmp_path / "IMG_0042.HEIC"
+    img.write_bytes(b"heic")
+    e = ops.save_receipt_file(ws, Project.load(p.dir), img, "", 4.0, "Home Depot", dt.date(2026, 11, 1))
+    assert e["path"] == "2026/2026-11-01 Home Depot.heic" and img.exists()
+    assert ops.receipt_file_name("", dt.date(2026, 1, 2), "") == "2026-01-02 Receipt"
+    assert ops.receipt_file_name("2026-01-02 Lowes", dt.date(2026, 1, 2), ".JPG") == "2026-01-02 Lowes.jpg"
+    with pytest.raises(ops.OpError):
+        (tmp_path / "notes.txt").write_text("x")
+        ops.save_receipt_file(ws, p, tmp_path / "notes.txt")
+    assert [i for i in lint_workspace(ws) if i.severity == "error"] == []
+
+
 def test_ideas_roundtrip_and_promote(ws):
     ops.add_idea(ws, "Backyard Sequoia tree")
     ops.add_idea(ws, "Solar panels")

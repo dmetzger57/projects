@@ -182,6 +182,23 @@ struct ReceiptDetailsSheet: View {
     @State private var date = Date()
     @Environment(\.dismiss) private var dismiss
 
+    /// The image, when the new receipt is a photo (not a scanned PDF or an existing file).
+    private let photo: Image?
+
+    init(pending: PendingReceipt, save: @escaping (String, String?, Double?, String) async -> Void) {
+        self.pending = pending
+        self.save = save
+        if let data = pending.data, pending.fileExtension == "jpg" {
+            #if os(iOS)
+            photo = UIImage(data: data).map { Image(uiImage: $0) }
+            #else
+            photo = NSImage(data: data).map { Image(nsImage: $0) }
+            #endif
+        } else {
+            photo = nil
+        }
+    }
+
     private var parsedAmount: Double? {
         let cleaned = amount.replacingOccurrences(of: "$", with: "").replacingOccurrences(of: ",", with: "")
             .trimmingCharacters(in: .whitespaces)
@@ -191,6 +208,15 @@ struct ReceiptDetailsSheet: View {
     var body: some View {
         NavigationStack {
             Form {
+                if let image = photo {      // a receipt from Photos: read the amount off it
+                    Section {
+                        image.resizable().scaledToFit()
+                            .frame(maxHeight: 280).frame(maxWidth: .infinity)
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                            .accessibilityLabel("The receipt photo")
+                    }
+                    .listRowBackground(Color.clear)
+                }
                 Section {
                     if pending.reference == nil { TextField("Description", text: $desc) }
                     TextField("Vendor", text: $vendor)
@@ -221,7 +247,7 @@ struct ReceiptDetailsSheet: View {
                 }
             }
         }
-        .sheetSize(width: 480, height: 420)
+        .sheetSize(width: 480, height: photo == nil ? 420 : 720)
         .onAppear { desc = pending.suggestedName }
     }
 }

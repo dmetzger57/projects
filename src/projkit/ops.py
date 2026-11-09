@@ -1143,6 +1143,60 @@ def add_receipt(ws: Workspace, p: Project, src: Path, amount: float | None = Non
     return entry
 
 
+def receipt_file_name(description: str, date: dt.date, ext: str) -> str:
+    """"2026-10-09 Shingles-roof.pdf". Same as Ops.receiptFileName (ios/ProjKit)."""
+    desc = _BAD_NAME.sub("-", description.strip())
+    if re.match(r"^\d{4}-\d{2}-\d{2} ", desc):
+        desc = desc[11:]
+    desc = desc or "Receipt"
+    e = ext.lower().strip(".")
+    return f"{date.isoformat()} {desc}" + (f".{e}" if e else "")
+
+
+def save_receipt(ws: Workspace, p: Project, data: bytes, ext: str, description: str = "",
+                 amount: float | None = None, vendor: str | None = None, date: dt.date | None = None,
+                 tag: bool = True) -> dict:
+    """Saves a new receipt that has no other original (a photo from Photos, a scan) as
+    <receipts>/<year>/<date> <description>.<ext> and references it. Existing files are never
+    copied: use add_receipt for those. Same as Ops.addReceipt(data:) (ios/ProjKit)."""
+    if not data:
+        raise OpError("the receipt is empty")
+    date = date or _today()
+    vendor = (vendor or "").strip() or None
+    name = receipt_file_name(description.strip() or (vendor or ""), date, ext)
+    rel = f"{date.year:04d}/{name}"
+    target = ws.receipts_root.expanduser() / rel
+    if target.exists():
+        raise OpError(f"receipt already exists: {rel}")
+    if any(r.get("path") == rel for r in p.receipts):
+        raise OpError(f"receipt already attached: {rel}")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(data)
+    if tag:
+        try:
+            tag_file(target)
+        except (OSError, subprocess.CalledProcessError):
+            pass    # tags are a convenience; `proj lint --fix` adds missing ones
+    entry = CommentedMap(path=rel, amount=amount, vendor=vendor, date=date)
+    _seq(p, "receipts").append(entry)
+    p.save()
+    return entry
+
+
+def save_receipt_file(ws: Workspace, p: Project, src: Path, description: str | None = None,
+                      amount: float | None = None, vendor: str | None = None,
+                      date: dt.date | None = None) -> dict:
+    """Copies an image (e.g. exported from Photos) into the receipts folder as a new receipt.
+    The description defaults to the file's name."""
+    src = Path(src).expanduser()
+    if not src.is_file():
+        raise OpError(f"no such file: {src}")
+    if src.suffix.lower() not in PHOTO_EXTS | {".pdf"}:
+        raise OpError(f"not an image or PDF: {src.name}")
+    return save_receipt(ws, p, src.read_bytes(), src.suffix,
+                        src.stem if description is None else description, amount, vendor, date)
+
+
 # ---- idea backlog ----------------------------------------------------------
 def backlog_path(ws: Workspace) -> Path:
     return ws.root / f"{BACKLOG_STEM}.md"
