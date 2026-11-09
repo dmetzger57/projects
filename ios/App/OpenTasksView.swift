@@ -4,7 +4,7 @@ import ProjKitCore
 /// The Open Tasks tab (a peer of Today): every open task of every project that isn't closed, grouped by
 /// project in overview order. Tap tasks to select them, then Copy to Today (linked, like the ☀ action).
 /// Each task can also be edited, given a note, photo, link or Apple Reminder here (the ⋯ menu, a left swipe
-/// or long-press), or opened in its project (scrolled to and highlighted).
+/// or long-press), have its links and photos removed, or be opened in its project (scrolled to and highlighted).
 /// Mirrors the web UI's /tasks page and `proj tasks`.
 struct OpenTasksView: View {
     @Environment(AppModel.self) private var model
@@ -142,6 +142,30 @@ struct OpenTasksView: View {
         Button { sheet = TaskSheet(kind: .remind, project: g.project, task: t) } label: {
             Label("Add Reminder…", systemImage: "bell.badge")
         }
+        if !t.files.isEmpty || !t.photos.isEmpty {
+            Divider()
+            let p = g.project
+            if !t.files.isEmpty {       // same as the project page's "Remove Attachment"
+                Menu {
+                    ForEach(t.files) { f in
+                        Button(role: .destructive) {
+                            Task { await model.perform { try Ops.removeTaskFile($0, p, task: t.index, index: f.index) } }
+                        } label: { Label(f.name, systemImage: f.isURL ? "link" : "doc") }
+                    }
+                } label: { Label("Remove Link", systemImage: "minus.circle") }
+            }
+            if !t.photos.isEmpty {      // deletes the file too, like Delete Photo on the project page
+                Menu {
+                    ForEach(t.photos) { ph in
+                        Button(role: .destructive) {
+                            Task { await model.perform { try Ops.removePhoto($0, p, index: ph.index, task: t.index) } }
+                        } label: {
+                            Label(ph.note.isEmpty ? "Photo \(ph.index + 1)" : "Photo \(ph.index + 1): \(ph.note)", systemImage: "photo")
+                        }
+                    }
+                } label: { Label("Delete Photo", systemImage: "trash") }
+            }
+        }
         Divider()
         if inToday(t) {
             Label("In Today", systemImage: "sun.max.fill")
@@ -227,7 +251,7 @@ struct OpenTasksView: View {
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
         .fixedSize()
-        .help("Edit, add a note, photo, link or reminder")
+        .help("Edit; add a note, photo, link or reminder; remove links and photos")
         .accessibilityLabel("Actions for “\(t.text)”")
         Button { path.append(pick) } label: {
             Image(systemName: "arrow.up.forward.square").foregroundStyle(.secondary)

@@ -53,6 +53,8 @@ proj tasks edit 5 "new text"            # edit one (web/app: ✎; app: also swip
 proj tasks note 5 "Ask about cedar"     # add a note    (web: 📝; app: ⋯ › Add Note…)
 proj tasks photo 5 ~/Desktop/a.jpg -n "Sample"   # add a photo (web: 📷; app: ⋯ › Take/Choose Photo…)
 proj tasks link 5 https://example.com --name "Supplier"   # add a link (web: 🔗; app: ⋯ › Add Link…)
+proj tasks link-rm 5 Supplier           # remove a link: # from `proj tasks show`, or part of its name (web: × by it; app: ⋯ › Remove Link)
+proj tasks photo-rm 5 1                 # delete a photo and its file (web: × under it; app: ⋯ › Delete Photo)
 proj tasks remind 5 "2026-11-20 10:00"  # Apple Reminder (web: ⏰; app: ⋯ › Add Reminder…)
 proj task ls photo --archived           # …and list the project's archived tasks below its own
 proj archive                            # all archived tasks with their project and date (web/iPhone: Archive)

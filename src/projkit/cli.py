@@ -605,10 +605,10 @@ def tasks_show(number: int = typer.Argument(..., help="Task number from `proj ta
     bell = f"  [cyan]⏰ {reminders.reminder_label(t['reminder'])}[/]" if t["reminder"] else ""
     console.print(f"  ☐ {t['text']}{sun}{bell}", highlight=False)
     _print_task_details(t)
-    for ph in t["photos"]:
-        console.print(f"       📷 {ph['note'] or ph['path']}  [dim]{ph['path']}[/]", highlight=False)
-    console.print(f"[dim]Edit: proj tasks edit {number} \"new text\"  ·  more: proj task … \"{p.folder_name}\" {i + 1}[/]",
-                  highlight=False)
+    for j, ph in enumerate(t["photos"], 1):
+        console.print(f"       {j}. 📷 {ph['note'] or ph['path']}  [dim]{ph['path']}[/]", highlight=False)
+    console.print(f"[dim]Edit: proj tasks edit {number} \"new text\"  ·  delete: proj tasks link-rm|photo-rm {number} <#>"
+                  f"  ·  more: proj task … \"{p.folder_name}\" {i + 1}[/]", highlight=False)
 
 
 @tasks_app.command("edit")
@@ -650,6 +650,27 @@ def tasks_link(number: int = typer.Argument(..., help="Task number from `proj ta
     g, i, t = _open_row(_ws(root, receipts), number)
     f = _run(ops.add_task_file, g["project"], str(i + 1), target, name)
     console.print(f"[green]link added[/] to {t['text']}: {f['name']}  [dim]· {g['project'].title}[/]", highlight=False)
+
+
+@tasks_app.command("photo-rm")
+def tasks_photo_rm(number: int = typer.Argument(..., help="Task number from `proj tasks`"),
+                   photo: str = typer.Argument(..., help="Photo number from `proj tasks show`, or text of its note"),
+                   root: Optional[Path] = RootOpt, receipts: Optional[Path] = ReceiptsOpt):
+    """Delete a photo from an open task (its file is deleted too)."""
+    g, i, t = _open_row(_ws(root, receipts), number)
+    ph = _run(ops.remove_photo, g["project"], photo, task=str(i + 1))
+    console.print(f"[red]photo deleted[/] from {t['text']}: {ph['note'] or ph['path']}  [dim]· {g['project'].title}[/]",
+                  highlight=False)
+
+
+@tasks_app.command("link-rm")
+def tasks_link_rm(number: int = typer.Argument(..., help="Task number from `proj tasks`"),
+                  link: str = typer.Argument(..., help="Link number from `proj tasks show`, or part of its name/target"),
+                  root: Optional[Path] = RootOpt, receipts: Optional[Path] = ReceiptsOpt):
+    """Remove a link (or file link) from an open task. A linked file itself is not touched."""
+    g, i, t = _open_row(_ws(root, receipts), number)
+    f = _run(ops.remove_task_file, g["project"], str(i + 1), link)
+    console.print(f"[red]link removed[/] from {t['text']}: {f['name']}  [dim]· {g['project'].title}[/]", highlight=False)
 
 
 @tasks_app.command("remind")

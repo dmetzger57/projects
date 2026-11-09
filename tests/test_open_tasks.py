@@ -144,3 +144,41 @@ def test_cli_add_note_photo_link_reminder(ws, tmp_path, monkeypatch):
     r = run("show", "2")
     assert "Cedar, not asphalt" in r.output and "Supplier" in r.output and "Sample" in r.output and "⏰" in r.output
     assert run("note", "9", "x").exit_code == 1
+
+
+def test_web_delete_photo_and_link(ws):
+    c = TestClient(create_app(ws))
+    roof = ws.find("Roof")[0]
+    p = Project.load(roof.dir)
+    ops.add_task_file(p, "2", "https://example.com/a", "Supplier")
+    ops.add_task_file(Project.load(roof.dir), "2", "https://example.com/b", "Backup")
+    ph = ops.add_photo(Project.load(roof.dir), b"\xff\xd8\xff", ".jpg", "Sample", task="2")
+    photo_file = ops.photo_path(Project.load(roof.dir), ph["path"])
+    assert photo_file.exists()
+    r = c.get("/tasks/list")
+    assert 'hx-post="/tasks/photo/delete"' in r.text and 'hx-post="/tasks/link/delete"' in r.text
+    r = c.post("/tasks/link/delete", data={"pick": "Roof:2", "n": "1"}, headers=HX)
+    assert r.status_code == 200 and "Removed “Supplier”" in r.text and ">Backup</a>" in r.text
+    r = c.post("/tasks/photo/delete", data={"pick": "Roof:2", "n": "1"}, headers=HX)
+    assert r.status_code == 200 and "Deleted a photo" in r.text and 'alt="Sample"' not in r.text
+    t = Project.load(roof.dir).tasks[1]
+    assert [f["name"] for f in t["files"]] == ["Backup"] and t["photos"] == [] and not photo_file.exists()
+    assert c.post("/tasks/photo/delete", data={"pick": "Roof:2", "n": "1"}, headers=HX).status_code == 400
+    assert c.post("/tasks/link/delete", data={"pick": "Roof:2", "n": "5"}, headers=HX).status_code == 400
+
+
+def test_cli_delete_photo_and_link(ws, tmp_path):
+    run = lambda *a: CliRunner().invoke(cli, ["tasks", *a, "--root", str(ws.root), "--receipts", str(ws.receipts_root)])
+    img = tmp_path / "sample.jpg"
+    img.write_bytes(b"\xff\xd8\xff")
+    assert run("photo", "2", str(img), "--note", "Sample").exit_code == 0
+    assert run("link", "2", "https://example.com/shingles", "--name", "Supplier").exit_code == 0
+    r = run("show", "2")
+    assert "1. 📷 Sample" in r.output and "photo-rm" in r.output
+    r = run("link-rm", "2", "Supplier")
+    assert r.exit_code == 0 and "link removed" in r.output, r.output
+    r = run("photo-rm", "2", "1")
+    assert r.exit_code == 0 and "photo deleted" in r.output, r.output
+    t = Project.load(ws.find("Roof")[0].dir).tasks[1]
+    assert t["files"] == [] and t["photos"] == []
+    assert run("photo-rm", "2", "1").exit_code == 1

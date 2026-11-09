@@ -249,6 +249,20 @@ def create_app(ws: Workspace) -> FastAPI:
         ops.add_task_file(p, ref, target, name.strip() or None)
         return open_done(request, f"Added a link to “{t['text']}”.")
 
+    @app.post("/tasks/photo/delete", response_class=HTMLResponse)
+    def open_tasks_photo_delete(request: Request, pick: str = Form(...), n: int = Form(...)):
+        """Deletes photo `n` (1-based) of a task, and its file."""
+        p, ref, t = _picked(pick)
+        ops.remove_photo(p, str(n), task=ref)
+        return open_done(request, f"Deleted a photo from “{t['text']}”.")
+
+    @app.post("/tasks/link/delete", response_class=HTMLResponse)
+    def open_tasks_link_delete(request: Request, pick: str = Form(...), n: int = Form(...)):
+        """Removes link `n` (1-based) of a task; a linked file itself is not touched."""
+        p, ref, t = _picked(pick)
+        f = ops.remove_task_file(p, ref, str(n))
+        return open_done(request, f"Removed “{f['name']}” from “{t['text']}”.")
+
     @app.post("/tasks/remind", response_class=HTMLResponse)
     def open_tasks_remind(request: Request, pick: str = Form(...), when: str = Form(...), text: str = Form("")):
         p, ref, t = _picked(pick)

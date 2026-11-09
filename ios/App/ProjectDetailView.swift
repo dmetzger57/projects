@@ -834,15 +834,29 @@ struct ProjectDetailView: View {
                             } label: { Label("Delete Note", systemImage: "minus.circle") }
                         }
                     }
-                    if !isToday {
+                    if !isToday || !t.photos.isEmpty {
                         Section("Photos") {
-                            if Camera.isAvailable {
-                                Button { photoRequest = PhotoRequest(task: t.index, source: .camera) } label: {
-                                    Label("Take Photo…", systemImage: "camera")
+                            if !isToday {
+                                if Camera.isAvailable {
+                                    Button { photoRequest = PhotoRequest(task: t.index, source: .camera) } label: {
+                                        Label("Take Photo…", systemImage: "camera")
+                                    }
+                                }
+                                Button { photoRequest = PhotoRequest(task: t.index, source: .library) } label: {
+                                    Label("Choose Photo…", systemImage: "photo.on.rectangle")
                                 }
                             }
-                            Button { photoRequest = PhotoRequest(task: t.index, source: .library) } label: {
-                                Label("Choose Photo…", systemImage: "photo.on.rectangle")
+                            if !t.photos.isEmpty {      // also on each thumbnail's own long-press menu
+                                Menu {
+                                    ForEach(t.photos) { ph in
+                                        Button(role: .destructive) {
+                                            Task { await model.perform { try Ops.removePhoto($0, p, index: ph.index, task: t.index) } }
+                                        } label: {
+                                            Label(ph.note.isEmpty ? "Photo \(ph.index + 1)" : "Photo \(ph.index + 1): \(ph.note)",
+                                                  systemImage: "photo")
+                                        }
+                                    }
+                                } label: { Label("Delete Photo", systemImage: "trash") }
                             }
                         }
                     }

@@ -11,7 +11,7 @@ add it; ticking it in either place ticks both; add tasks directly; Clear Done fo
 overview order (tap a project's name to open it); tap tasks to select them (or Select All per project) and
 Copy to Today, or swipe right on one; filter with search; tasks already in Today show ☀; ⋯ › Edit… edits a task's
 text and ↗ opens its project scrolled to it; the ⋯ menu (or long-press) also has Add Note…, Take/Choose Photo…,
-Add Link… and Add Reminder…, and a left swipe has Edit, Note, Remind and Open; each task shows its notes,
+Add Link… and Add Reminder…, plus Remove Link and Delete Photo when the task has some, and a left swipe has Edit, Note, Remind and Open; each task shows its notes,
 links, photo count and reminder ·
 **Reminders:** swipe right on a task (or long-press › Add Reminder…) to create an Apple Reminder in the
 “Projects Tasks” list: the text starts as the task's and can be edited, pick the date and time; the task then

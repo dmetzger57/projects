@@ -57,7 +57,11 @@
             {% for f in x.t.files %}
             <li><span class="file-icon" aria-hidden="true">{{ '🔗' if f.kind == 'url' else '📄' }}</span>
               {% if f.kind == 'url' %}<a href="{{ f.target|safe_url }}" target="_blank" rel="noopener noreferrer" title="{{ f.target }}">{{ f.name }}</a>
-              {% else %}<span title="{{ f.target }}">{{ f.name }}</span>{% endif %}</li>
+              {% else %}<span title="{{ f.target }}">{{ f.name }}</span>{% endif %}
+              <button type="button" class="x" title="Remove link" aria-label="Remove link “{{ f.name }}” from “{{ x.t.text }}”"
+                      hx-post="/tasks/link/delete" hx-vals='{"pick": {{ pick|tojson }}, "n": {{ loop.index }}}'
+                      hx-target="#open-tasks" hx-swap="outerHTML"
+                      hx-confirm="Remove the link “{{ f.name }}”? A linked file itself is not touched.">×</button></li>
             {% endfor %}
           </ul>
           {% endif %}
@@ -68,6 +72,15 @@
               <a href="{{ photo_src(g.url, ph.path) }}" target="_blank" rel="noopener" title="{{ ph.note or 'Open photo' }}">
                 <img src="{{ photo_src(g.url, ph.path) }}" alt="{{ ph.note or 'Photo' }}" loading="lazy">
               </a>
+              <div class="photo-caption">
+                <span class="{{ 'muted' if not ph.note }}">{{ ph.note or 'No note' }}</span>
+                <span class="photo-actions">
+                  <button type="button" class="x" title="Delete photo" aria-label="Delete photo {{ loop.index }} of “{{ x.t.text }}”"
+                          hx-post="/tasks/photo/delete" hx-vals='{"pick": {{ pick|tojson }}, "n": {{ loop.index }}}'
+                          hx-target="#open-tasks" hx-swap="outerHTML"
+                          hx-confirm="Delete this photo? Its file is deleted too.">×</button>
+                </span>
+              </div>
             </li>
             {% endfor %}
           </ul>
