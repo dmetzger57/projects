@@ -3,6 +3,20 @@
 CLI, local web UI, and iPhone/iPad/Mac app ([ios/](ios/README.md)) for the project folders in `~/Documents/Projects`.
 The file format is defined in [SPEC.md](SPEC.md); the files are the source of truth.
 
+## Screenshots (Mac app)
+
+**Projects**: areas in the sidebar list, with an overview of each project's goals, tasks and spending.
+![Projects](docs/screenshots/mac-projects.png)
+
+**Today**: tasks copied from projects (each shows where it came from), plus tasks added directly.
+![Today](docs/screenshots/mac-today.png)
+
+**Open Tasks**: every open task across projects, grouped by project, with a filter and Select mode.
+![Open Tasks](docs/screenshots/mac-open-tasks.png)
+
+**Archive**: archived tasks with their attachments and links, filterable by project and time.
+![Archive](docs/screenshots/mac-archive.png)
+
 ## Setup
 
 ```sh
