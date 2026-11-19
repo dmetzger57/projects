@@ -1,0 +1,157 @@
+# Proj web UI tour (viewport 1280x768). See drive.mjs for the commands.
+at|700|420
+pause|0.8
+
+# 1. Today
+scene|Today|Your list for the day. Tasks copied from projects stay linked to them.
+pause|3.2
+click|css:#tasks li::Pick up dry cleaning>>input[type=checkbox]
+pause|0.6
+scene|Today|Tick a project task here and it is ticked in its project too.
+click|css:#tasks li::Get three contractor quotes>>input[type=checkbox]
+pause|1.4
+scene|Today|Add tasks straight to Today, and drag them into any order.
+click|Add a task
+type|Renew library books
+key|Enter
+pause|1.2
+drag|^Reorder “Call the vet|0|-108
+pause|1.6
+
+# 2. Open Tasks
+click|Open Tasks
+scene|Open Tasks|Every open task of every project, grouped by project.
+pause|2.5
+scroll|520
+pause|1.2
+scroll|-520
+scene|Open Tasks|Filter the list by task or project name.
+click|Filter tasks or projects
+type|garage
+pause|2.2
+key|Backspace
+key|Backspace
+key|Backspace
+key|Backspace
+key|Backspace
+key|Backspace
+pause|0.8
+scene|Open Tasks|Add a note, photo, link or reminder to any task, or open it in its project.
+click|Add a note to “Clear the gutters”
+pause|0.6
+type|Ladder is in the garage
+key|Enter
+pause|1.8
+scene|Open Tasks|Click Select, pick several tasks and copy them to Today at once.
+click|Select
+click|Select “Install wall shelving” to copy to Today
+click|Select “Donate old bikes” to copy to Today
+pause|0.8
+click|^☀ Copy
+pause|2
+
+# 3. Overview
+click|Overview
+scene|Overview|Projects by area as tiles, with goal and task progress and spending.
+pause|3
+scroll|420
+pause|1.2
+scroll|-420
+pause|0.6
+scene|Overview|Collapse every area to just its name, or fold one area at a time.
+click|Collapse all
+pause|1.6
+click|Expand all
+pause|1.4
+click|css:section[data-area=Home] .area-toggle
+pause|1.2
+click|css:section[data-area=Home] .area-toggle
+pause|1
+scene|Overview|Show projects by status, or search names, goals and notes.
+click|css:a.chip::Blocked
+pause|1.6
+click|css:a.chip::All
+pause|1.6
+click|css:a.chip::Open
+pause|0.6
+click|Search projects, goals, notes…
+type|holidays
+key|Enter
+pause|2.4
+click|css:a.chip::Open
+pause|1
+
+# 4. A project
+scene|A project|A project page: status, goals, tasks, photos, notes, files, links and receipts.
+click|css:.card-title::Kitchen Remodel
+pause|2.8
+scene|A project|Change the status from a menu.
+select|Status|blocked
+pause|1.4
+select|Status|active
+pause|0.8
+scene|A project|Tick off goals as you reach them.
+click|css:#goals li::Finish before the holidays>>input[type=checkbox]
+pause|1.6
+scene|A project|The task list: tick, add, edit, add notes, drag to reorder.
+click|css:#tasks li::Order cabinet hardware>>input[type=checkbox]
+pause|1
+click|Add a task
+type|Pick paint colors
+key|Enter
+pause|1.4
+scene|A project|Each task can go to Today, move to another project or be archived.
+hover|Copy “Choose countertop material” to Today
+pause|0.8
+click|Copy “Choose countertop material” to Today
+pause|1.6
+click|Archive “Measure the pantry wall”
+pause|1.8
+scene|A project|Photos with notes, dated notes, Project Files and links.
+scroll|380
+pause|1.6
+click|Add a note for today…
+type|Cabinet delivery moved to Friday.
+key|cmd+Enter
+pause|2
+scroll|-380
+scene|A project|Receipts add up to the project's spending.
+hover|css:#receipts h3
+pause|3
+
+# 5. New project
+scene|New project|Create a project in any area; it starts from your template.
+click|css:a.btn.primary[href="/new"]
+pause|1
+type|Patio Furniture
+select|css:select[name=area]|Home
+pause|0.8
+click|Create
+pause|2.8
+
+# 6. Ideas
+click|Ideas
+scene|Ideas|An idea backlog for someday-maybe projects.
+pause|1.4
+click|New idea
+type|Plant a pollinator garden
+key|Enter
+pause|1.6
+scene|Ideas|Turn an idea into a project in any area.
+hover|Make project|1
+pause|2.4
+
+# 7. Archive
+click|Archive
+scene|Archive|Archived tasks keep their notes and attachments, and can be restored.
+pause|2.4
+select|css:select[name=project]|Kitchen Remodel
+pause|2
+select|css:select[name=project]|
+pause|1.2
+
+# 8. Back to Today
+click|Today
+scene|Today|Everything you copied is waiting in Today.
+pause|4
+end

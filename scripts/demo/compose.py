@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Builds the final demo video from a recording: <work dir>/raw.mov + events.txt + rec_start.txt,
 with captions, click/touch indicators and intro/outro cards drawn by render.swift (next to this file).
-usage: compose.py <work dir> <iPhone|iPad|Mac> <output.mp4>"""
+usage: compose.py <work dir> <iPhone|iPad|Mac|Web> <output.mp4>"""
 import subprocess, sys
 from pathlib import Path
 
@@ -15,6 +15,8 @@ for e in ev: e[1] = float(e[1]) - S                      # seconds into raw.mov
 LAYOUTS = {
     "iPhone": dict(x=250, y=49, w=452, h=982, r=62, bezel=14, tx=840, tw=960, title=76, sub=40, ty=400, pts=402),
     "Mac":    dict(x=56, y=128, w=1300, h=832, r=17, bezel=0, tx=1410, tw=470, title=50, sub=30, ty=330, pts=1280),
+    # Web: the Mac window with a drawn browser toolbar (bar px) above a 1280x768 viewport
+    "Web":    dict(x=56, y=180, w=1300, h=780, r=17, bezel=0, bar=52, tx=1410, tw=470, title=50, sub=30, ty=330, pts=1280),
     "iPad":   dict(x=64, y=154, w=1120, h=772, r=24, bezel=20, tx=1240, tw=630, title=60, sub=34, ty=360, pts=1210),
 }
 LAY = LAYOUTS[PLATFORM]
@@ -65,7 +67,7 @@ for e in ev:                                               # Mac events -> touch
 touches = [e for e in ev if e[2] in ("TAP", "HOLD", "SWIPE")]
 f.append(f"[3:v]split={len(touches)}" + "".join(f"[d{j}]" for j in range(len(touches))))
 for j, e in enumerate(touches):
-    t = e[1] - T0 + (0.0 if PLATFORM == "Mac" else 0.08)
+    t = e[1] - T0 + (0.0 if PLATFORM in ("Mac", "Web") else 0.08)
     px = lambda x: SX + float(x) * K - 28
     py = lambda y: SY + float(y) * K - 28
     if e[2] == "TAP":
@@ -74,7 +76,7 @@ for j, e in enumerate(touches):
         dur, xe, ye = 1.5, f"{px(e[3]):.1f}", f"{py(e[4]):.1f}"
     else:
         x0, y0, x1, y1 = map(float, e[3:7])
-        dur = 1.3 if PLATFORM == "Mac" else (0.55 if y0 == y1 else 0.35)
+        dur = 1.3 if PLATFORM in ("Mac", "Web") else (0.55 if y0 == y1 else 0.35)
         xe = f"{px(x0):.1f}+({(x1-x0)*K:.1f})*min(1,(t-{t:.3f})/{dur})"
         ye = f"{py(y0):.1f}+({(y1-y0)*K:.1f})*min(1,(t-{t:.3f})/{dur})"
     nxt = f"t{j}"

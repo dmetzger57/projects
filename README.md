@@ -25,7 +25,7 @@ ln -s "$PWD/.venv/bin/proj" ~/bin/proj   # or add .venv/bin to PATH
 ```
 
 Common tasks are in the [Makefile](Makefile) (`make` lists them): `make check` (Python tests, Swift checks,
-cross-check), `make restart-web`, `make install` (Mac, iPhone and iPad; `make install-mac` for just the Mac), `make sim TAB=projects` / `make screenshot`, `make demo-mac` / `demo-iphone` / `demo-ipad` (demo videos; see `scripts/demo/README.md`)
+cross-check), `make restart-web`, `make install` (Mac, iPhone and iPad; `make install-mac` for just the Mac), `make sim TAB=projects` / `make screenshot`, `make demo-mac` / `demo-iphone` / `demo-ipad` / `demo-web` (demo videos; see `scripts/demo/README.md`)
 (simulator on a copy of your projects), `make release`.
 
 Environment: `PROJ_ROOT` (default `~/Documents/Projects`), `PROJ_RECEIPTS` (default `~/Documents/Receipts`).

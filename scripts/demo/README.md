@@ -8,10 +8,12 @@ Remodel, Vegetable Beds, Learn Spanish, …), so none of your real projects appe
 make demo-mac       # ios/build/demo/proj-mac-demo.mp4     (~3 min; takes over the mouse)
 make demo-iphone    # ios/build/demo/proj-iphone-demo.mp4  (simulator "iPhone 18 Pro")
 make demo-ipad      # ios/build/demo/proj-ipad-demo.mp4    (simulator "iPad Pro 11-inch (M5)")
+make demo-web       # ios/build/demo/proj-web-demo.mp4     (headless Chrome; ~3.5 min, runs in the background)
 ```
 
 All output (demo data, Debug builds, raw recordings) goes in `ios/build/demo/<platform>/`.
-Needs `ffmpeg`, ImageMagick (`magick`) and the Python venv (`make setup`).
+Needs `ffmpeg`, ImageMagick (`magick`) and the Python venv (`make setup`); the web tour also needs Google
+Chrome and Node 22+.
 
 ## How it works
 
@@ -25,7 +27,12 @@ Needs `ffmpeg`, ImageMagick (`magick`) and the Python venv (`make setup`).
      at the screen's right edge so toolbar menus open inside it.
    - **iPhone/iPad** (`ios/`): an XCUITest (`ios/driver/DemoUITests/IPhoneDemo.swift`,
      `IPadDemo.swift`) drives the simulator while `simctl io recordVideo` records it.
-3. **Compose:** `compose.py <work dir> <iPhone|iPad|Mac> <out.mp4>` cuts the recording to the tour,
+   - **Web** (`web/`): `record.sh` serves the demo workspace on port 8791 (the launchd UI is untouched) and
+     `drive.mjs` plays `web/tour.txt` in headless Chrome over the DevTools protocol (no npm packages),
+     drawing a cursor into the page and saving the screencast frames, which become `raw.mov`. Native
+     `<select>` menus and `confirm()` dialogs don't render headless, so the tour sets selects directly and
+     avoids confirm prompts.
+3. **Compose:** `compose.py <work dir> <iPhone|iPad|Mac|Web> <out.mp4>` cuts the recording to the tour,
    adds the graphics drawn by `render.swift` (background, device frame or window shadow, one caption
    card per scene, intro/outro) and writes the video. Captions are synced from the first frame's
    time (`rec_start.txt`).
@@ -37,6 +44,8 @@ Needs `ffmpeg`, ImageMagick (`magick`) and the Python venv (`make setup`).
   `<work dir>/drive $(cat <work dir>/pid) -c "click|Projects@AXStaticText"`.
   `mac/launch.sh <work dir> quit` closes it and restores Proj's settings (the Debug build shares them).
 - iPhone/iPad: edit the XCUITest.
+- Web: edit `web/tour.txt` (commands and target syntax at the top of `web/drive.mjs`); targets are
+  aria-labels, titles, placeholders or visible text, or `css:` selectors.
 - After recording, `python3 sheet.py <work dir> 0 30` makes a contact sheet (`sheet.png`) of the
   frame after each event, to check that every step landed before composing.
 

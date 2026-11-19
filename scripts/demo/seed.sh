@@ -82,9 +82,11 @@ $P goal done "Vegetable Beds" 1 >/dev/null
 $P task done "Vegetable Beds" "Buy cedar boards" >/dev/null
 
 new "Fruit Trees" Garden on-hold
+desc "Fruit Trees" "Two dwarf apple trees along the back fence."
 task "Fruit Trees" "Research dwarf apple varieties"
 
 new "Irrigation" Garden completed-on-hold
+desc "Irrigation" "Drip lines for the beds, on a timer."
 task "Irrigation" "Install drip lines"
 $P task done "Irrigation" 1 >/dev/null
 

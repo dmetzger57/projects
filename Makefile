@@ -38,7 +38,7 @@ AGENT     := gui/$(shell id -u)/com.dmetzger57.proj-serve
 WEB_URL   := http://127.0.0.1:8765/
 
 .PHONY: help version setup test checks crosscheck check lint serve restart-web web-log xcodeproj \
-        build-sim sim screenshot demo-mac demo-iphone demo-ipad install install-iphone install-ipad install-mac build-mac mac pkg signing-probe release clean
+        build-sim sim screenshot demo-mac demo-iphone demo-ipad demo-web install install-iphone install-ipad install-mac build-mac mac pkg signing-probe release clean
 
 help: ## List the targets
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z_-]+:.*## / {printf "  \033[1m%-16s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -142,6 +142,10 @@ demo-iphone: ## Record the iPhone demo video on a simulator -> ios/build/demo/pr
 demo-ipad: ## Record the iPad demo video on a simulator -> ios/build/demo/proj-ipad-demo.mp4
 	scripts/demo/ios/record.sh $(DEMO)/ipad iPad
 	python3 scripts/demo/compose.py $(DEMO)/ipad iPad $(DEMO)/proj-ipad-demo.mp4
+
+demo-web: ## Record the web UI demo video in headless Chrome -> ios/build/demo/proj-web-demo.mp4
+	scripts/demo/web/record.sh $(DEMO)/web
+	python3 scripts/demo/compose.py $(DEMO)/web Web $(DEMO)/proj-web-demo.mp4
 
 signing-probe: ## Check codesign can use your key without a keychain prompt
 	@id=$$(security find-identity -v -p codesigning | awk -F'"' '/Apple Development/{print $$2; exit}'); \

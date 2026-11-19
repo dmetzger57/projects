@@ -12,6 +12,7 @@ let rows = try! String(contentsOfFile: args[3], encoding: .utf8).split(separator
 // geometry from compose.py (layout.json next to the captions)
 let L = try! JSONSerialization.jsonObject(with: Data(contentsOf: URL(fileURLWithPath: args[3]).deletingLastPathComponent().appendingPathComponent("layout.json"))) as! [String: Double]
 let scrW = L["w"]!, scrH = L["h"]!, scrX = L["x"]!, scrY = L["y"]!, scrR = L["r"]!, bezel = L["bezel"]!
+let bar = L["bar"] ?? 0      // Web: browser toolbar height above the screen area
 let accent = NSColor(srgbRed: 0.18, green: 0.49, blue: 0.36, alpha: 1)
 let ink = NSColor(srgbRed: 0.11, green: 0.13, blue: 0.16, alpha: 1)
 let muted = NSColor(srgbRed: 0.38, green: 0.42, blue: 0.47, alpha: 1)
@@ -54,14 +55,31 @@ func background() {
 // 1. background + device frame (the screen area is left for the video)
 png("frame.png") {
     background()
-    let body = NSRect(x: scrX - bezel, y: scrY - bezel, width: scrW + 2 * bezel, height: scrH + 2 * bezel)
+    let body = NSRect(x: scrX - bezel, y: scrY - bezel - bar, width: scrW + 2 * bezel, height: scrH + 2 * bezel + bar)
     let sh = NSShadow(); sh.shadowBlurRadius = 40; sh.shadowOffset = NSSize(width: 0, height: -14)
     sh.shadowColor = NSColor.black.withAlphaComponent(0.28)
     NSGraphicsContext.saveGraphicsState(); sh.set()
     (bezel == 0 ? NSColor.white : NSColor(srgbRed: 0.09, green: 0.09, blue: 0.1, alpha: 1)).setFill()
     NSBezierPath(roundedRect: body, xRadius: scrR + bezel, yRadius: scrR + bezel).fill()
     NSGraphicsContext.restoreGraphicsState()
-    if bezel == 0 { return }       // Mac: a window, no device rim
+    if bar > 0 {                   // Web: browser toolbar with traffic lights and an address field
+        NSGraphicsContext.saveGraphicsState()
+        NSBezierPath(roundedRect: body, xRadius: scrR, yRadius: scrR).addClip()
+        NSColor(srgbRed: 0.95, green: 0.95, blue: 0.96, alpha: 1).setFill()
+        NSRect(x: body.minX, y: body.minY, width: body.width, height: bar).fill()
+        NSColor(srgbRed: 0.84, green: 0.84, blue: 0.86, alpha: 1).setFill()
+        NSRect(x: body.minX, y: body.minY + bar - 1, width: body.width, height: 1).fill()
+        NSGraphicsContext.restoreGraphicsState()
+        for (i, c) in [(1.0, 0.37, 0.34), (1.0, 0.74, 0.18), (0.16, 0.79, 0.25)].enumerated() {
+            NSColor(srgbRed: c.0, green: c.1, blue: c.2, alpha: 1).setFill()
+            NSBezierPath(ovalIn: NSRect(x: body.minX + 20 + Double(i) * 22, y: body.minY + bar / 2 - 7, width: 14, height: 14)).fill()
+        }
+        let field = NSRect(x: body.midX - 280, y: body.minY + bar / 2 - 16, width: 560, height: 32)
+        NSColor(srgbRed: 0.88, green: 0.88, blue: 0.9, alpha: 1).setFill()
+        NSBezierPath(roundedRect: field, xRadius: 9, yRadius: 9).fill()
+        _ = text("127.0.0.1:8765", font(16, .regular), ink, x: field.minX, y: field.minY + 6, width: field.width, align: .center)
+    }
+    if bezel == 0 { return }       // Mac / Web: a window, no device rim
     NSColor(srgbRed: 0.32, green: 0.33, blue: 0.35, alpha: 1).setStroke()
     let rim = NSBezierPath(roundedRect: body.insetBy(dx: 1.5, dy: 1.5), xRadius: scrR + bezel - 1.5, yRadius: scrR + bezel - 1.5)
     rim.lineWidth = 3; rim.stroke()
@@ -72,6 +90,7 @@ png("mask.png", scrW, scrH) {
     NSColor.black.setFill(); NSRect(x: 0, y: 0, width: scrW, height: scrH).fill()
     NSColor.white.setFill()
     NSBezierPath(roundedRect: NSRect(x: 0, y: 0, width: scrW, height: scrH), xRadius: scrR, yRadius: scrR).fill()
+    if bar > 0 { NSRect(x: 0, y: 0, width: scrW, height: scrR).fill() }   // Web: square top under the toolbar
 }
 
 // 3. captions: chapter strip + title + subtitle on the right
