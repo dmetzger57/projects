@@ -1,13 +1,4 @@
 One-liner
-Proj is a project tracker that keeps everything in plain folders on your iCloud Drive, with apps for iPhone, iPad, Mac, the web and the command line.
-
-Elevator pitch (about 30 seconds)
-
-▎ Most project apps lock your plans inside their database. Proj does the opposite. Each project is just a folder on your iCloud Drive with a readable Markdown file inside, holding its goals, tasks, notes, photos, files, links and receipts. Proj gives you a polished app on iPhone, iPad and Mac, a web UI and a command line, all working on those same files.
-▎
-▎ Start the day in Today: pull tasks in from any project, and ticking one off there ticks it off in the project too. Open Tasks shows everything still to do across every project. The Overview shows each area of your life at a glance, with progress bars and how much you've spent.
-▎
-One-liner
 ---------
 
 Proj is a project tracker that keeps everything in plain folders on your iCloud Drive, with apps for iPhone, iPad, Mac, the web and the command line.

@@ -5,4 +5,4 @@ Most project apps lock your plans inside their database. Proj does the opposite.
 
 Start the day in Today: pull tasks in from any project, and ticking one off there ticks it off in the project too. Open Tasks shows everything still to do across every project. The Overview shows each area of your life at a glance, with progress bars and how much you've spent.
 
- There's no account, no server and no subscription. Everything is in files you own, can read in any text editor, and can keep forever.
+There's no account, no server and no subscription. Everything is in files you own, can read in any text editor, and can keep forever.
