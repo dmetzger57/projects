@@ -1,0 +1,44 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {};
+	objectVersion = 77;
+	objects = {
+		A0000000000000000000000A /* Project */ = {
+			isa = PBXProject;
+			buildConfigurationList = A0000000000000000000001A;
+			compatibilityVersion = "Xcode 15.0";
+			mainGroup = A0000000000000000000002A;
+			productRefGroup = A0000000000000000000003A;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (B0000000000000000000000A, C0000000000000000000000A);
+			attributes = { LastSwiftUpdateCheck = 1600; TargetAttributes = { C0000000000000000000000A = { TestTargetID = B0000000000000000000000A; }; }; };
+		};
+		A0000000000000000000002A = { isa = PBXGroup; children = (B0000000000000000000005A, C0000000000000000000005A, A0000000000000000000003A); sourceTree = "<group>"; };
+		A0000000000000000000003A = { isa = PBXGroup; children = (B0000000000000000000006A, C0000000000000000000006A); name = Products; sourceTree = "<group>"; };
+		B0000000000000000000005A = { isa = PBXFileSystemSynchronizedRootGroup; path = Host; sourceTree = "<group>"; };
+		C0000000000000000000005A = { isa = PBXFileSystemSynchronizedRootGroup; path = DemoUITests; sourceTree = "<group>"; };
+		B0000000000000000000006A = { isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Host.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		C0000000000000000000006A = { isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DemoUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		B0000000000000000000007A = { isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		C0000000000000000000007A = { isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		B0000000000000000000000A = {
+			isa = PBXNativeTarget; buildConfigurationList = B0000000000000000000001A; buildPhases = (B0000000000000000000007A); buildRules = (); dependencies = ();
+			fileSystemSynchronizedGroups = (B0000000000000000000005A); name = Host; productName = Host; productReference = B0000000000000000000006A; productType = "com.apple.product-type.application";
+		};
+		C0000000000000000000000A = {
+			isa = PBXNativeTarget; buildConfigurationList = C0000000000000000000001A; buildPhases = (C0000000000000000000007A); buildRules = (); dependencies = (C0000000000000000000008A);
+			fileSystemSynchronizedGroups = (C0000000000000000000005A); name = DemoUITests; productName = DemoUITests; productReference = C0000000000000000000006A; productType = "com.apple.product-type.bundle.ui-testing";
+		};
+		C0000000000000000000008A = { isa = PBXTargetDependency; target = B0000000000000000000000A; targetProxy = C0000000000000000000009A; };
+		C0000000000000000000009A = { isa = PBXContainerItemProxy; containerPortal = A0000000000000000000000A; proxyType = 1; remoteGlobalIDString = B0000000000000000000000A; remoteInfo = Host; };
+		A0000000000000000000001A = { isa = XCConfigurationList; buildConfigurations = (A0000000000000000000004A); defaultConfigurationName = Debug; };
+		B0000000000000000000001A = { isa = XCConfigurationList; buildConfigurations = (B0000000000000000000004A); defaultConfigurationName = Debug; };
+		C0000000000000000000001A = { isa = XCConfigurationList; buildConfigurations = (C0000000000000000000004A); defaultConfigurationName = Debug; };
+		A0000000000000000000004A = { isa = XCBuildConfiguration; name = Debug; buildSettings = { SDKROOT = iphoneos; IPHONEOS_DEPLOYMENT_TARGET = 17.0; SWIFT_VERSION = 5.0; CODE_SIGNING_ALLOWED = NO; ONLY_ACTIVE_ARCH = YES; }; };
+		B0000000000000000000004A = { isa = XCBuildConfiguration; name = Debug; buildSettings = { PRODUCT_BUNDLE_IDENTIFIER = demo.driver.host; PRODUCT_NAME = Host; GENERATE_INFOPLIST_FILE = YES; INFOPLIST_KEY_UILaunchScreen_Generation = YES; TARGETED_DEVICE_FAMILY = "1,2"; }; };
+		C0000000000000000000004A = { isa = XCBuildConfiguration; name = Debug; buildSettings = { PRODUCT_BUNDLE_IDENTIFIER = demo.driver.uitests; PRODUCT_NAME = DemoUITests; GENERATE_INFOPLIST_FILE = YES; TEST_TARGET_NAME = Host; TARGETED_DEVICE_FAMILY = "1,2"; }; };
+	};
+	rootObject = A0000000000000000000000A;
+}

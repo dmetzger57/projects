@@ -38,7 +38,7 @@ AGENT     := gui/$(shell id -u)/com.dmetzger57.proj-serve
 WEB_URL   := http://127.0.0.1:8765/
 
 .PHONY: help version setup test checks crosscheck check lint serve restart-web web-log xcodeproj \
-        build-sim sim screenshot install install-iphone install-ipad install-mac build-mac mac pkg signing-probe release clean
+        build-sim sim screenshot demo-mac demo-iphone demo-ipad install install-iphone install-ipad install-mac build-mac mac pkg signing-probe release clean
 
 help: ## List the targets
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z_-]+:.*## / {printf "  \033[1m%-16s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -127,6 +127,21 @@ sim: build-sim ## Run in the simulator on a COPY of your projects (TAB=projects 
 screenshot: sim ## `make sim`, then save a screenshot to ios/build/screenshot.png
 	@sleep 4; udid=$$(xcrun simctl list devices available | grep -F "$(SIM) (" | head -1 | grep -oE '[0-9A-F-]{36}'); \
 	xcrun simctl io $$udid screenshot $(BUILD)/screenshot.png >/dev/null 2>&1 && echo "saved $(BUILD)/screenshot.png"
+
+# ---- Demo videos (scripts/demo; see its README) ------------------------------
+DEMO := $(BUILD)/demo
+
+demo-mac: ## Record the Mac demo video (takes over the mouse ~3 min) -> ios/build/demo/proj-mac-demo.mp4
+	scripts/demo/mac/record.sh $(DEMO)/mac
+	python3 scripts/demo/compose.py $(DEMO)/mac Mac $(DEMO)/proj-mac-demo.mp4
+
+demo-iphone: ## Record the iPhone demo video on a simulator -> ios/build/demo/proj-iphone-demo.mp4
+	scripts/demo/ios/record.sh $(DEMO)/iphone iPhone
+	python3 scripts/demo/compose.py $(DEMO)/iphone iPhone $(DEMO)/proj-iphone-demo.mp4
+
+demo-ipad: ## Record the iPad demo video on a simulator -> ios/build/demo/proj-ipad-demo.mp4
+	scripts/demo/ios/record.sh $(DEMO)/ipad iPad
+	python3 scripts/demo/compose.py $(DEMO)/ipad iPad $(DEMO)/proj-ipad-demo.mp4
 
 signing-probe: ## Check codesign can use your key without a keychain prompt
 	@id=$$(security find-identity -v -p codesigning | awk -F'"' '/Apple Development/{print $$2; exit}'); \

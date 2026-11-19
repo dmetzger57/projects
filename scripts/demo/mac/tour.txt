@@ -1,0 +1,170 @@
+# Proj Mac tour, run by drive.swift (record.sh). Window at 448,150, 1280x820 pt. Commands: see drive.swift.
+at|700|420
+pause|0.8
+
+# 1. Today
+scene|Today|Your list for the day. Tasks copied from projects stay linked to them.
+pause|3.2
+click|Mark “Pick up dry cleaning” done
+pause|0.6
+scene|Today|Tick a project task here and it is ticked in its project too.
+click|Mark “Get three contractor quotes” done
+pause|1.4
+scene|Today|Add tasks straight to Today, and drag them into any order.
+click|@AXTextField
+type|Renew library books
+key|return
+pause|1.2
+drag|Call the vet about Max's checkup@AXStaticText|0|-84
+pause|1.6
+
+# 2. Open Tasks
+click|Open Tasks@AXStaticText
+scene|Open Tasks|Every open task of every project, grouped by project.
+pause|2.5
+scroll|-420|760|520
+pause|1.2
+scroll|420|760|520
+scene|Open Tasks|Filter the list by task or project name.
+click|@AXTextField|1|700
+type|garage
+pause|2.2
+key|esc
+pause|1
+scene|Open Tasks|Right-click a task to edit it, add a note, photo, link or reminder, or copy it to Today.
+rclick|Clear the gutters@AXButton
+pause|2
+click|Copy to Today@AXMenuItem
+pause|1.6
+scene|Open Tasks|Or click Select, pick several tasks and copy them to Today at once.
+click|Select@AXButton
+click|Install wall shelving@AXButton
+click|Donate old bikes@AXButton
+pause|0.8
+click|^Copy 2
+pause|1.6
+click?|Done@AXButton
+pause|0.6
+
+# 3. Projects
+click|Projects@AXStaticText
+scene|Projects|Projects by area on the left, an overview of tiles on the right.
+pause|3
+scroll|-520|900|520
+pause|1.2
+scroll|520|900|520
+scene|Projects|Collapse every area to just its name, or fold one area at a time.
+click|Collapse All|2
+pause|1.4
+click|Expand All|1|560
+pause|1.4
+click|Collapse Home|1|560
+pause|1.2
+click|Expand Home|1|560
+pause|1
+scene|Projects|Right-click a tile to change the order of projects in its area.
+rclick|^Garage Organization, Backlog, Tasks
+pause|1.8
+click|Move to Top@AXMenuItem
+pause|1.8
+scene|Projects|Show open, closed or all projects, or search names, goals and notes.
+click|All@AXRadioButton
+pause|0.8
+click|Closed@AXRadioButton
+pause|1.2
+click|Open@AXRadioButton
+click|@AXTextField|1|700
+type|holidays
+pause|2.4
+key|esc
+pause|1
+scene|Projects|Hide the sidebar to give the overview the whole window.
+click|Hide Sidebar
+pause|1.8
+click|Show Sidebar
+pause|1.4
+
+# 4. A project
+scene|A project|A project page: status, goals, tasks, photos, notes, files, links and receipts.
+click|^Kitchen Remodel, Active, Goals
+pause|2.8
+scene|A project|Change the status from a menu.
+click|@AXPopUpButton
+click|Blocked@AXMenuItem
+pause|1.2
+click|@AXPopUpButton
+click|Active@AXMenuItem
+pause|0.8
+scene|A project|Tick off goals as you reach them.
+click|Finish before the holidays@AXButton
+pause|1.6
+scene|A project|The Tasks checklist: tick, add, edit, add notes, drag to reorder.
+click|Mark “Order cabinet hardware” done
+pause|1
+click|@AXTextField|2
+type|Pick paint colors
+key|return
+pause|1.4
+scene|A project|Right-click a task to copy it to Today, move it to another project or archive it.
+rclick|Choose countertop material@AXStaticText
+pause|2.4
+key|esc
+pause|0.6
+scene|A project|Photos with notes, dated notes, Project Files and links.
+scroll|-380|760|520
+pause|2
+scroll|-380|760|520
+pause|2.2
+scene|A project|Receipts add up to the project's spending.
+scroll|-600|760|520
+pause|3
+scene|A project|The Actions menu: rename the project, add a receipt or close it.
+click|Actions
+pause|2.6
+key|esc
+pause|0.6
+click|Back@AXButton
+pause|1.4
+
+# 5. New project
+scene|New project|Create a project in any area; it starts from your template.
+click|Add@AXMenuButton
+click|New Project@AXMenuItem
+pause|0.8
+type|Patio Furniture
+click|@AXPopUpButton
+click|Home@AXMenuItem
+pause|0.6
+click|Create@AXButton
+pause|2.8
+click?|Back@AXButton
+pause|1
+
+# 6. Ideas
+click|Ideas@AXStaticText
+scene|Ideas|An idea backlog for someday-maybe projects.
+pause|1.4
+click|@AXTextField
+type|Plant a pollinator garden
+key|return
+pause|1.4
+scene|Ideas|Right-click an idea to turn it into a project.
+rclick|Build a backyard fire pit@AXStaticText
+pause|2.2
+key|esc
+pause|0.6
+
+# 7. Archive
+click|Archive@AXStaticText
+scene|Archive|Archived tasks keep their notes and attachments, and can be restored.
+pause|2.4
+click|Project: All Projects
+pause|1.8
+key|esc
+pause|1
+
+# 8. Back to Today
+click|Today@AXStaticText
+scene|Today|Everything you copied is waiting in Today.
+pause|4
+end
