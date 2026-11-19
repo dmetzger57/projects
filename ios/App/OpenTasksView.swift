@@ -62,7 +62,10 @@ struct OpenTasksView: View {
                 if let status { Section { statusRow(status) } }
                 ForEach(groups) { g in
                     Section {
-                        ForEach(g.tasks) { t in row(g, t) }
+                        // Identify rows by project + index: a task's own id is its index in its project,
+                        // which repeats across sections, and the Mac List then reuses one project's rows.
+                        ForEach(g.tasks.map { (pick: Pick(folder: g.project.folderName, index: $0.index), task: $0) },
+                                id: \.pick) { row(g, $0.task) }
                     } header: {
                         header(g)
                     }
